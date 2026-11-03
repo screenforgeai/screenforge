@@ -1,5 +1,11 @@
 # screenforge
 
+## 0.6.16
+
+### Patch Changes
+
+- 6d2d16d: Error reports and in-app feedback now go to PostHog error tracking; Sentry has been removed.
+
 ## 0.6.15
 
 ### Patch Changes
