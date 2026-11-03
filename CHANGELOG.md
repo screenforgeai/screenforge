@@ -1,5 +1,11 @@
 # screenforge
 
+## 0.6.17
+
+### Patch Changes
+
+- 31e276f: Pin the bundled Windows and Linux FFmpeg (7.1.5) to a verified build so releases are reproducible.
+
 ## 0.6.16
 
 ### Patch Changes
