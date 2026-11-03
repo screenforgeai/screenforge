@@ -1,8 +1,7 @@
-import * as Sentry from '@sentry/electron/renderer';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { trackEvent } from 'src/lib/analytics';
+import { submitFeedback, trackEvent } from 'src/lib/analytics';
 import {
   Button,
   Dialog,
@@ -88,29 +87,19 @@ export const PostExportFeedbackModal = ({ open, onClose }: PostExportFeedbackMod
     try {
       const appVersion = await window.screenforge.getAppVersion().catch(() => 'unknown');
 
-      Sentry.withScope((scope) => {
-        scope.setContext('screenforge_feedback', {
+      submitFeedback({
+        message: comment.trim() || `Rating: ${rating}/5 — ${STAR_LABELS[rating - 1]}`,
+        name: name.trim(),
+        email: email.trim(),
+        source: 'first_export_feedback_modal',
+        reportType: 'first_export',
+        rating,
+        context: {
           app_version: appVersion,
           route: window.location.hash || 'main',
           platform: navigator.platform,
           user_agent: navigator.userAgent,
-          rating,
-          report_type: 'first_export',
-        });
-
-        return Sentry.captureFeedback(
-          {
-            message: comment.trim() || `Rating: ${rating}/5 — ${STAR_LABELS[rating - 1]}`,
-            name: name.trim(),
-            email: email.trim(),
-            source: 'first_export_feedback_modal',
-            tags: {
-              screenforge_report_type: 'first_export',
-              screenforge_rating: String(rating),
-            },
-          },
-          { includeReplay: false },
-        );
+        },
       });
 
       const trimmedName = name.trim();

@@ -1,4 +1,3 @@
-import * as Sentry from '@sentry/electron/renderer';
 import { createRoot } from 'react-dom/client';
 import './i18n';
 import './i18n.types';
@@ -11,14 +10,7 @@ import { Teleprompter } from './components/Teleprompter/Teleprompter';
 import { SceneOverlayWindow } from './components/WidgetLibrary/_components/SceneOverlay';
 import { AreaSelector } from './components/AreaSelector/AreaSelector';
 import App from './app';
-
-Sentry.init();
-
-window.screenforge.getAnonymousId().then((id) => {
-  if (id) {
-    Sentry.setUser({ id });
-  }
-});
+import { captureException } from './lib/analytics';
 
 const hash = window.location.hash.slice(1); // strip leading #
 
@@ -31,6 +23,7 @@ window.addEventListener('error', (event) => {
     colno: event.colno,
     stack: event.error instanceof Error ? event.error.stack : undefined,
   });
+  captureException(event.error ?? event.message, { window: hash || 'main', kind: 'error' });
 });
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -46,6 +39,7 @@ window.addEventListener('unhandledrejection', (event) => {
     hash,
     reason,
   });
+  captureException(event.reason, { window: hash || 'main', kind: 'unhandledrejection' });
 });
 
 // Toolbar window is fully transparent — body must not paint a bg.

@@ -5,6 +5,21 @@ export interface PreloadProgress {
 }
 
 export type StartupPermission = 'screen' | 'microphone' | 'camera' | 'accessibility';
+
+/** An error as it crosses IPC from a renderer: Error instances don't survive structured clone intact. */
+export type SerializedError = { name?: string; message: string; stack?: string };
+
+/** In-app feedback, sent to PostHog as a `feedback_submitted` event. */
+export type FeedbackSubmission = {
+  message: string;
+  name?: string;
+  email?: string;
+  source: string;
+  reportType: string;
+  rating?: number;
+  context?: Record<string, unknown>;
+  logs?: string;
+};
 export type RequestableMediaPermission = 'microphone' | 'camera';
 export type StartupPermissionStatus =
   | 'granted'
@@ -627,6 +642,8 @@ export interface ScreenforgeAPI {
   trackEvent: (event: string, properties?: Record<string, unknown>) => void;
   getAnonymousId: () => Promise<string | null>;
   identifyUser: (profile: { name?: string; email?: string }) => void;
+  captureException: (error: SerializedError, properties?: Record<string, unknown>) => void;
+  submitFeedback: (feedback: FeedbackSubmission) => void;
   saveScreenshot: (dataUrl: string) => Promise<string>;
   minimizeToDock: () => void;
   quitApp: () => void;

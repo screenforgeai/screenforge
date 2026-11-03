@@ -16,7 +16,6 @@ export default defineConfig(({ mode }) => {
     define: {
       // Inline telemetry credentials so they work in the packaged app where
       // process.env is not populated from a .env file.
-      'process.env.SENTRY_DSN': JSON.stringify(env.SENTRY_DSN ?? ''),
       'process.env.POSTHOG_API_KEY': JSON.stringify(env.POSTHOG_API_KEY ?? ''),
       'process.env.POSTHOG_HOST': JSON.stringify(env.POSTHOG_HOST ?? ''),
       'process.env.SCREENFORGE_MAC_UPDATE_BASE_URL': JSON.stringify(

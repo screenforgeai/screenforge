@@ -254,7 +254,6 @@ jobs:
           SCREENFORGE_ENABLE_SIGNING: ${{ steps.signing.outputs.enabled }}
           SCREENFORGE_MAC_UPDATE_BASE_URL: ${{ env.SCREENFORGE_MAC_UPDATE_BASE_URL }}
           SCREENFORGE_MAC_UPDATE_RELEASE_NOTES_PATH: ${{ env.SCREENFORGE_MAC_UPDATE_RELEASE_NOTES_PATH }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}

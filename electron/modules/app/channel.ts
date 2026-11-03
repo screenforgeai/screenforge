@@ -1,10 +1,13 @@
 import { app } from 'electron';
 import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
+import type { FeedbackSubmission, SerializedError } from '../../../src/types/index';
 import {
+  captureException,
   getAppVersion,
   getAnonymousId,
   identifyUser,
+  submitFeedback,
   getDiagnosticLogFilePath,
   readDiagnosticLog,
   prepareRecordingStartPermissions,
@@ -56,6 +59,15 @@ export function registerAppChannels(): void {
   handleChannel<[], string | null>(CH.app.GET_ANONYMOUS_ID, () => getAnonymousId());
   listenChannel<[{ name?: string; email?: string }]>(CH.app.IDENTIFY_USER, ({ name, email }) => {
     identifyUser(name, email);
+  });
+  listenChannel<[SerializedError, Record<string, unknown>?]>(
+    CH.app.CAPTURE_EXCEPTION,
+    (error, properties) => {
+      captureException(error, properties);
+    },
+  );
+  listenChannel<[FeedbackSubmission]>(CH.app.SUBMIT_FEEDBACK, (feedback) => {
+    submitFeedback(feedback);
   });
   handleChannel<[string], string>(CH.app.SAVE_SCREENSHOT, (dataUrl) => saveScreenshot(dataUrl));
   handleChannel<[string, string], { filePath: string; duration: number }>(
