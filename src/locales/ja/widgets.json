@@ -1,0 +1,21 @@
+{
+  "recordings": "録画",
+  "video": "ビデオ",
+  "zoom": "ズーム",
+  "cursor": "カーソル",
+  "keyboard": "キーボード",
+  "frame": "フレーム",
+  "camera": "カメラ",
+  "mask": "プライバシーマスク",
+  "captions": "字幕",
+  "text": "テキスト",
+  "music": "Music",
+  "newRecording": "新規録画",
+  "keyboardShortcuts": "キーボードショートカット",
+  "feedbackSupport": "フィードバック・サポート",
+  "kofiSupport": "Screenforgeを支援する",
+  "comingSoon": "近日公開",
+  "unsavedRecording_title": "未保存の録画",
+  "unsavedRecording_desc": "未保存の録画があります。",
+  "discard": "破棄"
+}

@@ -1,0 +1,15 @@
+{
+  "header": "プライバシーマスク",
+  "noRecordingSelected": "録画が選択されていません。",
+  "addMask": "マスクを追加",
+  "noMasks": "マスクがありません",
+  "noMasksDesc": "「マスクを追加」をクリックして開始してください。",
+  "maskN": "マスク {{n}}",
+  "ariaDelete": "マスクを削除",
+  "style": "スタイル",
+  "blur": "ブラー",
+  "solidFill": "ベタ塗り",
+  "amount": "強度",
+  "pickColor": "色を選択",
+  "live": "LIVE"
+}

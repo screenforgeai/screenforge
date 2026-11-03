@@ -1,0 +1,258 @@
+// @vitest-environment node
+
+import { EventEmitter } from 'node:events';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const electronMock = vi.hoisted(() => {
+  const primaryDisplay = {
+    id: 0,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    scaleFactor: 1,
+  };
+  return {
+    primaryDisplay,
+    app: {
+      isPackaged: false,
+      getAppPath: () => '/dev/project',
+      getPath: () => '/tmp',
+    },
+    screen: {
+      getAllDisplays: () => [primaryDisplay],
+      getPrimaryDisplay: () => primaryDisplay,
+    },
+  };
+});
+
+const childProcessMock = vi.hoisted(() => ({
+  spawn: vi.fn(),
+  execFile: vi.fn(),
+}));
+
+const ffmpegRunnerMock = vi.hoisted(() => ({
+  runFFmpeg: vi.fn(),
+}));
+
+const loggerMock = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock('electron', () => ({
+  app: electronMock.app,
+  screen: electronMock.screen,
+}));
+
+vi.mock('node:child_process', () => ({
+  spawn: childProcessMock.spawn,
+  execFile: childProcessMock.execFile,
+}));
+
+vi.mock('../ffmpeg/index', () => ({
+  getFFmpegPath: vi.fn().mockResolvedValue('/usr/bin/ffmpeg'),
+}));
+
+vi.mock('../ffmpeg/runner', () => ({
+  runFFmpeg: ffmpegRunnerMock.runFFmpeg,
+}));
+
+vi.mock('../../lib/logger', () => ({
+  default: loggerMock,
+}));
+
+vi.mock('../../lib/telemetry', () => ({
+  trackMemorySnapshot: vi.fn(),
+}));
+
+vi.mock('../../lib/macos-native-capture', () => ({
+  shouldUseMacNativeCapture: vi.fn(() => false),
+  shouldUseNativeCapture: vi.fn(() => false),
+}));
+
+vi.mock('../app/service', () => ({
+  prepareRecordingStartPermissionsIfNeeded: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../sources/service', () => ({
+  getMacWindowMetadata: vi.fn().mockResolvedValue(new Map()),
+  parseWindowIdFromSourceId: vi.fn(() => null),
+}));
+
+vi.mock('../export/service', () => ({
+  probeExportSource: vi.fn().mockResolvedValue({ width: 1920, height: 1080 }),
+}));
+
+/**
+ * Fake ffmpeg probe process: emits the given stderr, then closes with code 0.
+ * Used by hasAudioStream / probeMediaDurationMs inside stopRecording().
+ */
+function fakeProbeProcess(stderrText: string) {
+  const proc = new EventEmitter() as EventEmitter & {
+    stderr: EventEmitter;
+    kill: () => void;
+  };
+  proc.stderr = new EventEmitter();
+  proc.kill = vi.fn();
+  process.nextTick(() => {
+    proc.stderr.emit('data', Buffer.from(stderrText));
+    proc.emit('close', 0);
+  });
+  return proc;
+}
+
+const PROBE_STDERR_3S_NO_AUDIO = [
+  'Input #0, mov,mp4,m4a,3gp,3g2,mj2, from output.mp4:',
+  '  Duration: 00:00:03.00, start: 0.000000, bitrate: 20000 kb/s',
+  '  Stream #0:0: Video: h264 (High), yuv420p, 1280x720, 60 fps',
+].join('\n');
+
+const originalPlatform = process.platform;
+const savedEnv: Record<string, string | undefined> = {};
+const SESSION_ENV_KEYS = ['XDG_SESSION_TYPE', 'WAYLAND_DISPLAY', 'DISPLAY'];
+
+function setPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', {
+    configurable: true,
+    value: platform,
+  });
+}
+
+async function loadService() {
+  return import('./service');
+}
+
+describe('recording service on Linux', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    for (const key of SESSION_ENV_KEYS) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+    setPlatform('linux');
+
+    childProcessMock.spawn.mockImplementation(() => fakeProbeProcess(PROBE_STDERR_3S_NO_AUDIO));
+    ffmpegRunnerMock.runFFmpeg.mockReturnValue({ promise: Promise.resolve() });
+  });
+
+  afterEach(() => {
+    for (const key of SESSION_ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+  });
+
+  afterAll(() => {
+    setPlatform(originalPlatform);
+  });
+
+  describe('getCaptureBackend', () => {
+    it('selects the Wayland portal backend in Wayland sessions', async () => {
+      process.env.XDG_SESSION_TYPE = 'wayland';
+      const { getCaptureBackend } = await loadService();
+      expect(getCaptureBackend()).toBe('wayland-portal');
+    });
+
+    it('selects the FFmpeg backend in X11 sessions', async () => {
+      process.env.XDG_SESSION_TYPE = 'x11';
+      process.env.DISPLAY = ':0';
+      const { getCaptureBackend } = await loadService();
+      expect(getCaptureBackend()).toBe('ffmpeg-x11');
+    });
+
+    it('reports unsupported when no display session is detectable', async () => {
+      const { getCaptureBackend } = await loadService();
+      expect(getCaptureBackend()).toBe('unsupported');
+    });
+  });
+
+  describe('Wayland renderer capture', () => {
+    beforeEach(() => {
+      process.env.XDG_SESSION_TYPE = 'wayland';
+      process.env.DISPLAY = ':0'; // XWayland: DISPLAY is set but must be ignored
+    });
+
+    it('rejects start when the renderer did not initialize portal capture', async () => {
+      const { startRecording, isRecordingBusy } = await loadService();
+
+      await expect(startRecording('screen:wayland', null)).rejects.toThrow(
+        /system screen-share dialog/,
+      );
+      expect(isRecordingBusy()).toBe(false);
+    });
+
+    it('runs the full start → stop cycle: transcodes the webm and adopts stream dimensions', async () => {
+      const { startRecording, stopRecording, isRecordingBusy } = await loadService();
+
+      await startRecording('screen:wayland', null, { rendererCapture: true });
+      expect(isRecordingBusy()).toBe(true);
+      // No capture process is spawned on Wayland — the renderer records.
+      expect(ffmpegRunnerMock.runFFmpeg).not.toHaveBeenCalled();
+
+      const result = await stopRecording({
+        webmPath: '/tmp/portal-capture.webm',
+        width: 1280,
+        height: 720,
+      });
+
+      expect(isRecordingBusy()).toBe(false);
+      // The webm was transcoded to H.264 MP4 via FFmpeg.
+      expect(ffmpegRunnerMock.runFFmpeg).toHaveBeenCalledTimes(1);
+      const transcodeArgs = ffmpegRunnerMock.runFFmpeg.mock.calls[0][0] as string[];
+      expect(transcodeArgs).toContain('/tmp/portal-capture.webm');
+      expect(transcodeArgs).toContain('libopenh264');
+      expect(transcodeArgs).toContain('+faststart');
+      expect(transcodeArgs).toContain('-an');
+
+      expect(result.filePath).toMatch(/screenforge-wayland-.*\.mp4$/);
+      // The portal stream's pixel size is the authoritative capture area.
+      expect(result.recordingArea).toEqual({ x: 0, y: 0, width: 1280, height: 720 });
+      // Duration comes from the probed media file (3s fake probe).
+      expect(result.durationMs).toBe(3000);
+      expect(result.hasEmbeddedAudio).toBe(false);
+      expect(result.events).toEqual([]);
+    });
+
+    it('rejects stop when the renderer produced no video data', async () => {
+      const { startRecording, stopRecording, isRecordingBusy } = await loadService();
+
+      await startRecording('screen:wayland', null, { rendererCapture: true });
+      await expect(stopRecording()).rejects.toThrow(/did not produce any video data/);
+      expect(isRecordingBusy()).toBe(false);
+    });
+
+    it('supports pause/resume bookkeeping without signaling any process', async () => {
+      const { startRecording, pauseRecording, resumeRecording, stopRecording } =
+        await loadService();
+
+      await startRecording('screen:wayland', null, { rendererCapture: true });
+      pauseRecording();
+      resumeRecording();
+      const result = await stopRecording({ webmPath: '/tmp/p.webm', width: 640, height: 480 });
+
+      expect(result.durationMs).toBe(3000);
+    });
+
+    it('discards an active renderer capture without spawning anything', async () => {
+      const { startRecording, discardRecording, isRecordingBusy } = await loadService();
+
+      await startRecording('screen:wayland', null, { rendererCapture: true });
+      await expect(discardRecording()).resolves.toBeUndefined();
+      expect(isRecordingBusy()).toBe(false);
+      expect(ffmpegRunnerMock.runFFmpeg).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unknown Linux session', () => {
+    it('fails start with a clear error instead of grabbing a black screen', async () => {
+      const { startRecording } = await loadService();
+
+      await expect(startRecording('screen:0', null)).rejects.toThrow(
+        /Could not detect a supported display session/,
+      );
+    });
+  });
+});

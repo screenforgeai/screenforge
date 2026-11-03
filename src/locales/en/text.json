@@ -1,0 +1,22 @@
+{
+  "header": "Text",
+  "noRecordingSelected": "No recording selected.",
+  "addText": "Add text",
+  "text": "Text",
+  "noTextClips": "No text overlays yet",
+  "font": "Font",
+  "size": "Size",
+  "format": "Format",
+  "color": "Color",
+  "background": "Background",
+  "radius": "Radius",
+  "padding": "Padding",
+  "animationIn": "Animate in",
+  "animationOut": "Animate out",
+  "duration": "Duration",
+  "animations": "Animations",
+  "none": "None",
+  "fade": "Fade",
+  "slideUp": "Slide Up",
+  "slideDown": "Slide Down"
+}

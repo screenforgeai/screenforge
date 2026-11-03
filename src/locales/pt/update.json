@@ -1,0 +1,16 @@
+{
+  "downloadingTitle": "A atualização ficará pronta após a gravação ou exportação atual terminar.",
+  "updateDownloaded": "Atualização baixada",
+  "checking": "Verificando...",
+  "retryUpdate": "Tentar atualização novamente",
+  "updateReady": "Atualização pronta",
+  "readyLabel": "Atualização pronta · {{version}}",
+  "restartWhenDone": "Reiniciar quando terminar",
+  "updateDesc": "{{version}} terminou de baixar em segundo plano. O Screenforge salvará seu trabalho antes de reiniciar.",
+  "viewChangelog": "Ver changelog",
+  "staysDownloaded": "A atualização permanece baixada se você escolher depois.",
+  "later": "Mais tarde",
+  "preparing": "Preparando…",
+  "restartAndInstall": "Reiniciar e instalar",
+  "newVersion": "Nova versão"
+}

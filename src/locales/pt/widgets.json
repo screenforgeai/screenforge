@@ -1,0 +1,21 @@
+{
+  "recordings": "Gravações",
+  "video": "Vídeo",
+  "zoom": "Zoom",
+  "cursor": "Cursor",
+  "keyboard": "Teclado",
+  "frame": "Moldura",
+  "camera": "Câmera",
+  "mask": "Máscara de privacidade",
+  "captions": "Legendas",
+  "text": "Texto",
+  "music": "Music",
+  "newRecording": "Nova gravação",
+  "keyboardShortcuts": "Atalhos de teclado",
+  "feedbackSupport": "Feedback e suporte",
+  "kofiSupport": "Apoiar Screenforge",
+  "comingSoon": "Em breve",
+  "unsavedRecording_title": "Gravação não salva",
+  "unsavedRecording_desc": "Você tem uma gravação não salva.",
+  "discard": "Descartar"
+}

@@ -1,0 +1,16 @@
+{
+  "title_missing": "FFmpegが見つかりません",
+  "title_downloading": "FFmpegをインストール中…",
+  "title_success": "FFmpeg準備完了",
+  "title_error": "ダウンロード失敗",
+  "desc_missing": "ScreenforgeはFFmpegを動画処理とエクスポートに使用します。今すぐインストールしてください。少しだけ時間がかかります。",
+  "desc_downloading": "静的ビルドをダウンロード中（約70 MB）。これは一度だけ行われます。",
+  "desc_success": "FFmpegが準備できました。動画の録画とエクスポートの準備が整いました。",
+  "desc_errorDefault": "ダウンロードに失敗しました。インターネット接続を確認してもう一度お試しください。",
+  "connecting": "接続中…",
+  "skipForNow": "今はスキップ",
+  "installFFmpeg": "FFmpegをインストール",
+  "installing": "インストール中...",
+  "continue": "続ける",
+  "tryAgain": "もう一度試す"
+}

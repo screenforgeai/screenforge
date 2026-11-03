@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Electron requires JIT compilation for V8 -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <!-- Required for Electron's V8 engine and WebAssembly -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- Required for native Node modules (.node files) such as uiohook-napi -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- Microphone access for recording narration and system audio -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <!-- Camera access for webcam overlay feature -->
+  <key>com.apple.security.device.camera</key>
+  <true/>
+</dict>
+</plist>

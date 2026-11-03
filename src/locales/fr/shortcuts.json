@@ -1,0 +1,21 @@
+{
+  "title": "Raccourcis clavier",
+  "playback": "Lecture",
+  "playPause": "Lecture / Pause",
+  "editing": "Édition",
+  "undo": "Annuler",
+  "redo": "Rétablir",
+  "splitAtPlayhead": "Couper à la tête de lecture",
+  "deleteSelected": "Supprimer la sélection",
+  "view": "Affichage",
+  "toggleFocusMode": "Basculer le mode focus",
+  "recording": "Pendant l'enregistrement",
+  "nextScene": "Scène suivante",
+  "prevScene": "Scène précédente",
+  "captureFrame": "Capturer l'image",
+  "addEffects": "Add Effects",
+  "addZoom": "Add Zoom",
+  "addCinematicZoom": "Add Cinematic Zoom",
+  "addText": "Add Text",
+  "addMask": "Add Mask"
+}

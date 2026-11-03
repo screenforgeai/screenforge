@@ -1,0 +1,16 @@
+{
+  "downloadingTitle": "Update will be ready after the current recording or export finishes.",
+  "updateDownloaded": "Update downloaded",
+  "checking": "Checking...",
+  "retryUpdate": "Retry update",
+  "updateReady": "Update ready",
+  "readyLabel": "Update ready · {{version}}",
+  "restartWhenDone": "Restart when you’re done here",
+  "updateDesc": "{{version}} finished downloading in the background. Screenforge will save your work before restarting.",
+  "viewChangelog": "View changelog",
+  "staysDownloaded": "Update stays downloaded if you choose later.",
+  "later": "Later",
+  "preparing": "Preparing…",
+  "restartAndInstall": "Restart & install",
+  "newVersion": "New version"
+}

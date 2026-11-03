@@ -1,0 +1,52 @@
+{
+  "id": "gif-smoke",
+  "description": "GIF export completes through the temp-video path and contains more than one frame.",
+  "recording": {
+    "filePath": "../media/screen-motion.mp4",
+    "mouseData": [],
+    "duration": 3,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 320,
+      "height": 180
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "gif-screen",
+      "timelineStart": 0,
+      "timelineEnd": 3,
+      "sourceStart": 0,
+      "sourceEnd": 3,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#101010",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "gif",
+    "resolution": "720p",
+    "fps": 60,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "gif-smoke.gif"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.6,
+    "minDistinctFrameHashes": 2
+  }
+}

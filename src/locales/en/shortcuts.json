@@ -1,0 +1,21 @@
+{
+  "title": "Keyboard Shortcuts",
+  "playback": "Playback",
+  "playPause": "Play / Pause",
+  "editing": "Editing",
+  "undo": "Undo",
+  "redo": "Redo",
+  "splitAtPlayhead": "Split at Playhead",
+  "deleteSelected": "Delete Selected",
+  "addEffects": "Add Effects",
+  "addZoom": "Add Zoom",
+  "addCinematicZoom": "Add Cinematic Zoom",
+  "addText": "Add Text",
+  "addMask": "Add Mask",
+  "view": "View",
+  "toggleFocusMode": "Toggle Focus Mode",
+  "recording": "While Recording",
+  "nextScene": "Next scene",
+  "prevScene": "Previous scene",
+  "captureFrame": "Capture Frame"
+}

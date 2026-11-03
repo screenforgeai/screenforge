@@ -1,0 +1,54 @@
+{
+  "id": "mp4-duration-overrun",
+  "description": "Export trims an overstated recording duration back to the playable media range instead of stalling or freezing.",
+  "recording": {
+    "filePath": "../media/screen-motion.mp4",
+    "mouseData": [],
+    "duration": 5.5,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 320,
+      "height": 180
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "screen-overrun",
+      "timelineStart": 0,
+      "timelineEnd": 5.5,
+      "sourceStart": 0,
+      "sourceEnd": 5.5,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#0f0f12",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-duration-overrun.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.35,
+    "minDistinctFrameHashes": 2,
+    "outputDurationSeconds": 3,
+    "maxElapsedMs": 10000
+  }
+}

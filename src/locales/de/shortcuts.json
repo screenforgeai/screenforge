@@ -1,0 +1,21 @@
+{
+  "title": "Tastaturkürzel",
+  "playback": "Wiedergabe",
+  "playPause": "Wiedergabe / Pause",
+  "editing": "Bearbeitung",
+  "undo": "Rückgängig",
+  "redo": "Wiederholen",
+  "splitAtPlayhead": "An Abspielposition teilen",
+  "deleteSelected": "Auswahl löschen",
+  "view": "Ansicht",
+  "toggleFocusMode": "Fokusmodus umschalten",
+  "recording": "Während der Aufnahme",
+  "nextScene": "Nächste Szene",
+  "prevScene": "Vorherige Szene",
+  "captureFrame": "Frame aufnehmen",
+  "addEffects": "Add Effects",
+  "addZoom": "Add Zoom",
+  "addCinematicZoom": "Add Cinematic Zoom",
+  "addText": "Add Text",
+  "addMask": "Add Mask"
+}

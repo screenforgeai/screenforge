@@ -1,0 +1,53 @@
+{
+  "id": "mp4-smoke-60s",
+  "description": "A 60-second moving MP4 export stays playable and gives us a long-run performance baseline.",
+  "recording": {
+    "filePath": "../media/screen-motion-60s.mp4",
+    "mouseData": [],
+    "duration": 60,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 640,
+      "height": 360
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "screen-60s",
+      "timelineStart": 0,
+      "timelineEnd": 60,
+      "sourceStart": 0,
+      "sourceEnd": 60,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#111111",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-smoke-60s.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.75,
+    "minDistinctFrameHashes": 2,
+    "maxElapsedMs": 40000
+  }
+}

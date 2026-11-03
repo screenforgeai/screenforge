@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  # Generated or binary files — nothing useful to review.
+  path_filters:
+    - '!pnpm-lock.yaml'
+    - '!CHANGELOG.md'
+    - '!native/bin/**'
+    - '!src/assets/**'
+  path_instructions:
+    - path: 'electron/**'
+      instructions: >-
+        Main-process code. Flag IPC handlers that trust renderer input
+        (paths, URLs, shell arguments), any shell: true or string-built
+        command lines, and secrets or tokens in code or logs.
+    - path: '.github/workflows/**'
+      instructions: >-
+        Actions must stay pinned to a full commit SHA. Flag
+        pull_request_target, secrets reachable from fork PRs, and release
+        jobs missing the screenforgeai repository_owner guard.
+
+chat:
+  auto_reply: true

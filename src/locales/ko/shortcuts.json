@@ -1,0 +1,21 @@
+{
+  "title": "키보드 단축키",
+  "playback": "재생",
+  "playPause": "재생 / 일시정지",
+  "editing": "편집",
+  "undo": "실행 취소",
+  "redo": "다시 실행",
+  "splitAtPlayhead": "재생 헤드에서 분할",
+  "deleteSelected": "선택 항목 삭제",
+  "view": "보기",
+  "toggleFocusMode": "집중 모드 전환",
+  "recording": "녹화 중",
+  "nextScene": "다음 장면",
+  "prevScene": "이전 장면",
+  "captureFrame": "프레임 캡처",
+  "addEffects": "Add Effects",
+  "addZoom": "Add Zoom",
+  "addCinematicZoom": "Add Cinematic Zoom",
+  "addText": "Add Text",
+  "addMask": "Add Mask"
+}

@@ -1,0 +1,101 @@
+name: Changesets
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: changesets-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-pr:
+    # Opens version-bump PRs for the upstream repo only; skip it in forks.
+    if: github.repository_owner == 'screenforgeai'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create or update release PR
+        id: changesets
+        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1
+        with:
+          version: pnpm changeset version
+          publish: pnpm ci:tag-release
+          commit: Version Packages
+          title: Version Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for release PR
+        if: steps.changesets.outputs.pullRequestNumber != ''
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const pullNumber = Number('${{ steps.changesets.outputs.pullRequestNumber }}');
+            const { owner, repo } = context.repo;
+            const { data: pull } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            });
+
+            if (pull.auto_merge) {
+              core.info(`Auto-merge is already enabled for PR #${pullNumber}.`);
+              return;
+            }
+
+            try {
+              await github.graphql(
+                `mutation EnableAutoMerge($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(
+                    input: {
+                      pullRequestId: $pullRequestId
+                      mergeMethod: SQUASH
+                    }
+                  ) {
+                    pullRequest {
+                      number
+                    }
+                  }
+                }`,
+                {
+                  pullRequestId: pull.node_id,
+                },
+              );
+
+              core.info(`Enabled auto-merge for PR #${pullNumber}.`);
+            } catch (error) {
+              core.warning(
+                [
+                  `Failed to enable auto-merge for PR #${pullNumber}: ${error.message}`,
+                  'Enable repository setting "Allow auto-merge" and make sure this PR can satisfy branch protection requirements.',
+                ].join('\n'),
+              );
+            }

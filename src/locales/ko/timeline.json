@@ -1,0 +1,10 @@
+{
+  "undo": "실행 취소 (Ctrl/Cmd + Z)",
+  "redo": "다시 실행 (Ctrl/Cmd + Shift + Z, Ctrl + Y)",
+  "split": "재생 헤드에서 분할 (Ctrl/Cmd + B)",
+  "play": "재생",
+  "pause": "일시정지",
+  "stop": "정지",
+  "zoomOut": "축소",
+  "zoomIn": "확대"
+}

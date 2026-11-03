@@ -1,0 +1,15 @@
+{
+  "header": "Privacy Masks",
+  "noRecordingSelected": "No recording selected.",
+  "addMask": "Add Mask",
+  "noMasks": "No masks yet",
+  "noMasksDesc": "Click \"Add Mask\" to get started.",
+  "maskN": "Mask {{n}}",
+  "ariaDelete": "Delete mask",
+  "style": "Style",
+  "blur": "Blur",
+  "solidFill": "Solid fill",
+  "amount": "Amount",
+  "pickColor": "Pick color",
+  "live": "LIVE"
+}

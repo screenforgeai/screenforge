@@ -1,0 +1,16 @@
+{
+  "downloadingTitle": "La mise à jour sera prête après l'enregistrement ou l'exportation en cours.",
+  "updateDownloaded": "Mise à jour téléchargée",
+  "checking": "Vérification...",
+  "retryUpdate": "Réessayer la mise à jour",
+  "updateReady": "Mise à jour prête",
+  "readyLabel": "Mise à jour prête · {{version}}",
+  "restartWhenDone": "Redémarrer quand vous avez terminé",
+  "updateDesc": "{{version}} a fini de se télécharger en arrière-plan. Screenforge sauvegardera votre travail avant de redémarrer.",
+  "viewChangelog": "Voir le journal des modifications",
+  "staysDownloaded": "La mise à jour reste téléchargée si vous choisissez plus tard.",
+  "later": "Plus tard",
+  "preparing": "Préparation…",
+  "restartAndInstall": "Redémarrer et installer",
+  "newVersion": "Nouvelle version"
+}

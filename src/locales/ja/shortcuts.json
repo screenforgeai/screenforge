@@ -1,0 +1,21 @@
+{
+  "title": "キーボードショートカット",
+  "playback": "再生",
+  "playPause": "再生 / 一時停止",
+  "editing": "編集",
+  "undo": "元に戻す",
+  "redo": "やり直す",
+  "splitAtPlayhead": "再生位置で分割",
+  "deleteSelected": "選択範囲を削除",
+  "view": "表示",
+  "toggleFocusMode": "フォーカスモード切替",
+  "recording": "録画中",
+  "nextScene": "次のシーン",
+  "prevScene": "前のシーン",
+  "captureFrame": "フレームをキャプチャ",
+  "addEffects": "Add Effects",
+  "addZoom": "Add Zoom",
+  "addCinematicZoom": "Add Cinematic Zoom",
+  "addText": "Add Text",
+  "addMask": "Add Mask"
+}

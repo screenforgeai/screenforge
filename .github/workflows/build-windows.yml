@@ -1,0 +1,214 @@
+name: Build Windows
+
+on:
+  push:
+    tags:
+      - 'win-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (win-vX.Y.Z)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-windows-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Release jobs need this org's signing/R2 secrets; skip them in forks.
+    if: github.repository_owner == 'screenforgeai'
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 45
+
+    env:
+      CI: true
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ -z "${RELEASE_TAG:-}" ]]; then
+            echo "RELEASE_TAG is required. Provide workflow_dispatch input 'tag' in win-vX.Y.Z format." >&2
+            exit 1
+          fi
+          if [[ ! "${RELEASE_TAG}" =~ ^win-v[0-9A-Za-z._-]+$ ]]; then
+            echo "Invalid RELEASE_TAG: ${RELEASE_TAG} (expected win-vX.Y.Z)" >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      # Store on D: (same drive as workspace) so pnpm uses hard links instead of cross-drive
+      # copies. Cross-drive fallback copies can produce broken/missing binary files, including
+      # the 7z.exe that Squirrel needs to build the installer.
+      - name: Configure pnpm store and linker
+        run: |
+          pnpm config set store-dir D:\.pnpm-store --location project
+          pnpm config set node-linker hoisted --location project
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Attempt to exclude the electron-winstaller vendor dir from Defender real-time scanning.
+      # Some runners have Defender active and quarantine the bundled 7z.exe (a known false positive).
+      # Non-fatal: if the Defender service isn't running (error 0x800106ba), we continue anyway.
+      - name: Exclude electron-winstaller vendor from Windows Defender
+        shell: pwsh
+        run: |
+          $vendor = Join-Path (Get-Location) "node_modules\electron-winstaller\vendor"
+          try {
+            Add-MpPreference -ExclusionPath $vendor -ErrorAction Stop
+            Write-Host "Defender exclusion added for: $vendor"
+          } catch {
+            Write-Host "Defender exclusion skipped (service unavailable): $($_.Exception.Message)"
+          }
+
+      - name: Verify and prepare electron-winstaller vendor files
+        shell: pwsh
+        run: |
+          $vendor = "node_modules\electron-winstaller\vendor"
+          if (-not (Test-Path $vendor)) {
+            Write-Error "electron-winstaller vendor directory not found at $vendor"
+            exit 1
+          }
+          @("Squirrel.exe", "7z-x64.exe", "7z-x64.dll", "StubExecutable.exe") | ForEach-Object {
+            if (-not (Test-Path (Join-Path $vendor $_))) {
+              Write-Error "Required vendor file missing: $_"
+              exit 1
+            }
+          }
+          # Squirrel.exe hardcodes looking for "7z.exe" next to itself, but electron-winstaller
+          # ships arch-suffixed binaries (7z-x64.exe). Copy to the name Squirrel expects.
+          Copy-Item "$vendor\7z-x64.exe" "$vendor\7z.exe" -Force
+          Copy-Item "$vendor\7z-x64.dll" "$vendor\7z.dll" -Force
+          Write-Host "Vendor files verified and 7z aliases created."
+
+      - name: Generate Windows app icon
+        shell: pwsh
+        run: |
+          $src = "src\assets\app-icon.png"
+          $out = "build\icons\screenforge.ico"
+          if (-not (Test-Path $out)) {
+            # ImageMagick is pre-installed on windows-latest runners
+            magick $src `
+              ( -clone 0 -resize 256x256 ) `
+              ( -clone 0 -resize 128x128 ) `
+              ( -clone 0 -resize 64x64  ) `
+              ( -clone 0 -resize 48x48  ) `
+              ( -clone 0 -resize 32x32  ) `
+              ( -clone 0 -resize 16x16  ) `
+              -delete 0 `
+              $out
+            Write-Host "Generated $out"
+          } else {
+            Write-Host "Icon already present: $out"
+          }
+
+      - name: Compute Windows update feed URL
+        shell: bash
+        env:
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+          R2_RELEASE_PREFIX: ${{ vars.R2_RELEASE_PREFIX || 'screenforge' }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${R2_PUBLIC_BASE_URL:-}" ]]; then
+            echo "R2_PUBLIC_BASE_URL is required to build the updater feed URL." >&2
+            exit 1
+          fi
+          public_base="${R2_PUBLIC_BASE_URL%/}"
+          release_prefix="${R2_RELEASE_PREFIX#/}"
+          release_prefix="${release_prefix%/}"
+          echo "SCREENFORGE_WIN_UPDATE_BASE_URL=${public_base}/${release_prefix}/updates/release/win32/x64" >> "$GITHUB_ENV"
+
+      - name: Download Windows FFmpeg
+        shell: bash
+        run: bash scripts/download-ffmpeg-windows.sh
+
+      - name: Build native Windows helper
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+            call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          )
+          cmake -B build/windows -G "Ninja" -DCMAKE_BUILD_TYPE=Release -S native/windows/ScreenforgeCapture
+          cmake --build build/windows
+
+      - name: Build Windows app
+        run: node scripts/make-platform.mjs win --arch x64
+        env:
+          SCREENFORGE_WIN_UPDATE_BASE_URL: ${{ env.SCREENFORGE_WIN_UPDATE_BASE_URL }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_files=()
+          while IFS= read -r file; do
+            artifact_files+=("$file")
+          done < <(find out/make -type f \( -name "*.exe" -o -name "*.zip" \) | sort)
+
+          if (( ${#artifact_files[@]} == 0 )); then
+            echo "No release artifacts found under out/make." >&2
+            exit 1
+          fi
+
+          : > out/make/SHA256SUMS
+          for file in "${artifact_files[@]}"; do
+            sha256sum "$file" >> out/make/SHA256SUMS
+          done
+
+          echo "Generated checksums:"
+          cat out/make/SHA256SUMS
+
+      - name: Upload release files to Cloudflare R2
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+          R2_RELEASE_PREFIX: ${{ vars.R2_RELEASE_PREFIX || 'screenforge' }}
+          R2_RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: bash scripts/upload-release-to-r2-windows.sh
+
+      - name: Publish draft GitHub release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            out/make/squirrel.windows/x64/ScreenforgeSetup.exe
+            out/make/zip/win32/x64/*.zip
+            out/make/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

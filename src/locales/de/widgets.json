@@ -1,0 +1,21 @@
+{
+  "recordings": "Aufnahmen",
+  "video": "Video",
+  "zoom": "Zoom",
+  "cursor": "Cursor",
+  "keyboard": "Tastatur",
+  "frame": "Rahmen",
+  "camera": "Kamera",
+  "mask": "Datenschutzmaske",
+  "captions": "Untertitel",
+  "text": "Text",
+  "music": "Music",
+  "newRecording": "Neue Aufnahme",
+  "keyboardShortcuts": "Tastaturkürzel",
+  "feedbackSupport": "Feedback & Support",
+  "kofiSupport": "Screenforge unterstützen",
+  "comingSoon": "Demnächst",
+  "unsavedRecording_title": "Nicht gespeicherte Aufnahme",
+  "unsavedRecording_desc": "Sie haben eine nicht gespeicherte Aufnahme.",
+  "discard": "Verwerfen"
+}

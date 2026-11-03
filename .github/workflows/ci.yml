@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Enforce changeset for releasable pull requests
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin "${BASE_REF}" --depth=1
+          changed_files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+
+          echo "Changed files:"
+          echo "${changed_files}"
+
+          if [[ -z "${changed_files}" ]]; then
+            echo "No file changes detected."
+            exit 0
+          fi
+
+          needs_changeset=false
+          has_changeset=false
+
+          while IFS= read -r file; do
+            [[ -z "${file}" ]] && continue
+
+            case "${file}" in
+              .changeset/*.md)
+                if [[ "${file}" != ".changeset/README.md" ]]; then
+                  has_changeset=true
+                fi
+                ;;
+            esac
+
+            case "${file}" in
+              docs/*|.github/*|.changeset/*|README.md|CHANGELOG.md|LICENSE|CLAUDE.md|.gitignore|.npmrc|.prettierignore|.prettierrc.json)
+                ;;
+              *)
+                needs_changeset=true
+                ;;
+            esac
+          done <<< "${changed_files}"
+
+          if [[ "${needs_changeset}" != "true" ]]; then
+            echo "Docs/chore-only pull request detected. Changeset is not required."
+            exit 0
+          fi
+
+          if [[ "${has_changeset}" == "true" ]]; then
+            echo "Changeset file found."
+            exit 0
+          fi
+
+          echo "This pull request changes app code but has no changeset." >&2
+          echo "Run 'pnpm changeset' and commit the generated .changeset/*.md file." >&2
+          exit 1
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Run unit tests
+        run: pnpm test:unit

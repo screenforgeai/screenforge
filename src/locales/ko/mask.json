@@ -1,0 +1,15 @@
+{
+  "header": "개인 정보 마스크",
+  "noRecordingSelected": "선택된 녹화가 없습니다.",
+  "addMask": "마스크 추가",
+  "noMasks": "마스크 없음",
+  "noMasksDesc": "\"마스크 추가\"를 클릭하여 시작하세요.",
+  "maskN": "마스크 {{n}}",
+  "ariaDelete": "마스크 삭제",
+  "style": "스타일",
+  "blur": "블러",
+  "solidFill": "단색 채우기",
+  "amount": "강도",
+  "pickColor": "색상 선택",
+  "live": "LIVE"
+}

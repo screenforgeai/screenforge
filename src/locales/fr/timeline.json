@@ -1,0 +1,10 @@
+{
+  "undo": "Annuler (Ctrl/Cmd + Z)",
+  "redo": "Rétablir (Ctrl/Cmd + Shift + Z, Ctrl + Y)",
+  "split": "Couper à la tête (Ctrl/Cmd + B)",
+  "play": "Lecture",
+  "pause": "Pause",
+  "stop": "Arrêter",
+  "zoomOut": "Dézoomer",
+  "zoomIn": "Zoomer"
+}

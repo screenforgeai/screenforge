@@ -1,0 +1,16 @@
+{
+  "downloadingTitle": "Das Update ist bereit, wenn die aktuelle Aufnahme oder der Export abgeschlossen ist.",
+  "updateDownloaded": "Update heruntergeladen",
+  "checking": "Wird geprüft...",
+  "retryUpdate": "Update erneut versuchen",
+  "updateReady": "Update bereit",
+  "readyLabel": "Update bereit · {{version}}",
+  "restartWhenDone": "Neu starten, wenn Sie fertig sind",
+  "updateDesc": "{{version}} wurde im Hintergrund heruntergeladen. Screenforge speichert Ihre Arbeit vor dem Neustart.",
+  "viewChangelog": "Änderungsprotokoll anzeigen",
+  "staysDownloaded": "Das Update bleibt heruntergeladen, wenn Sie später wählen.",
+  "later": "Später",
+  "preparing": "Wird vorbereitet…",
+  "restartAndInstall": "Neu starten & installieren",
+  "newVersion": "Neue Version"
+}

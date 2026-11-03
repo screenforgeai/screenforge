@@ -1,0 +1,16 @@
+{
+  "title_missing": "FFmpeg를 찾을 수 없음",
+  "title_downloading": "FFmpeg 설치 중…",
+  "title_success": "FFmpeg 준비 완료",
+  "title_error": "다운로드 실패",
+  "desc_missing": "Screenforge는 동영상 처리 및 내보내기에 FFmpeg를 사용합니다. 지금 설치하세요. 잠깐이면 됩니다.",
+  "desc_downloading": "정적 빌드를 다운로드 중 (~70 MB). 이 작업은 한 번만 수행됩니다.",
+  "desc_success": "FFmpeg가 준비되었습니다. 동영상 녹화 및 내보내기 준비가 완료되었습니다.",
+  "desc_errorDefault": "다운로드 실패. 인터넷 연결을 확인하고 다시 시도해 주세요.",
+  "connecting": "연결 중…",
+  "skipForNow": "지금은 건너뛰기",
+  "installFFmpeg": "FFmpeg 설치",
+  "installing": "설치 중...",
+  "continue": "계속",
+  "tryAgain": "다시 시도"
+}

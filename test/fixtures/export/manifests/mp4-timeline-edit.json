@@ -1,0 +1,70 @@
+{
+  "id": "mp4-timeline-edit",
+  "description": "Timeline edits with a disabled-video span and a gap still export without freezing or stalling.",
+  "recording": {
+    "filePath": "../media/screen-motion.mp4",
+    "mouseData": [],
+    "duration": 3,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 320,
+      "height": 180
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "segment-a",
+      "timelineStart": 0,
+      "timelineEnd": 1,
+      "sourceStart": 0,
+      "sourceEnd": 1,
+      "videoEnabled": true,
+      "audioEnabled": false
+    },
+    {
+      "id": "segment-b",
+      "timelineStart": 1,
+      "timelineEnd": 1.5,
+      "sourceStart": 1,
+      "sourceEnd": 1.5,
+      "videoEnabled": false,
+      "audioEnabled": false
+    },
+    {
+      "id": "segment-c",
+      "timelineStart": 1.75,
+      "timelineEnd": 2.25,
+      "sourceStart": 2,
+      "sourceEnd": 2.5,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#0f0f0f",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-timeline-edit.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.35,
+    "minDistinctFrameHashes": 2
+  }
+}

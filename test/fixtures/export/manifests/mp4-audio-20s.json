@@ -1,0 +1,53 @@
+{
+  "id": "mp4-audio-20s",
+  "description": "A longer MP4 export with embedded audio stays playable and gives us a stable audio-export performance baseline.",
+  "recording": {
+    "filePath": "../media/screen-audio-20s.mp4",
+    "mouseData": [],
+    "duration": 20,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 640,
+      "height": 360
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "screen-audio-20s",
+      "timelineStart": 0,
+      "timelineEnd": 20,
+      "sourceStart": 0,
+      "sourceEnd": 20,
+      "videoEnabled": true,
+      "audioEnabled": true
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#141414",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": true,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-audio-20s.mp4"
+  },
+  "expected": {
+    "audio": true,
+    "moving": true,
+    "durationToleranceSeconds": 0.5,
+    "minDistinctFrameHashes": 2,
+    "maxElapsedMs": 19000
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "id": "mp4-smoke",
+  "description": "Screen-only moving MP4 export stays playable and does not freeze on the first frame.",
+  "recording": {
+    "filePath": "../media/screen-motion.mp4",
+    "mouseData": [],
+    "duration": 3,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 320,
+      "height": 180
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "screen",
+      "timelineStart": 0,
+      "timelineEnd": 3,
+      "sourceStart": 0,
+      "sourceEnd": 3,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#111111",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-smoke.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.35,
+    "minDistinctFrameHashes": 2,
+    "maxElapsedMs": 8000
+  }
+}

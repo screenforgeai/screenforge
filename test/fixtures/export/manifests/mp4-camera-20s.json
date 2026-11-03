@@ -1,0 +1,63 @@
+{
+  "id": "mp4-camera-20s",
+  "description": "A longer MP4 export with camera overlay stays playable and gives us a stable camera-export performance baseline.",
+  "recording": {
+    "filePath": "../media/screen-motion-20s.mp4",
+    "cameraPath": "../media/camera-overlay-20s.mp4",
+    "mouseData": [],
+    "duration": 20,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 640,
+      "height": 360
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "screen-camera-20s",
+      "timelineStart": 0,
+      "timelineEnd": 20,
+      "sourceStart": 0,
+      "sourceEnd": 20,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#101010",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "camera": {
+    "enabled": true,
+    "x": 0.78,
+    "y": 0.7,
+    "size": 0.28,
+    "shape": "square",
+    "roundness": 0.18,
+    "backgroundBlur": 0
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-camera-20s.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.5,
+    "minDistinctFrameHashes": 2,
+    "maxElapsedMs": 22000
+  }
+}

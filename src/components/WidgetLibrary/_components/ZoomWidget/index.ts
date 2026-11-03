@@ -1,0 +1,1 @@
+export { ZoomWidget } from './ZoomWidget';

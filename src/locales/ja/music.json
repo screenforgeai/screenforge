@@ -1,0 +1,16 @@
+{
+  "header": "Music",
+  "noRecordingSelected": "No recording selected",
+  "noMusicTracks": "No music tracks",
+  "noMusicTracksDesc": "Add an audio file to overlay background music",
+  "addMusic": "Add Music",
+  "saving": "Saving...",
+  "ariaDelete": "Delete music clip",
+  "track": "Track {{n}}",
+  "live": "Live",
+  "volume": "Volume",
+  "file": "File",
+  "errorUnsupportedType": "Unsupported file type. Use MP3, WAV, M4A, or AAC.",
+  "errorReadPath": "Could not read file path",
+  "errorSaveFailed": "Failed to save music file"
+}

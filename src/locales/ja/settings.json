@@ -1,0 +1,18 @@
+{
+  "sidebarTitle": "設定",
+  "tabs_profile": "プロフィール",
+  "tabs_language": "言語",
+  "profile_title": "プロフィール",
+  "profile_description": "分析とエラーレポートをパーソナライズします。",
+  "language_title": "言語",
+  "language_description": "インターフェースの言語を選択してください。",
+  "displayName": "表示名",
+  "displayName_placeholder": "お名前",
+  "emailAddress": "メールアドレス",
+  "emailAddress_placeholder": "you@example.com",
+  "emailAddress_invalid": "有効なメールアドレスを入力してください。",
+  "interfaceLanguage": "インターフェース言語",
+  "cancel": "キャンセル",
+  "save": "保存",
+  "saved": "設定を保存しました"
+}

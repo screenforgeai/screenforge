@@ -1,0 +1,16 @@
+{
+  "downloadingTitle": "現在の録画またはエクスポートが終了するとアップデートが準備されます。",
+  "updateDownloaded": "アップデートをダウンロードしました",
+  "checking": "確認中...",
+  "retryUpdate": "アップデートを再試行",
+  "updateReady": "アップデート準備完了",
+  "readyLabel": "アップデート準備完了 · {{version}}",
+  "restartWhenDone": "終了したら再起動",
+  "updateDesc": "{{version}}のダウンロードがバックグラウンドで完了しました。Screenforgeは再起動前に作業を保存します。",
+  "viewChangelog": "変更履歴を見る",
+  "staysDownloaded": "後で選択してもアップデートはダウンロードされたままです。",
+  "later": "後で",
+  "preparing": "準備中…",
+  "restartAndInstall": "再起動してインストール",
+  "newVersion": "新バージョン"
+}

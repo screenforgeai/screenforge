@@ -1,0 +1,15 @@
+{
+  "header": "Masques de confidentialité",
+  "noRecordingSelected": "Aucun enregistrement sélectionné.",
+  "addMask": "Ajouter un masque",
+  "noMasks": "Aucun masque pour l'instant",
+  "noMasksDesc": "Cliquez sur « Ajouter un masque » pour commencer.",
+  "maskN": "Masque {{n}}",
+  "ariaDelete": "Supprimer le masque",
+  "style": "Style",
+  "blur": "Flou",
+  "solidFill": "Remplissage uni",
+  "amount": "Intensité",
+  "pickColor": "Choisir une couleur",
+  "live": "LIVE"
+}

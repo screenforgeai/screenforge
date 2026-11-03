@@ -1,0 +1,16 @@
+{
+  "title_missing": "FFmpeg nicht gefunden",
+  "title_downloading": "FFmpeg wird installiert…",
+  "title_success": "FFmpeg bereit",
+  "title_error": "Download fehlgeschlagen",
+  "desc_missing": "Screenforge verwendet FFmpeg für die Videoverarbeitung und den Export. Installieren Sie es jetzt, es dauert nur einen Moment.",
+  "desc_downloading": "Ein statisches Build wird heruntergeladen (~70 MB). Das passiert nur einmal.",
+  "desc_success": "FFmpeg ist bereit. Sie können jetzt Videos aufnehmen und exportieren.",
+  "desc_errorDefault": "Download fehlgeschlagen. Überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
+  "connecting": "Verbinden…",
+  "skipForNow": "Vorerst überspringen",
+  "installFFmpeg": "FFmpeg installieren",
+  "installing": "Wird installiert...",
+  "continue": "Weiter",
+  "tryAgain": "Erneut versuchen"
+}

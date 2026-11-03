@@ -1,0 +1,10 @@
+{
+  "undo": "元に戻す (Ctrl/Cmd + Z)",
+  "redo": "やり直す (Ctrl/Cmd + Shift + Z, Ctrl + Y)",
+  "split": "再生位置で分割 (Ctrl/Cmd + B)",
+  "play": "再生",
+  "pause": "一時停止",
+  "stop": "停止",
+  "zoomOut": "縮小",
+  "zoomIn": "拡大"
+}

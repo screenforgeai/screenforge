@@ -1,0 +1,21 @@
+{
+  "recordings": "Recordings",
+  "video": "Video",
+  "zoom": "Zoom",
+  "cursor": "Cursor",
+  "keyboard": "Keyboard",
+  "frame": "Frame",
+  "camera": "Camera",
+  "mask": "Privacy Mask",
+  "captions": "Captions",
+  "text": "Text",
+  "music": "Music",
+  "newRecording": "New recording",
+  "keyboardShortcuts": "Keyboard shortcuts",
+  "feedbackSupport": "Feedback & support",
+  "kofiSupport": "Support Screenforge",
+  "comingSoon": "Coming soon",
+  "unsavedRecording_title": "Unsaved recording",
+  "unsavedRecording_desc": "You have an unsaved recording.",
+  "discard": "Discard"
+}

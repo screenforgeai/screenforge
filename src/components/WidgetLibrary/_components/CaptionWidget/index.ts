@@ -1,0 +1,1 @@
+export { CaptionWidget } from './CaptionWidget';

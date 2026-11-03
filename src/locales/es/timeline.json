@@ -1,0 +1,10 @@
+{
+  "undo": "Deshacer (Ctrl/Cmd + Z)",
+  "redo": "Rehacer (Ctrl/Cmd + Shift + Z, Ctrl + Y)",
+  "split": "Dividir en el cabezal (Ctrl/Cmd + B)",
+  "play": "Reproducir",
+  "pause": "Pausar",
+  "stop": "Detener",
+  "zoomOut": "Alejar",
+  "zoomIn": "Acercar"
+}

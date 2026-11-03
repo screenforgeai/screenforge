@@ -1,0 +1,53 @@
+{
+  "id": "mp4-smoke-20s",
+  "description": "A longer moving MP4 export stays playable and gives us a stable 20-second performance baseline.",
+  "recording": {
+    "filePath": "../media/screen-motion-20s.mp4",
+    "mouseData": [],
+    "duration": 20,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 640,
+      "height": 360
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "screen-20s",
+      "timelineStart": 0,
+      "timelineEnd": 20,
+      "sourceStart": 0,
+      "sourceEnd": 20,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#111111",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-smoke-20s.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.5,
+    "minDistinctFrameHashes": 2,
+    "maxElapsedMs": 18000
+  }
+}

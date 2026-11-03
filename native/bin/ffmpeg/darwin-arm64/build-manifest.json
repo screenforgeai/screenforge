@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "builtAt": "2026-04-09T21:25:59.125Z",
+  "targetId": "darwin-arm64",
+  "deploymentTarget": "11.0",
+  "sourceDir": "/Users/mohibarshi/Desktop/work/screenforgeai/ffmpeg",
+  "git": {
+    "revision": "7d57621b832a68c7b150fb2aab1c02e14c82144d",
+    "describe": "n8.2-dev-500-g7d57621b83"
+  },
+  "ffmpegPath": "/Users/mohibarshi/Desktop/work/screenforgeai/app/scripts/../native/bin/ffmpeg/darwin-arm64/ffmpeg",
+  "ffprobePath": "/Users/mohibarshi/Desktop/work/screenforgeai/app/scripts/../native/bin/ffmpeg/darwin-arm64/ffprobe",
+  "ffmpegVersionLine": "ffmpeg version N-123773-g7d57621b83 Copyright (c) 2000-2026 the FFmpeg developers",
+  "ffprobeVersionLine": "ffprobe version N-123773-g7d57621b83 Copyright (c) 2007-2026 the FFmpeg developers",
+  "configurationLine": "--prefix=/var/folders/2g/gy2yd8v93n7bfcfv7l4c0mnh0000gn/T//screenforge-ffmpeg-build.qD5LBm/install --disable-debug --disable-doc --disable-ffplay --disable-xlib --disable-libxcb --enable-ffmpeg --enable-ffprobe --enable-avfoundation --enable-audiotoolbox --enable-videotoolbox --enable-libopus --extra-cflags='-mmacosx-version-min=11.0' --extra-ldflags='-mmacosx-version-min=11.0'",
+  "configureArgs": [
+    "--prefix=/var/folders/2g/gy2yd8v93n7bfcfv7l4c0mnh0000gn/T//screenforge-ffmpeg-build.qD5LBm/install",
+    "--disable-debug",
+    "--disable-doc",
+    "--disable-ffplay",
+    "--disable-xlib",
+    "--disable-libxcb",
+    "--enable-ffmpeg",
+    "--enable-ffprobe",
+    "--enable-avfoundation",
+    "--enable-audiotoolbox",
+    "--enable-videotoolbox",
+    "--enable-libopus",
+    "--extra-cflags=-mmacosx-version-min=11.0",
+    "--extra-ldflags=-mmacosx-version-min=11.0"
+  ]
+}

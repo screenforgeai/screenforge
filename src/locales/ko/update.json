@@ -1,0 +1,16 @@
+{
+  "downloadingTitle": "현재 녹화 또는 내보내기가 완료되면 업데이트가 준비됩니다.",
+  "updateDownloaded": "업데이트 다운로드 완료",
+  "checking": "확인 중...",
+  "retryUpdate": "업데이트 재시도",
+  "updateReady": "업데이트 준비 완료",
+  "readyLabel": "업데이트 준비 완료 · {{version}}",
+  "restartWhenDone": "완료 후 재시작",
+  "updateDesc": "{{version}} 다운로드가 백그라운드에서 완료되었습니다. Screenforge는 재시작 전에 작업을 저장합니다.",
+  "viewChangelog": "변경 로그 보기",
+  "staysDownloaded": "나중에 선택해도 업데이트는 다운로드된 상태로 유지됩니다.",
+  "later": "나중에",
+  "preparing": "준비 중…",
+  "restartAndInstall": "재시작 및 설치",
+  "newVersion": "새 버전"
+}

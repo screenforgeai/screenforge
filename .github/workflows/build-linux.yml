@@ -1,0 +1,122 @@
+name: Build Linux
+
+on:
+  push:
+    tags:
+      - 'linux-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (linux-vX.Y.Z)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-linux-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Release jobs need this org's signing/R2 secrets; skip them in forks.
+    if: github.repository_owner == 'screenforgeai'
+    # Oldest supported LTS runner = oldest glibc the binaries link against,
+    # which maximizes distro compatibility of the produced packages.
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 45
+
+    env:
+      CI: true
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Validate release tag
+        run: |
+          if [[ -z "${RELEASE_TAG:-}" ]]; then
+            echo "RELEASE_TAG is required. Provide workflow_dispatch input 'tag' in linux-vX.Y.Z format." >&2
+            exit 1
+          fi
+          if [[ ! "${RELEASE_TAG}" =~ ^linux-v[0-9A-Za-z._-]+$ ]]; then
+            echo "Invalid RELEASE_TAG: ${RELEASE_TAG} (expected linux-vX.Y.Z)" >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install packaging tools (deb/rpm)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fakeroot dpkg rpm
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Linux app icon
+        run: bash scripts/build-linux-app-icon.sh
+
+      - name: Download Linux FFmpeg
+        run: bash scripts/download-ffmpeg-linux.sh x86_64
+
+      - name: Build Linux app
+        run: node scripts/make-platform.mjs linux --arch x64
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+
+      - name: Generate SHA256 checksums
+        run: |
+          set -euo pipefail
+
+          artifact_files=()
+          while IFS= read -r file; do
+            artifact_files+=("$file")
+          done < <(find out/make -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.zip" -o -name "*.AppImage" \) | sort)
+
+          if (( ${#artifact_files[@]} == 0 )); then
+            echo "No release artifacts found under out/make." >&2
+            exit 1
+          fi
+
+          : > out/make/SHA256SUMS
+          for file in "${artifact_files[@]}"; do
+            sha256sum "$file" >> out/make/SHA256SUMS
+          done
+
+          echo "Generated checksums:"
+          cat out/make/SHA256SUMS
+
+      - name: Publish draft GitHub release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: |
+            out/make/deb/x64/*.deb
+            out/make/rpm/x64/*.rpm
+            out/make/zip/linux/x64/*.zip
+            out/make/AppImage/x64/*.AppImage
+            out/make/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

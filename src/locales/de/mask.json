@@ -1,0 +1,15 @@
+{
+  "header": "Datenschutzmasken",
+  "noRecordingSelected": "Keine Aufnahme ausgewählt.",
+  "addMask": "Maske hinzufügen",
+  "noMasks": "Noch keine Masken",
+  "noMasksDesc": "Klicke auf 'Maske hinzufügen', um zu beginnen.",
+  "maskN": "Maske {{n}}",
+  "ariaDelete": "Maske löschen",
+  "style": "Stil",
+  "blur": "Unschärfe",
+  "solidFill": "Einfarbig",
+  "amount": "Stärke",
+  "pickColor": "Farbe auswählen",
+  "live": "LIVE"
+}

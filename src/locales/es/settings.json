@@ -1,0 +1,18 @@
+{
+  "sidebarTitle": "Ajustes",
+  "tabs_profile": "Perfil",
+  "tabs_language": "Idioma",
+  "profile_title": "Perfil",
+  "profile_description": "Personaliza tus informes de análisis y errores.",
+  "language_title": "Idioma",
+  "language_description": "Elige el idioma de la interfaz.",
+  "displayName": "Nombre para mostrar",
+  "displayName_placeholder": "Tu nombre",
+  "emailAddress": "Correo electrónico",
+  "emailAddress_placeholder": "tu@ejemplo.com",
+  "emailAddress_invalid": "Ingresa una dirección de correo electrónico válida.",
+  "interfaceLanguage": "Idioma de la interfaz",
+  "cancel": "Cancelar",
+  "save": "Guardar",
+  "saved": "Ajustes guardados"
+}

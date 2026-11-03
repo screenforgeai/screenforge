@@ -1,0 +1,15 @@
+{
+  "header": "Máscaras de privacidad",
+  "noRecordingSelected": "Ninguna grabación seleccionada.",
+  "addMask": "Agregar máscara",
+  "noMasks": "Sin máscaras aún",
+  "noMasksDesc": "Haz clic en \"Agregar máscara\" para comenzar.",
+  "maskN": "Máscara {{n}}",
+  "ariaDelete": "Eliminar máscara",
+  "style": "Estilo",
+  "blur": "Desenfoque",
+  "solidFill": "Relleno sólido",
+  "amount": "Cantidad",
+  "pickColor": "Elegir color",
+  "live": "LIVE"
+}

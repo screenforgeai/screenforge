@@ -1,0 +1,18 @@
+{
+  "sidebarTitle": "Settings",
+  "tabs_profile": "Profile",
+  "tabs_language": "Language",
+  "profile_title": "Profile",
+  "profile_description": "Personalizes your analytics and error reports.",
+  "language_title": "Language",
+  "language_description": "Choose your interface language.",
+  "displayName": "Display name",
+  "displayName_placeholder": "Your name",
+  "emailAddress": "Email address",
+  "emailAddress_placeholder": "you@example.com",
+  "emailAddress_invalid": "Enter a valid email address.",
+  "interfaceLanguage": "Interface language",
+  "cancel": "Cancel",
+  "save": "Save",
+  "saved": "Settings saved"
+}
