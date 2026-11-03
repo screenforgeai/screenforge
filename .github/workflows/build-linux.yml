@@ -105,6 +105,17 @@ jobs:
           echo "Generated checksums:"
           cat out/make/SHA256SUMS
 
+      - name: Upload release files to Cloudflare R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+          R2_RELEASE_PREFIX: ${{ vars.R2_RELEASE_PREFIX || 'screenforge' }}
+          R2_RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: bash scripts/upload-release-to-r2-linux.sh
+
       - name: Publish draft GitHub release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
