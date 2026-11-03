@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import * as Sentry from '@sentry/electron/renderer';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { identifyUser, trackEvent } from 'src/lib/analytics';
@@ -122,13 +121,6 @@ export const SettingsModal = ({ open, onClose }: Props) => {
       trackEvent('settings_profile_saved', {
         has_name: !!trimmed.name,
         has_email: !!trimmed.email,
-      });
-
-      const id = await window.screenforge.getAnonymousId().catch(() => null);
-      Sentry.setUser({
-        id: id ?? undefined,
-        ...(trimmed.email && { email: trimmed.email }),
-        ...(trimmed.name && { username: trimmed.name }),
       });
 
       setSavedProfile(trimmed);

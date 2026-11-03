@@ -1,7 +1,9 @@
 import { CH } from '../../channels';
 import { createInvokeBridge, createSendBridge, createSubscription } from '../../lib/ipc-renderer';
 import type {
+  FeedbackSubmission,
   PreloadProgress,
+  SerializedError,
   RequestableMediaPermission,
   StartupPermission,
   StartupPermissionMap,
@@ -44,6 +46,10 @@ export const appBridge = {
   trackEvent: createSendBridge<[string, Record<string, unknown>?]>(CH.app.TRACK_EVENT),
   getAnonymousId: createInvokeBridge<[], string | null>(CH.app.GET_ANONYMOUS_ID),
   identifyUser: createSendBridge<[{ name?: string; email?: string }]>(CH.app.IDENTIFY_USER),
+  captureException: createSendBridge<[SerializedError, Record<string, unknown>?]>(
+    CH.app.CAPTURE_EXCEPTION,
+  ),
+  submitFeedback: createSendBridge<[FeedbackSubmission]>(CH.app.SUBMIT_FEEDBACK),
   saveScreenshot: createInvokeBridge<[string], string>(CH.app.SAVE_SCREENSHOT),
   saveMusic: createInvokeBridge<[string, string], { filePath: string; duration: number }>(
     CH.music.SAVE,

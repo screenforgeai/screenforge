@@ -79,7 +79,6 @@ jobs:
       - name: Build Linux app
         run: node scripts/make-platform.mjs linux --arch x64
         env:
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
 

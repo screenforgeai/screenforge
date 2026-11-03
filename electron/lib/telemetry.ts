@@ -1,12 +1,15 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import * as Sentry from '@sentry/electron/main';
 import { PostHog } from 'posthog-node';
+import type { FeedbackSubmission, SerializedError } from '../../src/types/index';
 import log from './logger';
 
 let posthogClient: PostHog | null = null;
 let anonymousId: string | null = null;
+
+// PostHog caps event size; keep the tail, where the failure usually is.
+export const FEEDBACK_LOG_MAX_CHARS = 100_000;
 
 function loadOrCreateAnonymousId(): string {
   const idPath = path.join(app.getPath('userData'), 'analytics-id.txt');
@@ -31,21 +34,10 @@ function loadOrCreateAnonymousId(): string {
 }
 
 export function initTelemetry(): void {
-  const sentryDsn = process.env.SENTRY_DSN?.trim();
   const posthogKey = process.env.POSTHOG_API_KEY?.trim();
   const posthogHost = process.env.POSTHOG_HOST?.trim() || 'https://us.i.posthog.com';
 
   anonymousId = loadOrCreateAnonymousId();
-
-  if (sentryDsn) {
-    Sentry.init({
-      dsn: sentryDsn,
-      environment: app.isPackaged ? 'production' : 'development',
-      release: `screenforge@${app.getVersion()}`,
-    });
-    Sentry.setUser({ id: anonymousId });
-    log.info('[telemetry] Sentry initialized');
-  }
 
   if (!app.isPackaged) {
     if (posthogKey) {
@@ -60,6 +52,8 @@ export function initTelemetry(): void {
       host: posthogHost,
       flushAt: 5,
       flushInterval: 5_000,
+      // Uncaught exceptions and unhandled rejections in the main process.
+      enableExceptionAutocapture: true,
     });
     log.info('[telemetry] PostHog initialized');
   }
@@ -79,10 +73,7 @@ export function trackEvent(event: string, properties?: Record<string, unknown>):
       event,
       properties: {
         ...properties,
-        app_version: app.getVersion(),
-        platform: process.platform,
-        arch: process.arch,
-        is_packaged: app.isPackaged,
+        ...commonProperties(),
       },
     });
   } catch (err) {
@@ -114,10 +105,55 @@ export function trackMemorySnapshot(label: string): void {
   }
 }
 
-export function identifyUser(name?: string, email?: string): void {
-  if (anonymousId) {
-    Sentry.setUser({ id: anonymousId, ...(email && { email }), ...(name && { username: name }) });
+function commonProperties(): Record<string, unknown> {
+  return {
+    app_version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    is_packaged: app.isPackaged,
+  };
+}
+
+export function captureException(
+  error: SerializedError,
+  properties?: Record<string, unknown>,
+): void {
+  if (!posthogClient || !anonymousId) {
+    return;
   }
+  try {
+    const restored = new Error(error.message);
+    restored.name = error.name || 'Error';
+    if (error.stack) {
+      restored.stack = error.stack;
+    }
+    posthogClient.captureException(restored, anonymousId, {
+      ...properties,
+      ...commonProperties(),
+    });
+  } catch (err) {
+    log.warn('[telemetry] PostHog exception capture failed:', err);
+  }
+}
+
+export function submitFeedback(feedback: FeedbackSubmission): void {
+  const logs = feedback.logs ?? '';
+  const logsTruncated = logs.length > FEEDBACK_LOG_MAX_CHARS;
+  trackEvent('feedback_submitted', {
+    ...feedback.context,
+    message: feedback.message,
+    name: feedback.name || undefined,
+    email: feedback.email || undefined,
+    source: feedback.source,
+    report_type: feedback.reportType,
+    rating: feedback.rating,
+    logs_attached: logs.length > 0,
+    logs_truncated: logsTruncated,
+    logs: logs ? logs.slice(-FEEDBACK_LOG_MAX_CHARS) : undefined,
+  });
+}
+
+export function identifyUser(name?: string, email?: string): void {
   if (posthogClient && anonymousId) {
     posthogClient.identify({
       distinctId: anonymousId,

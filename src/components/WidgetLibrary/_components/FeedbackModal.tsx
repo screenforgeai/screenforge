@@ -1,8 +1,7 @@
-import * as Sentry from '@sentry/electron/renderer';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { trackEvent } from 'src/lib/analytics';
+import { submitFeedback, trackEvent } from 'src/lib/analytics';
 import {
   Button,
   Dialog,
@@ -145,31 +144,14 @@ export const FeedbackModal = ({
           ? await window.screenforge.readLogFile().catch(() => '')
           : '';
 
-      Sentry.withScope((scope) => {
-        scope.setContext('screenforge_feedback', {
-          ...context,
-          report_type: reportType,
-          logs_attached: logContent.length > 0,
-        });
-
-        return Sentry.captureFeedback(
-          {
-            message: trimmedMessage,
-            name: trimmedName,
-            email: trimmedEmail,
-            source,
-            tags: {
-              screenforge_report_type: reportType,
-              screenforge_active_widget: activeWidget,
-            },
-          },
-          {
-            includeReplay: false,
-            attachments: logContent
-              ? [{ filename: 'screenforge.log', data: logContent, contentType: 'text/plain' }]
-              : [],
-          },
-        );
+      submitFeedback({
+        message: trimmedMessage,
+        name: trimmedName,
+        email: trimmedEmail,
+        source,
+        reportType,
+        context: { ...context, active_widget: activeWidget },
+        logs: logContent,
       });
 
       if (trimmedName || trimmedEmail) {

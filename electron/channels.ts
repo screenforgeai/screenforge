@@ -160,5 +160,7 @@ export const CH = {
     TRACK_EVENT: 'app:track-event',
     GET_ANONYMOUS_ID: 'app:get-anonymous-id',
     IDENTIFY_USER: 'app:identify-user',
+    CAPTURE_EXCEPTION: 'app:capture-exception',
+    SUBMIT_FEEDBACK: 'app:submit-feedback',
   },
 } as const;
