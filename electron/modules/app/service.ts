@@ -419,4 +419,9 @@ export async function saveMusic(
   return { filePath: destPath, duration };
 }
 
-export { getAnonymousId, identifyUser } from '../../lib/telemetry';
+export {
+  captureException,
+  getAnonymousId,
+  identifyUser,
+  submitFeedback,
+} from '../../lib/telemetry';

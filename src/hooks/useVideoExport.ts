@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import * as Sentry from '@sentry/electron/renderer';
-import { trackEvent } from '../lib/analytics';
+import { captureException, trackEvent } from '../lib/analytics';
 import type {
   CaptureStoreSnapshot,
   CaptureWindowParams,
@@ -439,17 +438,13 @@ export function useVideoExport() {
           resolution: settings.resolution,
         });
       } else {
-        Sentry.captureException(error, {
-          tags: {
-            error_type: 'export_failed',
-            format: settings.format,
-            resolution: settings.resolution,
-          },
-          extra: {
-            quality: settings.quality,
-            has_audio: settings.includeAudio,
-            message,
-          },
+        captureException(error, {
+          error_type: 'export_failed',
+          format: settings.format,
+          resolution: settings.resolution,
+          quality: settings.quality,
+          has_audio: settings.includeAudio,
+          message,
         });
         trackEvent('export_failed', {
           format: settings.format,

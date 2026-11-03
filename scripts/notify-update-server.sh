@@ -37,6 +37,14 @@ select_preferred_release_asset() {
     for candidate in "${candidates[@]}"; do
       [[ "$candidate" == *.zip ]] && printf '%s\n' "$candidate" && return 0
     done
+  elif [[ "$platform" == "linux" ]]; then
+    # AppImage runs on any distro, so it's the default download.
+    local ext
+    for ext in .AppImage .deb .rpm .zip; do
+      for candidate in "${candidates[@]}"; do
+        [[ "$candidate" == *"$ext" ]] && printf '%s\n' "$candidate" && return 0
+      done
+    done
   fi
 
   return 1
@@ -133,8 +141,12 @@ elif [[ "$tag" =~ ^win-v[0-9A-Za-z._-]+$ ]]; then
   platform="win32"
   arch="x64"
   version="${tag#win-v}"
+elif [[ "$tag" =~ ^linux-v[0-9A-Za-z._-]+$ ]]; then
+  platform="linux"
+  arch="x64"
+  version="${tag#linux-v}"
 else
-  echo "Release tag_name is invalid: ${tag} (expected mac-vX.Y.Z or win-vX.Y.Z)" >&2
+  echo "Release tag_name is invalid: ${tag} (expected mac-vX.Y.Z, win-vX.Y.Z or linux-vX.Y.Z)" >&2
   exit 1
 fi
 
@@ -157,6 +169,8 @@ while IFS= read -r asset; do
 done < <(
   if [[ "$platform" == "darwin" ]]; then
     jq -r '.release.assets[]? | .name // empty | select(endswith(".dmg") or endswith(".zip"))' "$GITHUB_EVENT_PATH"
+  elif [[ "$platform" == "linux" ]]; then
+    jq -r '.release.assets[]? | .name // empty | select(endswith(".AppImage") or endswith(".deb") or endswith(".rpm") or endswith(".zip"))' "$GITHUB_EVENT_PATH"
   else
     jq -r '.release.assets[]? | .name // empty | select(endswith(".exe") or endswith(".zip"))' "$GITHUB_EVENT_PATH"
   fi
@@ -176,7 +190,7 @@ else
         candidate=$2
         sub(/^\*/, "", candidate)
         sub(/^.*\//, "", candidate)
-        if (candidate ~ /\.(dmg|zip|exe)$/) {
+        if (candidate ~ /\.(dmg|zip|exe|AppImage|deb|rpm)$/) {
           print candidate
         }
       }

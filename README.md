@@ -47,7 +47,7 @@ Screenforge records your screen (or a window), your webcam, and your mic, then g
 - Project library with autosave and style presets (save/reuse cursor, camera, frame, and caption styling together)
 - Video import — edit existing MP4/MOV/WebM/AVI/MKV/M4V files, not just fresh recordings
 - 7 languages: English, German, Spanish, French, Japanese, Korean, Portuguese
-- Optional anonymous crash reporting and usage analytics (Sentry + PostHog) — off in dev builds, no account required
+- Optional anonymous usage analytics and error reporting (PostHog) — off in dev builds, no account required
 
 See [`FEATURES.md`](./FEATURES.md) for what's planned next.
 
