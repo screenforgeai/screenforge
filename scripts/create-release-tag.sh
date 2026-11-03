@@ -46,6 +46,13 @@ dispatch_workflow() {
     return 0
   fi
 
+  # The tag was pushed with a token whose pushes trigger workflows, so its
+  # push:tags trigger already started the release — dispatching would run it twice.
+  if [[ "${TAG_PUSH_TRIGGERS_WORKFLOWS:-}" == "true" ]]; then
+    echo "Tag push already triggers ${workflow} for ${tag}; not dispatching."
+    return 0
+  fi
+
   if [[ -z "${GITHUB_TOKEN:-}" || -z "${GITHUB_REPOSITORY:-}" ]]; then
     echo "GITHUB_TOKEN and GITHUB_REPOSITORY are required to dispatch workflow." >&2
     exit 1
