@@ -467,22 +467,26 @@ const config: ForgeConfig = {
     new MakerRpm({
       options: {
         name: 'screenforge',
+        // The packaged binary is named after productName, not options.name.
+        bin: APP_DISPLAY_NAME,
         productName: APP_DISPLAY_NAME,
         genericName: 'Screen Recorder',
         categories: ['AudioVideo', 'Video'],
         icon: fs.existsSync(linuxAppIconPath) ? linuxAppIconPath : undefined,
-        homepage: 'https://github.com/mohibarshi/screenforge',
+        homepage: 'https://github.com/screenforgeai/screenforge',
       },
     }),
     new MakerDeb({
       options: {
         name: 'screenforge',
+        // The packaged binary is named after productName, not options.name.
+        bin: APP_DISPLAY_NAME,
         productName: APP_DISPLAY_NAME,
         genericName: 'Screen Recorder',
         section: 'video',
         categories: ['AudioVideo', 'Video'],
         icon: fs.existsSync(linuxAppIconPath) ? linuxAppIconPath : undefined,
-        homepage: 'https://github.com/mohibarshi/screenforge',
+        homepage: 'https://github.com/screenforgeai/screenforge',
         // Wayland capture requires the PipeWire portal stack at runtime;
         // X11-only systems work without it, so recommend rather than depend.
         recommends: ['pipewire', 'xdg-desktop-portal'],
