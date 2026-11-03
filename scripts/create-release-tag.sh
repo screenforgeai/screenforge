@@ -32,8 +32,10 @@ fi
 
 mac_version="$(node -p "require('./versions.json').mac")"
 win_version="$(node -p "require('./versions.json').win")"
+linux_version="$(node -p "require('./versions.json').linux")"
 mac_tag="mac-v${mac_version}"
 win_tag="win-v${win_version}"
+linux_tag="linux-v${linux_version}"
 
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -88,6 +90,7 @@ create_and_push_tag() {
 # Determine which platforms had their version changed
 mac_tag_new=false
 win_tag_new=false
+linux_tag_new=false
 
 if create_and_push_tag "$mac_tag"; then
   mac_tag_new=true
@@ -95,6 +98,10 @@ fi
 
 if create_and_push_tag "$win_tag"; then
   win_tag_new=true
+fi
+
+if create_and_push_tag "$linux_tag"; then
+  linux_tag_new=true
 fi
 
 # Dispatch only the workflows whose tag is new (avoids re-triggering existing releases)
@@ -106,6 +113,10 @@ if [[ "$win_tag_new" == "true" ]]; then
   dispatch_workflow "build-windows.yml" "$win_tag"
 fi
 
-if [[ "$mac_tag_new" == "false" && "$win_tag_new" == "false" ]]; then
-  echo "Both tags already exist — no workflows dispatched."
+if [[ "$linux_tag_new" == "true" ]]; then
+  dispatch_workflow "build-linux.yml" "$linux_tag"
+fi
+
+if [[ "$mac_tag_new" == "false" && "$win_tag_new" == "false" && "$linux_tag_new" == "false" ]]; then
+  echo "All tags already exist — no workflows dispatched."
 fi
