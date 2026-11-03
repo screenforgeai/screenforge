@@ -47,7 +47,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          git fetch origin "${BASE_REF}" --depth=1
+          # fetch-depth: 0 already fetched every branch, so origin/<base> is
+          # here. A separate `git fetch` fails on private repos: checkout runs
+          # with persist-credentials: false.
           changed_files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
 
           echo "Changed files:"
