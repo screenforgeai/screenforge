@@ -28,6 +28,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "changeset": "changeset",
     "version": "changeset version",
+    "version-packages": "changeset version && node scripts/sync-platform-versions.mjs",
     "build:icon:macos": "bash scripts/build-macos-app-icon.sh",
     "build:icon:windows": "bash scripts/build-windows-app-icon.sh",
     "build:native:macos": "bash scripts/build-native-macos.sh",
