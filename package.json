@@ -39,7 +39,25 @@
     "build:native:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-native-windows.ps1",
     "ci:tag-release": "bash scripts/create-release-tag.sh"
   },
-  "keywords": [],
+  "keywords": [
+    "screen-recorder",
+    "screen-recording",
+    "screencast",
+    "auto-zoom",
+    "cursor-tracking",
+    "video-editor",
+    "product-demo",
+    "tutorial",
+    "captions",
+    "whisper",
+    "ffmpeg",
+    "electron",
+    "react",
+    "open-source",
+    "macos",
+    "windows",
+    "linux"
+  ],
   "author": {
     "name": "Mohib Arshi",
     "email": "mohib@screenforge.co"
