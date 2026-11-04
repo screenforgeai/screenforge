@@ -13,9 +13,14 @@ async function ensureImportsDir(): Promise<string> {
   return dir;
 }
 
+// Electron 43+ opens dialogs in Downloads unless given a defaultPath, and the
+// OS no longer remembers the last folder, so remember it for this session.
+let lastImportDir: string | undefined;
+
 export async function pickAndImportVideo(): Promise<RecordingResult | null> {
   const result = await dialog.showOpenDialog({
     title: 'Import Video',
+    defaultPath: lastImportDir,
     properties: ['openFile'],
     filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v'] }],
   });
@@ -25,6 +30,7 @@ export async function pickAndImportVideo(): Promise<RecordingResult | null> {
   }
 
   const sourcePath = result.filePaths[0]!;
+  lastImportDir = path.dirname(sourcePath);
   return importVideoFromPath(sourcePath);
 }
 

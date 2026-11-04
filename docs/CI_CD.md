@@ -9,7 +9,7 @@ This repository now uses a four-workflow CI/CD setup for `main`-based releases w
 File: `.github/workflows/ci.yml`
 
 - Triggers on pull requests, pushes to `main`, and manual dispatch.
-- Uses Node.js 20 + pnpm 10.
+- Uses Node.js 22 + pnpm 10.
 - Installs dependencies with `pnpm install --frozen-lockfile`.
 - Runs:
   - `pnpm lint`

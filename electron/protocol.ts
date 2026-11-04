@@ -110,20 +110,55 @@ export const __testing = {
   parseByteRange,
 };
 
-export const registerProtocols = (): void => {
+// App pages are file:// (packaged) or the Vite dev server, so every
+// screenforge:// request is cross-origin. Chromium (Electron 45+) blocks those
+// fetches, and WebGL uploads of the media, unless the scheme is CORS-enabled
+// and responses allow the origin. Only the app's own origins are allowed, so
+// a foreign page can't read local files through this scheme.
+const corsHeadersFor = (
+  req: Request,
+  trustedOrigins: readonly string[],
+): Record<string, string> => {
+  const origin = req.headers.get('origin');
+  return origin && trustedOrigins.includes(origin)
+    ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }
+    : { Vary: 'Origin' };
+};
+
+// Must be called before app.ready
+export const registerSchemePrivileges = (): void => {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'screenforge',
+      privileges: {
+        secure: true,
+        standard: true,
+        stream: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
+  ]);
+};
+
+// trustedOrigins: the origins app pages send. Packaged file:// pages send the
+// literal "null", which a sandboxed iframe also sends; the navigation guards
+// keep foreign pages out of app windows so that can't be abused.
+export const registerProtocols = (trustedOrigins: readonly string[]): void => {
   // Serve local files via screenforge://local/<encoded absolute-path>
   // Range requests are handled so Chromium can seek video.
   protocol.handle('screenforge', (req) => {
+    const corsHeaders = corsHeadersFor(req, trustedOrigins);
     const filePath = decodeScreenforgeFilePath(req.url);
     if (!filePath) {
-      return new Response('Bad request', { status: 400 });
+      return new Response('Bad request', { status: 400, headers: corsHeaders });
     }
 
     let stat: fs.Stats;
     try {
       stat = fs.statSync(filePath);
     } catch {
-      return new Response('Not found', { status: 404 });
+      return new Response('Not found', { status: 404, headers: corsHeaders });
     }
 
     const fileSize = stat.size;
@@ -144,6 +179,7 @@ export const registerProtocols = (): void => {
         return new Response('Range Not Satisfiable', {
           status: 416,
           headers: {
+            ...corsHeaders,
             'Accept-Ranges': 'bytes',
             'Content-Range': `bytes */${fileSize}`,
             'Content-Type': contentType,
@@ -158,6 +194,7 @@ export const registerProtocols = (): void => {
       return new Response(webStream, {
         status: 206,
         headers: {
+          ...corsHeaders,
           'Content-Range': `bytes ${start}-${end}/${fileSize}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': String(end - start + 1),
@@ -170,6 +207,7 @@ export const registerProtocols = (): void => {
     return new Response(webStream, {
       status: 200,
       headers: {
+        ...corsHeaders,
         'Accept-Ranges': 'bytes',
         'Content-Length': String(fileSize),
         'Content-Type': contentType,
