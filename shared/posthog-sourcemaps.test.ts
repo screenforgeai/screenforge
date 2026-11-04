@@ -45,6 +45,23 @@ describe('uploadRendererSourcemaps', () => {
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('cleanup failed'));
   });
 
+  it('leaves a renderer asset whole when rewriting it fails partway', () => {
+    const realWrite = fs.writeFileSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((file, ...rest) => {
+      // Like a full disk: the file is truncated, then the write fails.
+      realWrite(file, '');
+      void rest;
+      throw new Error('ENOSPC');
+    });
+
+    uploadRendererSourcemaps(buildPath, '1.2.3', { env: {}, run: vi.fn(), log });
+
+    expect(fs.readFileSync(path.join(assetsDir, 'index.js'), 'utf8')).toBe(
+      'x\n//# sourceMappingURL=index.js.map',
+    );
+    expect(fs.readdirSync(assetsDir)).toEqual(['index.js']);
+  });
+
   it('does nothing outside a release build', () => {
     const run = vi.fn();
 

@@ -27,7 +27,17 @@ function removeSourcemaps(dir) {
       const code = fs.readFileSync(entryPath, 'utf8');
       const stripped = code.replace(/\/\/# sourceMappingURL=\S+\s*$/, '');
       if (stripped !== code) {
-        fs.writeFileSync(entryPath, stripped);
+        // Write beside it and swap in only once complete: a write that fails
+        // partway (a full disk) must not leave the shipped asset truncated.
+        // If it fails, keep the original — a dangling comment is harmless —
+        // and carry on removing the .map files.
+        const tmpPath = `${entryPath}.tmp`;
+        try {
+          fs.writeFileSync(tmpPath, stripped);
+          fs.renameSync(tmpPath, entryPath);
+        } catch {
+          fs.rmSync(tmpPath, { force: true });
+        }
       }
     }
   }
