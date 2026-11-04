@@ -141,6 +141,9 @@ export const usePixiRenderer = (
   // The app is created once when the canvas mounts and destroyed on unmount.
   const sceneRef = useRef<PixiScene | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
+  // The effect updaters for the current scene; they close over it, so they
+  // must never outlive it (see the scene cleanup below).
+  const updatersRef = useRef<PixiEffectUpdater[]>([]);
 
   // Track only whether a recording is present (null vs. non-null).
   // Switching from R1 → R2 must NOT destroy the Pixi app — recreating a
@@ -180,6 +183,10 @@ export const usePixiRenderer = (
       if (createdScene) {
         createdScene.app.destroy(false);
         sceneRef.current = null;
+        // Destroying the app nulls its renderer. The next scene can arrive
+        // and render a frame before its own pipeline is set up, so drop
+        // these now rather than letting it run them against a dead scene.
+        updatersRef.current = [];
       }
       setSceneReady(false);
     };
@@ -225,8 +232,6 @@ export const usePixiRenderer = (
   }, [sceneReady, frame, isCropEditing, videoRef]); // isCropEditing in deps triggers resize on enter/exit
 
   // ── Effect pipeline setup (async) ─────────────────────────────────────────
-  const updatersRef = useRef<PixiEffectUpdater[]>([]);
-
   useEffect(() => {
     const scene = sceneRef.current;
     if (!sceneReady || !scene || !recording) {
