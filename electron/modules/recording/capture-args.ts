@@ -129,6 +129,34 @@ export function buildH264EncodeArgs(bitrate: string, platform = process.platform
   return ['-c:v', 'libx264', '-preset', 'veryfast', '-b:v', bitrate];
 }
 
+// H.264 level 5.2: 36,864 macroblocks a frame (4096x2304), and VideoToolbox
+// won't open wider than 4096. libopenh264 has the same ceiling.
+const H264_MAX_SIDE = 4096;
+const H264_MAX_AREA = 4096 * 2304;
+
+/**
+ * The size to encode a width x height frame at with buildH264EncodeArgs: the
+ * same size when the encoder accepts it, otherwise scaled down (aspect kept,
+ * even sides) to fit. A 5K display records at 5120x2880, which VideoToolbox
+ * refuses to encode.
+ */
+export function fitH264FrameSize(
+  width: number,
+  height: number,
+): { width: number; height: number; scaled: boolean } {
+  if (width <= H264_MAX_SIDE && height <= H264_MAX_SIDE && width * height <= H264_MAX_AREA) {
+    return { width, height, scaled: false };
+  }
+  const factor = Math.min(
+    H264_MAX_SIDE / width,
+    H264_MAX_SIDE / height,
+    Math.sqrt(H264_MAX_AREA / (width * height)),
+  );
+  // The epsilon keeps exact fits (6016x3384 → 4096x2304) from rounding down.
+  const even = (n: number) => Math.floor((n * factor) / 2 + 1e-6) * 2;
+  return { width: even(width), height: even(height), scaled: true };
+}
+
 /**
  * Wayland (Linux): transcodes the renderer-captured portal webm (VP9/VP8 from
  * MediaRecorder) into the H.264 MP4 the rest of the pipeline expects.

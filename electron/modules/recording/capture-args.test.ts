@@ -8,7 +8,36 @@ import {
   buildWaylandTranscodeArgs,
   buildX11GrabArgs,
   clampCaptureBounds,
+  fitH264FrameSize,
 } from './capture-args';
+
+describe('fitH264FrameSize', () => {
+  it('keeps sizes H.264 encoders accept, including 4K UHD', () => {
+    expect(fitH264FrameSize(1920, 1080)).toEqual({ width: 1920, height: 1080, scaled: false });
+    expect(fitH264FrameSize(3840, 2160)).toEqual({ width: 3840, height: 2160, scaled: false });
+    expect(fitH264FrameSize(4096, 2304)).toEqual({ width: 4096, height: 2304, scaled: false });
+  });
+
+  it('scales a 5K frame down to the largest 16:9 size H.264 allows', () => {
+    // VideoToolbox refused 5120x2880 when joining clips (Sentry SCREENFORGE-APP-7X).
+    expect(fitH264FrameSize(5120, 2880)).toEqual({ width: 4096, height: 2304, scaled: true });
+    expect(fitH264FrameSize(6016, 3384)).toEqual({ width: 4096, height: 2304, scaled: true });
+  });
+
+  it('keeps the aspect ratio and even sides for other shapes', () => {
+    const portrait = fitH264FrameSize(2880, 5120);
+    expect(portrait.scaled).toBe(true);
+    expect(portrait.width * portrait.height).toBeLessThanOrEqual(4096 * 2304);
+    expect(Math.max(portrait.width, portrait.height)).toBeLessThanOrEqual(4096);
+    expect(portrait.width / portrait.height).toBeCloseTo(2880 / 5120, 2);
+
+    const ultrawide = fitH264FrameSize(5120, 1440);
+    expect(ultrawide.width).toBeLessThanOrEqual(4096);
+    expect(ultrawide.width % 2).toBe(0);
+    expect(ultrawide.height % 2).toBe(0);
+    expect(ultrawide.width / ultrawide.height).toBeCloseTo(5120 / 1440, 2);
+  });
+});
 
 describe('buildX11GrabArgs', () => {
   const bounds = { x: 0, y: 0, width: 1920, height: 1080 };
