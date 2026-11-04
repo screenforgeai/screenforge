@@ -155,6 +155,17 @@ describe('telemetry', () => {
     expect(posthogMock.captureException).toHaveBeenCalledTimes(3);
   });
 
+  it('tells errors apart even when the separator appears in name or message', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    captureException({ name: 'TypeError', message: 'load: failed' });
+    captureException({ name: 'TypeError: load', message: 'failed' });
+
+    expect(posthogMock.captureException).toHaveBeenCalledTimes(2);
+  });
+
   it('sends in-app feedback as a feedback_submitted event, keeping only the newest log lines', async () => {
     electronMock.app.isPackaged = true;
     const { initTelemetry, submitFeedback, FEEDBACK_LOG_MAX_CHARS } = await loadTelemetryModule();

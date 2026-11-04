@@ -128,7 +128,8 @@ export function captureException(
     return;
   }
   try {
-    const key = `${error.name}: ${error.message}`;
+    // A tuple, so a ': ' inside the name or message can't make two errors collide.
+    const key = JSON.stringify([error.name || 'Error', error.message]);
     const now = Date.now();
     const recent = recentExceptions.get(key);
     if (recent && now - recent.sentAt < EXCEPTION_REPEAT_WINDOW_MS) {
