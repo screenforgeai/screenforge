@@ -1,5 +1,11 @@
 # screenforge
 
+## 0.6.18
+
+### Patch Changes
+
+- 3c7d1d5: Fix the Linux .deb and .rpm packages, which couldn't find the app executable.
+
 ## 0.6.17
 
 ### Patch Changes
