@@ -5,7 +5,7 @@ Screenforge desktop app (Electron + React).
 
 ## Getting set up
 
-**Prerequisites:** Node.js 18+, pnpm 10 (pnpm 11 ignores this repo's
+**Prerequisites:** Node.js 22.12+, pnpm 10 (pnpm 11 ignores this repo's
 `.npmrc` settings, which Electron Forge needs)
 
 ```bash

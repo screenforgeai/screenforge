@@ -92,6 +92,9 @@ function ensurePreviewCameraVideo(path: string | null): HTMLVideoElement | null 
   }
   disposePreviewCameraVideo();
   const video = document.createElement('video');
+  // screenforge:// is cross-origin to the app page; without CORS mode WebGL
+  // refuses to upload the frames.
+  video.crossOrigin = 'anonymous';
   video.src = createScreenforgeFileUrl(path);
   video.preload = 'auto';
   video.muted = true;

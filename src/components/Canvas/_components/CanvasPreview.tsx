@@ -283,6 +283,9 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
                the buffer for 1×1 elements and cause first-play stutter). */}
           <video
             ref={videoRef}
+            // screenforge:// is cross-origin to the app page; CORS mode keeps
+            // the frames untainted so the WebGL preview can upload them.
+            crossOrigin="anonymous"
             src={createScreenforgeFileUrl(recordingResult.filePath)}
             preload="auto"
             style={{
