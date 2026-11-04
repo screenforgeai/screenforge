@@ -1,11 +1,13 @@
-import { app, BrowserWindow, desktopCapturer, protocol, screen, session } from 'electron';
+import { app, BrowserWindow, desktopCapturer, screen, session, shell } from 'electron';
 import started from 'electron-squirrel-startup';
 import os from 'node:os';
 import path from 'node:path';
 import fsSync from 'node:fs';
-import { registerProtocols } from './protocol';
+import { pathToFileURL } from 'node:url';
+import { registerProtocols, registerSchemePrivileges } from './protocol';
 import { CH } from './channels';
 import log, { getLogFilePath } from './lib/logger';
+import { installNavigationGuards } from './lib/navigation-guard';
 import { pinWindowToAllWorkspaces } from './lib/workspace-pin';
 import { registerAppChannels } from './modules/app/channel';
 import { runPreloadTasks, requestAccessibilityAccess } from './modules/app/service';
@@ -83,12 +85,20 @@ if (process.platform === 'linux') {
 }
 
 // Must be called before app.ready
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'screenforge',
-    privileges: { secure: true, standard: true, stream: true, supportFetchAPI: true },
-  },
-]);
+registerSchemePrivileges();
+
+// The page every app window loads, and the Origin header it sends: packaged
+// file:// pages send the literal "null".
+const APP_PAGE_URL =
+  MAIN_WINDOW_VITE_DEV_SERVER_URL ||
+  pathToFileURL(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)).href;
+const APP_ORIGIN = MAIN_WINDOW_VITE_DEV_SERVER_URL
+  ? new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL).origin
+  : 'null';
+
+app.on('web-contents-created', (_event, contents) => {
+  installNavigationGuards(contents, APP_PAGE_URL, (url) => void shell.openExternal(url));
+});
 
 const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 const APP_ICON_PATH = path.join(app.getAppPath(), 'src/assets/app-icon.png');
@@ -335,7 +345,7 @@ function createToolbarWindow(): BrowserWindow {
 }
 
 app.on('ready', async () => {
-  registerProtocols();
+  registerProtocols([APP_ORIGIN]);
 
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
     cb(isAllowedRendererPermission(permission)),

@@ -127,7 +127,7 @@ For a deeper tour, read [`docs/FOUNDATION.md`](./docs/FOUNDATION.md) and [`docs/
 
 ## Build from source
 
-**Prerequisites:** Node.js 18+ and pnpm 10 (pnpm 11 ignores this repo's `.npmrc`, which Electron Forge needs).
+**Prerequisites:** Node.js 22.12+ and pnpm 10 (pnpm 11 ignores this repo's `.npmrc`, which Electron Forge needs).
 
 ```bash
 git clone https://github.com/screenforgeai/screenforge.git
