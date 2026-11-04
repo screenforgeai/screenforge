@@ -1,5 +1,13 @@
 # screenforge
 
+## 0.6.19
+
+### Patch Changes
+
+- 24c59b6: Fix a Windows crash when closing a window, by updating Electron from 40 to 45. The Import Video picker now reopens in the folder you last imported from.
+- dea5024: Deleting the last clip on the timeline no longer throws an error on every preview frame.
+- 52d90e0: Closing a project and opening another no longer throws an error in the preview while the new one loads.
+
 ## 0.6.18
 
 ### Patch Changes
