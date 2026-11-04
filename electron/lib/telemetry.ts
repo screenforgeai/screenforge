@@ -114,6 +114,12 @@ function commonProperties(): Record<string, unknown> {
   };
 }
 
+// A render loop that throws every frame would otherwise send ~60 events a
+// second; one report per error per minute is enough to see it.
+const EXCEPTION_REPEAT_WINDOW_MS = 60_000;
+const MAX_TRACKED_EXCEPTIONS = 100;
+const recentExceptions = new Map<string, { sentAt: number; suppressed: number }>();
+
 export function captureException(
   error: SerializedError,
   properties?: Record<string, unknown>,
@@ -122,6 +128,18 @@ export function captureException(
     return;
   }
   try {
+    const key = `${error.name}: ${error.message}`;
+    const now = Date.now();
+    const recent = recentExceptions.get(key);
+    if (recent && now - recent.sentAt < EXCEPTION_REPEAT_WINDOW_MS) {
+      recent.suppressed += 1;
+      return;
+    }
+    if (!recent && recentExceptions.size >= MAX_TRACKED_EXCEPTIONS) {
+      recentExceptions.clear();
+    }
+    recentExceptions.set(key, { sentAt: now, suppressed: 0 });
+
     const restored = new Error(error.message);
     restored.name = error.name || 'Error';
     if (error.stack) {
@@ -129,6 +147,7 @@ export function captureException(
     }
     posthogClient.captureException(restored, anonymousId, {
       ...properties,
+      ...(recent?.suppressed ? { suppressed_repeats: recent.suppressed } : {}),
       ...commonProperties(),
     });
   } catch (err) {
