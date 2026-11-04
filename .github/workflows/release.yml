@@ -252,11 +252,13 @@ jobs:
       - name: Install PostHog CLI for source maps
         shell: bash
         env:
-          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          # Only whether the key is set: the key itself never reaches npm's
+          # install scripts, just the build step that uploads.
+          HAS_POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY != '' }}
         run: |
           # Optional: without the secret the build simply ships without
           # uploading renderer source maps, and a failed install never fails it.
-          if [[ -z "${POSTHOG_CLI_API_KEY:-}" ]]; then
+          if [[ "${HAS_POSTHOG_CLI_API_KEY}" != "true" ]]; then
             echo "POSTHOG_CLI_API_KEY is not set; skipping source map upload."
             exit 0
           fi
