@@ -21,7 +21,7 @@ Always run `pnpm lint` and `pnpm format` after writing code.
 
 ## Architecture
 
-Screenforge is an Electron desktop app for screen recording with automatic zoom/cursor tracking. All video processing happens locally via FFmpeg — no cloud services.
+Screenforge is an Electron desktop app for screen recording with automatic zoom/cursor tracking. Video processing runs through a bundled FFmpeg.
 
 ### Process Split
 
