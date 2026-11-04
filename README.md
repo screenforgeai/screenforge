@@ -15,13 +15,26 @@
 
 **Free, open-source screen recorder that zooms in and follows your cursor automatically.**
 
-Record your screen, webcam and mic, polish it in a full timeline editor, and export a ready-to-share video. Free and open source: no watermark, no paywalled features.
+Record your screen, webcam and mic, polish it in a full timeline editor, and export a ready-to-share video. No watermark, no paywalled features.
 
-[![Latest release](https://img.shields.io/github/v/release/screenforgeai/screenforge?label=release)](https://github.com/screenforgeai/screenforge/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/screenforgeai/screenforge?label=release&color=d44523)](https://github.com/screenforgeai/screenforge/releases/latest)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
 [![CI](https://github.com/screenforgeai/screenforge/actions/workflows/ci.yml/badge.svg)](https://github.com/screenforgeai/screenforge/actions/workflows/ci.yml)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
-[![Stars](https://img.shields.io/github/stars/screenforgeai/screenforge?style=social)](https://github.com/screenforgeai/screenforge/stargazers)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#download)
+
+[![Electron](https://img.shields.io/badge/Electron-40-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
+
+[![Last commit](https://img.shields.io/github/last-commit/screenforgeai/screenforge)](https://github.com/screenforgeai/screenforge/commits/main)
+[![Contributors](https://img.shields.io/github/contributors/screenforgeai/screenforge)](https://github.com/screenforgeai/screenforge/graphs/contributors)
+[![Issues](https://img.shields.io/github/issues/screenforgeai/screenforge)](https://github.com/screenforgeai/screenforge/issues)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
+
+[![GitHub stars](https://img.shields.io/github/stars/screenforgeai/screenforge?style=social)](https://github.com/screenforgeai/screenforge/stargazers)
+[![Follow on X](https://img.shields.io/twitter/follow/arshi_mohib?style=social)](https://x.com/arshi_mohib)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/mohibarshi)
 
 [**Download**](#download) · [Website](https://screenforge.co) · [Features](#features) · [Build from source](#build-from-source) · [Contributing](#contributing)
 
