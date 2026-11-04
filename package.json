@@ -2,7 +2,7 @@
   "name": "screenforge",
   "productName": "Screenforge",
   "version": "0.6.18",
-  "description": "A free, open-source screen recording tool that automatically zooms and tracks your cursor to create polished screen recordings. No cloud, no subscriptions — everything stays local.",
+  "description": "A free, open-source screen recording tool that automatically zooms and tracks your cursor to create polished screen recordings. No watermark, no subscriptions.",
   "main": ".vite/build/main.js",
   "private": true,
   "repository": {

@@ -15,7 +15,7 @@
 
 **Free, open-source screen recorder that zooms in and follows your cursor automatically.**
 
-Record your screen, webcam and mic, polish it in a full timeline editor, and export a ready-to-share video. Everything runs locally with FFmpeg: no account, no cloud upload, no watermark, no paywalled features.
+Record your screen, webcam and mic, polish it in a full timeline editor, and export a ready-to-share video. Free and open source: no watermark, no paywalled features.
 
 [![Latest release](https://img.shields.io/github/v/release/screenforgeai/screenforge?label=release)](https://github.com/screenforgeai/screenforge/releases/latest)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
@@ -34,7 +34,7 @@ Record your screen, webcam and mic, polish it in a full timeline editor, and exp
 Making a good product demo or tutorial usually means recording, then spending an hour hand-keyframing zooms. Screenforge records where your cursor goes and what you click, and uses that to zoom and pan the video for you. You get a polished result straight out of the recorder, and you can still adjust every zoom on the timeline.
 
 - **Automatic zoom and cursor tracking.** Clicks and typing drive smooth zooms that follow the cursor, so viewers always see what matters.
-- **Local and private.** Recording, editing, transcription and export all happen on your machine. Nothing is uploaded.
+- **Fast, built-in captions.** Whisper transcription is part of the app, with word-level timing you can edit.
 - **Actually free.** No watermark, no export limits, no "Pro" tier. The full app is open source under AGPL-3.0.
 - **A real editor.** Multi-track timeline with zoom, camera, captions, text, masks, music and transitions.
 
@@ -72,7 +72,7 @@ All builds are also on the [GitHub releases page](https://github.com/screenforge
 - **Undo/redo**, autosave, a project library, and style presets that save cursor, camera, frame and caption styling together
 
 ### Captions
-- Local transcription with Whisper (tiny, base, small or medium) on ONNX Runtime. No cloud calls.
+- Transcription with Whisper (tiny, base, small or medium) on ONNX Runtime
 - Word-level timing, click-to-edit segments, full styling
 - Export as SRT or burn captions into the video
 
@@ -93,7 +93,7 @@ Ideas on the roadmap live in [`FEATURES.md`](./FEATURES.md).
 Record ──► Edit ──► Export
   │          │         │
   │          │         └─ hidden window renders each frame with Pixi.js,
-  │          │            FFmpeg muxes video + audio, file written locally
+  │          │            FFmpeg muxes video + audio, file saved to disk
   │          └─ React + Zustand editor, Canvas 2D live preview, undoable timeline
   └─ Electron main process captures screen, camera, mic, cursor and keys
 ```
@@ -107,8 +107,8 @@ For a deeper tour, read [`docs/FOUNDATION.md`](./docs/FOUNDATION.md) and [`docs/
 | App framework | Electron 40 + Electron Forge |
 | UI | React 19, Tailwind CSS v4, Zustand |
 | Rendering | Pixi.js (export), Canvas 2D (live preview) |
-| Video processing | FFmpeg (bundled, run locally) |
-| Transcription | Whisper on ONNX Runtime (local) |
+| Video processing | FFmpeg (bundled) |
+| Transcription | Whisper on ONNX Runtime |
 | Build | Vite, TypeScript |
 | Tests | Vitest |
 
