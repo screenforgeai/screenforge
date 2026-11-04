@@ -15,7 +15,12 @@ export function isAppPageUrl(url: string, appPageUrl: string): boolean {
   }
 
   if (appPage.protocol === 'file:') {
-    return target.protocol === 'file:' && target.pathname === appPage.pathname;
+    // Host too: on Windows, file://server/<same path> is a network share.
+    return (
+      target.protocol === 'file:' &&
+      target.hostname === appPage.hostname &&
+      target.pathname === appPage.pathname
+    );
   }
   return target.origin === appPage.origin;
 }

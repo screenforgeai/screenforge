@@ -53,6 +53,12 @@ describe('isAppPageUrl', () => {
     expect(isAppPageUrl('http://localhost:5174/', DEV_PAGE)).toBe(false);
     expect(isAppPageUrl('not a url', DEV_PAGE)).toBe(false);
   });
+
+  it('rejects the packaged page path on another host (a Windows network share)', () => {
+    const onServer = PACKAGED_PAGE.replace('file:///', 'file://attacker-server/');
+
+    expect(isAppPageUrl(onServer, PACKAGED_PAGE)).toBe(false);
+  });
 });
 
 describe('installNavigationGuards', () => {
