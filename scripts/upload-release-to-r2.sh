@@ -51,6 +51,11 @@ endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
 export AWS_DEFAULT_REGION="auto"
+# Recent AWS CLI versions add CRC checksums to multipart uploads by default,
+# which R2 can reject (InvalidPart on CompleteMultipartUpload). Only send
+# checksums when an API requires them, as Cloudflare recommends for R2.
+export AWS_REQUEST_CHECKSUM_CALCULATION="when_required"
+export AWS_RESPONSE_CHECKSUM_VALIDATION="when_required"
 
 artifact_files=()
 while IFS= read -r file; do
