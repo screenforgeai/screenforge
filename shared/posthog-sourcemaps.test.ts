@@ -28,7 +28,21 @@ describe('uploadRendererSourcemaps', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(buildPath, { recursive: true, force: true });
+  });
+
+  it.each([
+    ['a build without the key', {}, 'skipped'],
+    ['a release build', releaseEnv, 'uploaded'],
+  ])('keeps going when the cleanup itself fails, in %s', (_label, env, expected) => {
+    vi.spyOn(fs, 'readdirSync').mockImplementation(() => {
+      throw new Error('EACCES');
+    });
+    const run = vi.fn(() => ({ status: 0 }));
+
+    expect(uploadRendererSourcemaps(buildPath, '1.2.3', { env, run, log })).toBe(expected);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('cleanup failed'));
   });
 
   it('does nothing outside a release build', () => {

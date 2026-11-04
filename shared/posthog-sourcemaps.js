@@ -87,7 +87,14 @@ function uploadRendererSourcemaps(
     );
     return 'failed';
   } finally {
-    removeSourcemaps(rendererDir);
+    // This runs on every build, keyed or not, so it must not throw either.
+    try {
+      removeSourcemaps(rendererDir);
+    } catch (err) {
+      log.warn(
+        `[posthog-sourcemaps] cleanup failed (${err?.message ?? err}); renderer .map files may remain in the package`,
+      );
+    }
   }
 }
 
