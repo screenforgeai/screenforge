@@ -23,13 +23,27 @@ export function serializeError(error: unknown): SerializedError {
   return { name: 'Error', message };
 }
 
+/**
+ * Set by the PostHog CLI's chunk-id snippet in a release bundle. The error is
+ * reported from the main process, which can't see this window's globals, so
+ * it travels with the error.
+ */
+function posthogChunkIds(): Record<string, string> | undefined {
+  const ids = (globalThis as { _posthogChunkIds?: unknown })._posthogChunkIds;
+  return ids && typeof ids === 'object' ? { ...(ids as Record<string, string>) } : undefined;
+}
+
 /** Reports a caught error to PostHog error tracking. */
 export function captureException(error: unknown, properties?: Record<string, unknown>): void {
   try {
-    window.screenforge.captureException(serializeError(error), {
-      source: 'renderer',
-      ...properties,
-    });
+    const chunkIds = posthogChunkIds();
+    window.screenforge.captureException(
+      { ...serializeError(error), ...(chunkIds && { chunkIds }) },
+      {
+        source: 'renderer',
+        ...properties,
+      },
+    );
   } catch {
     // Silently ignore — error reporting must never break the app.
   }

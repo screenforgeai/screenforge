@@ -82,11 +82,15 @@ function easeInCubic(t: number): number {
 
 // Fade-in is NOT computed here — the caller handles it with wall-clock time so
 // video seeks of arbitrary length don't extend the black hold at boundaries.
-function computeFadeOutAlpha(
+export function computeFadeOutAlpha(
   timelineT: number,
   segments: ReturnType<typeof sortMediaSegments>,
 ): { alpha: number; segIdx: number } {
-  if (segments.length <= 1) {
+  // No clips (the last one was deleted): there is no segment to index.
+  if (segments.length === 0) {
+    return { alpha: 1, segIdx: -1 };
+  }
+  if (segments.length === 1) {
     return { alpha: 1, segIdx: 0 };
   }
 

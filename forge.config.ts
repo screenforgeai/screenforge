@@ -17,6 +17,10 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const ffmpegPaths = require('./shared/ffmpeg-paths.js');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const uiohookPaths = require('./shared/uiohook-paths.js');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { uploadRendererSourcemaps } = require('./shared/posthog-sourcemaps.js');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version: appVersion } = require('./package.json');
 
 function loadLocalEnvFile(filePath: string): void {
   if (!fs.existsSync(filePath)) {
@@ -348,6 +352,10 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   hooks: {
     packageAfterCopy: async (_forgeConfig, buildPath) => {
+      // Before anything below can return early: makes renderer stacks in
+      // PostHog readable, and strips the .map files from the package.
+      uploadRendererSourcemaps(buildPath, appVersion);
+
       // Bytecode compilation removed — minification (vite.main.config.ts + vite.preload.config.ts)
       // already obscures the main/preload bundles. V8 bytecode provides no meaningful additional
       // protection (it's version-locked, easily decompiled, and doesn't cover the renderer bundle).

@@ -114,6 +114,30 @@ function commonProperties(): Record<string, unknown> {
   };
 }
 
+// A render loop that throws every frame would otherwise send ~60 events a
+// second; one report per error per minute is enough to see it.
+const EXCEPTION_REPEAT_WINDOW_MS = 60_000;
+const MAX_TRACKED_EXCEPTIONS = 100;
+const recentExceptions = new Map<string, { sentAt: number; suppressed: number }>();
+
+/**
+ * posthog-node tags each stack frame with its source-map chunk id from
+ * globalThis._posthogChunkIds, which the PostHog CLI only fills in inside the
+ * renderer bundle. Copy a renderer's ids here so its frames get them too.
+ */
+function adoptChunkIds(chunkIds: SerializedError['chunkIds']): void {
+  if (!chunkIds || typeof chunkIds !== 'object') {
+    return;
+  }
+  const global = globalThis as { _posthogChunkIds?: Record<string, string> };
+  for (const [stack, chunkId] of Object.entries(chunkIds)) {
+    if (typeof chunkId === 'string') {
+      global._posthogChunkIds ??= {};
+      global._posthogChunkIds[stack] = chunkId;
+    }
+  }
+}
+
 export function captureException(
   error: SerializedError,
   properties?: Record<string, unknown>,
@@ -122,13 +146,28 @@ export function captureException(
     return;
   }
   try {
+    // A tuple, so a ': ' inside the name or message can't make two errors collide.
+    const key = JSON.stringify([error.name || 'Error', error.message]);
+    const now = Date.now();
+    const recent = recentExceptions.get(key);
+    if (recent && now - recent.sentAt < EXCEPTION_REPEAT_WINDOW_MS) {
+      recent.suppressed += 1;
+      return;
+    }
+    if (!recent && recentExceptions.size >= MAX_TRACKED_EXCEPTIONS) {
+      recentExceptions.clear();
+    }
+    recentExceptions.set(key, { sentAt: now, suppressed: 0 });
+
     const restored = new Error(error.message);
     restored.name = error.name || 'Error';
     if (error.stack) {
       restored.stack = error.stack;
     }
+    adoptChunkIds(error.chunkIds);
     posthogClient.captureException(restored, anonymousId, {
       ...properties,
+      ...(recent?.suppressed ? { suppressed_repeats: recent.suppressed } : {}),
       ...commonProperties(),
     });
   } catch (err) {

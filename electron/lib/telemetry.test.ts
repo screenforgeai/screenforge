@@ -116,6 +116,80 @@ describe('telemetry', () => {
     );
   });
 
+  it('sends a repeating error once a minute, counting the repeats it held back', async () => {
+    vi.useFakeTimers();
+    try {
+      electronMock.app.isPackaged = true;
+      const { initTelemetry, captureException } = await loadTelemetryModule();
+      initTelemetry();
+      const frameError = { name: 'TypeError', message: "reading 'transitionIn'" };
+
+      // A render loop throws the same error every frame.
+      for (let i = 0; i < 1000; i++) {
+        captureException(frameError, { kind: 'error' });
+      }
+      expect(posthogMock.captureException).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(60_000);
+      captureException(frameError, { kind: 'error' });
+
+      expect(posthogMock.captureException).toHaveBeenCalledTimes(2);
+      const [, , properties] = posthogMock.captureException.mock.calls[1];
+      expect(properties).toEqual(
+        expect.objectContaining({ kind: 'error', suppressed_repeats: 999 }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not hold back a different error', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    captureException({ name: 'TypeError', message: 'first' });
+    captureException({ name: 'TypeError', message: 'second' });
+    captureException({ name: 'RangeError', message: 'first' });
+
+    expect(posthogMock.captureException).toHaveBeenCalledTimes(3);
+  });
+
+  it("hands a renderer's PostHog chunk ids to the SDK before reporting its error", async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+    const global = globalThis as { _posthogChunkIds?: Record<string, string> };
+    const stackKey = 'Error\n    at file:///app/assets/index-abc.js:1:1';
+    let seenAtCapture: Record<string, string> | undefined;
+    posthogMock.captureException.mockImplementationOnce(() => {
+      seenAtCapture = { ...global._posthogChunkIds };
+    });
+    try {
+      captureException({
+        name: 'TypeError',
+        message: 'boom',
+        chunkIds: { [stackKey]: 'chunk-1', bad: 42 as unknown as string },
+      });
+
+      // posthog-node reads globalThis._posthogChunkIds while building frames.
+      expect(seenAtCapture).toEqual({ [stackKey]: 'chunk-1' });
+    } finally {
+      delete global._posthogChunkIds;
+    }
+  });
+
+  it('tells errors apart even when the separator appears in name or message', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    captureException({ name: 'TypeError', message: 'load: failed' });
+    captureException({ name: 'TypeError: load', message: 'failed' });
+
+    expect(posthogMock.captureException).toHaveBeenCalledTimes(2);
+  });
+
   it('sends in-app feedback as a feedback_submitted event, keeping only the newest log lines', async () => {
     electronMock.app.isPackaged = true;
     const { initTelemetry, submitFeedback, FEEDBACK_LOG_MAX_CHARS } = await loadTelemetryModule();

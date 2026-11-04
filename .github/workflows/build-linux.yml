@@ -76,11 +76,33 @@ jobs:
       - name: Download Linux FFmpeg
         run: bash scripts/download-ffmpeg-linux.sh x86_64
 
+      - name: Install PostHog CLI for source maps
+        shell: bash
+        env:
+          # Only whether the key is set: the key itself never reaches npm's
+          # install scripts, just the build step that uploads.
+          HAS_POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY != '' }}
+        run: |
+          # Optional: without the secret the build simply ships without
+          # uploading renderer source maps, and a failed install never fails it.
+          if [[ "${HAS_POSTHOG_CLI_API_KEY}" != "true" ]]; then
+            echo "POSTHOG_CLI_API_KEY is not set; skipping source map upload."
+            exit 0
+          fi
+          if npm install --prefix "$RUNNER_TEMP/posthog-cli" --no-save --no-audit --no-fund @posthog/cli@0.18.12; then
+            echo "POSTHOG_CLI_SCRIPT=$RUNNER_TEMP/posthog-cli/node_modules/@posthog/cli/run-posthog-cli.js" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not install the PostHog CLI; skipping source map upload."
+          fi
+
       - name: Build Linux app
         run: node scripts/make-platform.mjs linux --arch x64
         env:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          # The Screenforge PostHog project (not a secret).
+          POSTHOG_CLI_PROJECT_ID: '708071'
 
       - name: Generate SHA256 checksums
         run: |

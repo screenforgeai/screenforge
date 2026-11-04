@@ -48,6 +48,27 @@ describe('renderer error and feedback reporting', () => {
     );
   });
 
+  it("sends this window's PostHog chunk ids with the error so its stack can be symbolicated", () => {
+    const chunkIds = { 'Error\n    at file:///app/assets/index-abc.js:1:1': 'chunk-1' };
+    (globalThis as { _posthogChunkIds?: unknown })._posthogChunkIds = chunkIds;
+    try {
+      captureException(new Error('decode failed'));
+
+      expect(bridge.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'decode failed', chunkIds }),
+        { source: 'renderer' },
+      );
+    } finally {
+      delete (globalThis as { _posthogChunkIds?: unknown })._posthogChunkIds;
+    }
+  });
+
+  it('sends no chunk ids from a build without uploaded source maps', () => {
+    captureException(new Error('decode failed'));
+
+    expect(bridge.captureException.mock.calls[0][0]).not.toHaveProperty('chunkIds');
+  });
+
   it('forwards feedback to the main process', () => {
     submitFeedback({ message: 'Love it', source: 'feedback_modal', reportType: 'idea' });
 
