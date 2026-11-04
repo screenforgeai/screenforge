@@ -7,7 +7,13 @@ export interface PreloadProgress {
 export type StartupPermission = 'screen' | 'microphone' | 'camera' | 'accessibility';
 
 /** An error as it crosses IPC from a renderer: Error instances don't survive structured clone intact. */
-export type SerializedError = { name?: string; message: string; stack?: string };
+export type SerializedError = {
+  name?: string;
+  message: string;
+  stack?: string;
+  /** The renderer's PostHog chunk ids, which map its stack frames to uploaded source maps. */
+  chunkIds?: Record<string, string>;
+};
 
 /** In-app feedback, sent to PostHog as a `feedback_submitted` event. */
 export type FeedbackSubmission = {

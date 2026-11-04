@@ -120,6 +120,24 @@ const EXCEPTION_REPEAT_WINDOW_MS = 60_000;
 const MAX_TRACKED_EXCEPTIONS = 100;
 const recentExceptions = new Map<string, { sentAt: number; suppressed: number }>();
 
+/**
+ * posthog-node tags each stack frame with its source-map chunk id from
+ * globalThis._posthogChunkIds, which the PostHog CLI only fills in inside the
+ * renderer bundle. Copy a renderer's ids here so its frames get them too.
+ */
+function adoptChunkIds(chunkIds: SerializedError['chunkIds']): void {
+  if (!chunkIds || typeof chunkIds !== 'object') {
+    return;
+  }
+  const global = globalThis as { _posthogChunkIds?: Record<string, string> };
+  for (const [stack, chunkId] of Object.entries(chunkIds)) {
+    if (typeof chunkId === 'string') {
+      global._posthogChunkIds ??= {};
+      global._posthogChunkIds[stack] = chunkId;
+    }
+  }
+}
+
 export function captureException(
   error: SerializedError,
   properties?: Record<string, unknown>,
@@ -146,6 +164,7 @@ export function captureException(
     if (error.stack) {
       restored.stack = error.stack;
     }
+    adoptChunkIds(error.chunkIds);
     posthogClient.captureException(restored, anonymousId, {
       ...properties,
       ...(recent?.suppressed ? { suppressed_repeats: recent.suppressed } : {}),

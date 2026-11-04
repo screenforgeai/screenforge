@@ -155,6 +155,30 @@ describe('telemetry', () => {
     expect(posthogMock.captureException).toHaveBeenCalledTimes(3);
   });
 
+  it("hands a renderer's PostHog chunk ids to the SDK before reporting its error", async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+    const global = globalThis as { _posthogChunkIds?: Record<string, string> };
+    const stackKey = 'Error\n    at file:///app/assets/index-abc.js:1:1';
+    let seenAtCapture: Record<string, string> | undefined;
+    posthogMock.captureException.mockImplementationOnce(() => {
+      seenAtCapture = { ...global._posthogChunkIds };
+    });
+    try {
+      captureException({
+        name: 'TypeError',
+        message: 'boom',
+        chunkIds: { [stackKey]: 'chunk-1', bad: 42 as unknown as string },
+      });
+
+      // posthog-node reads globalThis._posthogChunkIds while building frames.
+      expect(seenAtCapture).toEqual({ [stackKey]: 'chunk-1' });
+    } finally {
+      delete global._posthogChunkIds;
+    }
+  });
+
   it('tells errors apart even when the separator appears in name or message', async () => {
     electronMock.app.isPackaged = true;
     const { initTelemetry, captureException } = await loadTelemetryModule();

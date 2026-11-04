@@ -89,6 +89,8 @@ describe('uploadRendererSourcemaps', () => {
         'screenforge',
         '--release-version',
         '1.2.3',
+        '--release-mode',
+        'symbol-set',
         '--delete-after',
       ],
       expect.objectContaining({ env: releaseEnv }),

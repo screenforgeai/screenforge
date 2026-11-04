@@ -79,6 +79,11 @@ function uploadRendererSourcemaps(
         'screenforge',
         '--release-version',
         version,
+        // The default `event` mode needs the SDK to report the release on
+        // each exception; posthog-node in the main process doesn't, so bind
+        // the release to the uploaded maps instead.
+        '--release-mode',
+        'symbol-set',
         '--delete-after',
       ],
       { env, stdio: 'inherit' },
