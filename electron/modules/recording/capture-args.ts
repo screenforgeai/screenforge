@@ -130,9 +130,16 @@ export function buildH264EncodeArgs(bitrate: string, platform = process.platform
 }
 
 // H.264 level 5.2: 36,864 macroblocks a frame (4096x2304), and VideoToolbox
-// won't open wider than 4096. libopenh264 has the same ceiling.
+// won't open wider than 4096. libopenh264 has the same ceiling. Encoders
+// round each side up to a whole 16px macroblock before checking, so a frame
+// under the pixel area can still be over (3884x2428 is 3888x2432 to them).
 const H264_MAX_SIDE = 4096;
-const H264_MAX_AREA = 4096 * 2304;
+const H264_MAX_MACROBLOCKS = (4096 / 16) * (2304 / 16);
+
+const fitsH264 = (width: number, height: number) =>
+  width <= H264_MAX_SIDE &&
+  height <= H264_MAX_SIDE &&
+  Math.ceil(width / 16) * Math.ceil(height / 16) <= H264_MAX_MACROBLOCKS;
 
 /**
  * The size to encode a width x height frame at with buildH264EncodeArgs: the
@@ -144,16 +151,20 @@ export function fitH264FrameSize(
   width: number,
   height: number,
 ): { width: number; height: number; scaled: boolean } {
-  if (width <= H264_MAX_SIDE && height <= H264_MAX_SIDE && width * height <= H264_MAX_AREA) {
+  if (fitsH264(width, height)) {
     return { width, height, scaled: false };
   }
-  const factor = Math.min(
+  let factor = Math.min(
     H264_MAX_SIDE / width,
     H264_MAX_SIDE / height,
-    Math.sqrt(H264_MAX_AREA / (width * height)),
+    Math.sqrt((H264_MAX_MACROBLOCKS * 256) / (width * height)),
   );
   // The epsilon keeps exact fits (6016x3384 → 4096x2304) from rounding down.
   const even = (n: number) => Math.floor((n * factor) / 2 + 1e-6) * 2;
+  // Macroblock rounding can tip an area-sized fit just over; shrink until it fits.
+  while (!fitsH264(even(width), even(height))) {
+    factor *= 0.995;
+  }
   return { width: even(width), height: even(height), scaled: true };
 }
 

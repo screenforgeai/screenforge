@@ -37,6 +37,23 @@ describe('fitH264FrameSize', () => {
     expect(ultrawide.height % 2).toBe(0);
     expect(ultrawide.width / ultrawide.height).toBeCloseTo(5120 / 1440, 2);
   });
+
+  // The encoder rounds each side up to a 16px macroblock before checking its
+  // 36,864-macroblock limit: OpenH264 rejected 3884x2428 as "3888 x 2432".
+  const macroblocks = (w: number, h: number) => Math.ceil(w / 16) * Math.ceil(h / 16);
+
+  it('fits a 16:10 5K frame within the macroblock limit', () => {
+    const fit = fitH264FrameSize(5120, 3200);
+    expect(fit.scaled).toBe(true);
+    expect(macroblocks(fit.width, fit.height)).toBeLessThanOrEqual(36864);
+    expect(fit.width / fit.height).toBeCloseTo(5120 / 3200, 2);
+  });
+
+  it('scales a size under the pixel area that is over the macroblock limit', () => {
+    const fit = fitH264FrameSize(3884, 2428);
+    expect(fit.scaled).toBe(true);
+    expect(macroblocks(fit.width, fit.height)).toBeLessThanOrEqual(36864);
+  });
 });
 
 describe('buildX11GrabArgs', () => {
