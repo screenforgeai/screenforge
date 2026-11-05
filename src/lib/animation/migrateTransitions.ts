@@ -18,7 +18,6 @@ export const MOTION_VERSION = 1;
 
 // Before Motion, a clip without a transition faded in for 0.35s by default.
 const LEGACY_DEFAULT_IN: ClipTransition = { type: 'fade', duration: 0.35 };
-const MIN_LENGTH = 0.3;
 
 // Fade white and Blur have no Motion equivalent; they become a plain fade.
 const IN_MOVE: Record<Exclude<TransitionType, 'none'>, MotionMoveId> = {
@@ -62,8 +61,9 @@ export function migrateTransitionsToMotion(
   for (const seg of sorted) {
     const tIn = seg.transitionIn ?? LEGACY_DEFAULT_IN;
     const inType = normalizeType(tIn);
-    if (inType !== 'none' && !hasPinned(seg.id, 'start')) {
-      const len = Math.min(Math.max(MIN_LENGTH, tIn.duration), seg.timelineEnd - seg.timelineStart);
+    // Intros and outros keep their saved length (a zero-length one never showed).
+    if (inType !== 'none' && tIn.duration > 0 && !hasPinned(seg.id, 'start')) {
+      const len = Math.min(tIn.duration, seg.timelineEnd - seg.timelineStart);
       added.push(
         createMotionClip(IN_MOVE[inType], seg.timelineStart, seg.timelineStart + len, seg.id),
       );
@@ -74,12 +74,8 @@ export function migrateTransitionsToMotion(
     const outType = tOut ? normalizeType(tOut) : 'none';
     const lone = sorted.length === 1;
     const rendered = !lone || (outType !== 'fade' && outType !== 'fade-white');
-    if (tOut && outType !== 'none' && rendered && !hasPinned(seg.id, 'end')) {
-      // Motion blocks are at least MIN_LENGTH long; a shorter one never shows.
-      const len = Math.min(
-        Math.max(MIN_LENGTH, tOut.duration),
-        seg.timelineEnd - seg.timelineStart,
-      );
+    if (tOut && outType !== 'none' && tOut.duration > 0 && rendered && !hasPinned(seg.id, 'end')) {
+      const len = Math.min(tOut.duration, seg.timelineEnd - seg.timelineStart);
       const outro = createMotionClip(
         OUT_MOVE[outType],
         seg.timelineEnd - len,

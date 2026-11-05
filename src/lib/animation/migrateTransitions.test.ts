@@ -120,6 +120,34 @@ describe('migrateTransitionsToMotion', () => {
     expect(end.x).toBeLessThan(-0.3);
   });
 
+  it('keeps short transitions at their saved length', () => {
+    const { motionClips, mediaSegments } = migrateTransitionsToMotion(
+      [
+        seg({
+          id: 'a',
+          transitionIn: { type: 'fade', duration: 0.1 },
+          transitionOut: { type: 'slide-up', duration: 0.15 },
+        }),
+        seg({
+          id: 'b',
+          timelineStart: 4,
+          timelineEnd: 8,
+          transitionIn: { type: 'fade', duration: 0 },
+        }),
+      ],
+      [],
+    );
+    expect(
+      layoutMotionClips(motionClips, mediaSegments).map((c) => [
+        c.move,
+        +(c.end - c.start).toFixed(2),
+      ]),
+    ).toEqual([
+      ['fadeIn', 0.1],
+      ['slideUpOut', 0.15],
+    ]);
+  });
+
   it('does not add an intro where the clip already has one', () => {
     const existing = {
       id: 'mine',
