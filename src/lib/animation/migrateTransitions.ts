@@ -63,10 +63,12 @@ export function migrateTransitionsToMotion(
         createMotionClip(IN_MOVE[inType], seg.timelineStart, seg.timelineStart + len, seg.id),
       );
     }
-    // A clip's own fade-out only ever rendered when there was more than one clip.
+    // On a lone clip a fade-out never rendered (its opacity stayed at 1); the
+    // slide, grow, shrink and blur outros moved the video, so they did.
     const tOut = seg.transitionOut;
     const outType = tOut ? normalizeType(tOut) : 'none';
-    if (tOut && outType !== 'none' && sorted.length > 1 && !hasPinned(seg.id, 'end')) {
+    const rendered = sorted.length > 1 || (outType !== 'fade' && outType !== 'fade-white');
+    if (tOut && outType !== 'none' && rendered && !hasPinned(seg.id, 'end')) {
       const len = Math.min(
         Math.max(MIN_LENGTH, tOut.duration),
         seg.timelineEnd - seg.timelineStart,

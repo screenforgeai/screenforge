@@ -88,6 +88,24 @@ describe('migrateTransitionsToMotion', () => {
     expect(motionClips).toEqual([]);
   });
 
+  it("keeps a lone clip's slide, grow, shrink and blur outros, which did render", () => {
+    const outro = (type: 'slide-up' | 'grow' | 'shrink' | 'blur') =>
+      migrateTransitionsToMotion(
+        [
+          seg({
+            id: 'a',
+            transitionIn: { type: 'none', duration: 0 },
+            transitionOut: { type, duration: 0.5 },
+          }),
+        ],
+        [],
+      ).motionClips.map((c) => c.move);
+    expect(outro('slide-up')).toEqual(['slideUpOut']);
+    expect(outro('grow')).toEqual(['pushThrough']);
+    expect(outro('shrink')).toEqual(['zoomOut']);
+    expect(outro('blur')).toEqual(['fadeOut']);
+  });
+
   it('does not add an intro where the clip already has one', () => {
     const existing = {
       id: 'mine',
