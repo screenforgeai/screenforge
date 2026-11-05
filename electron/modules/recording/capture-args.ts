@@ -129,6 +129,49 @@ export function buildH264EncodeArgs(bitrate: string, platform = process.platform
   return ['-c:v', 'libx264', '-preset', 'veryfast', '-b:v', bitrate];
 }
 
+// H.264 level 5.2: 36,864 macroblocks a frame (4096x2304), and VideoToolbox
+// won't open wider than 4096. libopenh264 has the same ceiling. Encoders
+// round each side up to a whole 16px macroblock before checking, so a frame
+// under the pixel area can still be over (3884x2428 is 3888x2432 to them).
+const H264_MAX_SIDE = 4096;
+const H264_MAX_MACROBLOCKS = (4096 / 16) * (2304 / 16);
+
+const fitsH264 = (width: number, height: number) =>
+  width <= H264_MAX_SIDE &&
+  height <= H264_MAX_SIDE &&
+  Math.ceil(width / 16) * Math.ceil(height / 16) <= H264_MAX_MACROBLOCKS;
+
+/**
+ * The size to encode a width x height frame at with buildH264EncodeArgs: the
+ * same size when the encoder accepts it, otherwise scaled down (aspect kept,
+ * even sides) to fit. A 5K display records at 5120x2880, which VideoToolbox
+ * refuses to encode.
+ */
+export function fitH264FrameSize(
+  width: number,
+  height: number,
+): { width: number; height: number; scaled: boolean } {
+  // Only positive, finite sizes can be fitted: a bad crop area or probe (NaN,
+  // Infinity, zero or negative) passes through and FFmpeg rejects it as before.
+  const fittable = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+  if (!fittable || fitsH264(width, height)) {
+    return { width, height, scaled: false };
+  }
+  let factor = Math.min(
+    H264_MAX_SIDE / width,
+    H264_MAX_SIDE / height,
+    Math.sqrt((H264_MAX_MACROBLOCKS * 256) / (width * height)),
+  );
+  // The epsilon keeps exact fits (6016x3384 → 4096x2304) from rounding down.
+  const even = (n: number) => Math.floor((n * factor) / 2 + 1e-6) * 2;
+  // Macroblock rounding can tip an area-sized fit just over; shrink until it
+  // fits. A few steps always do; the cap only guarantees the loop ends.
+  for (let step = 0; step < 1000 && !fitsH264(even(width), even(height)); step++) {
+    factor *= 0.995;
+  }
+  return { width: even(width), height: even(height), scaled: true };
+}
+
 /**
  * Wayland (Linux): transcodes the renderer-captured portal webm (VP9/VP8 from
  * MediaRecorder) into the H.264 MP4 the rest of the pipeline expects.

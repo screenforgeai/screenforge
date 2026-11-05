@@ -44,6 +44,7 @@ import {
   buildWaylandTranscodeArgs,
   buildX11GrabArgs,
   clampCaptureBounds,
+  fitH264FrameSize,
   type CaptureBounds,
   type CaptureSegment,
 } from './capture-args';
@@ -1062,6 +1063,10 @@ export function clearActiveCropArea(): void {
   activeCropArea = null;
 }
 
+/**
+ * Crops a recording to `area` (logical pixels, scaled by `scaleFactor`) and
+ * re-encodes it, scaled down when the crop is too large for H.264.
+ */
 export async function cropRecording(
   filePath: string,
   area: { x: number; y: number; width: number; height: number },
@@ -1076,14 +1081,16 @@ export async function cropRecording(
   const w = pw % 2 === 0 ? pw : pw - 1;
   const h = ph % 2 === 0 ? ph : ph - 1;
 
-  log.info('[recording] cropRecording:', { px, py, w, h, scaleFactor });
+  const fit = fitH264FrameSize(w, h);
+
+  log.info('[recording] cropRecording:', { px, py, w, h, scaleFactor, encodeSize: fit });
 
   const args = [
     '-y',
     '-i',
     filePath,
     '-vf',
-    `crop=${w}:${h}:${px}:${py}`,
+    `crop=${w}:${h}:${px}:${py}` + (fit.scaled ? `,scale=${fit.width}:${fit.height}` : ''),
     ...buildH264EncodeArgs('20000k'),
     '-c:a',
     'copy',
@@ -1215,6 +1222,10 @@ export function clearAppendMode(): void {
   appendMode = false;
 }
 
+/**
+ * Joins two clips into one H.264/AAC file at the first clip's size, capped to
+ * what the encoder accepts, and returns its temp path.
+ */
 export async function concatRecordings(firstPath: string, secondPath: string): Promise<string> {
   const outPath = createTempPath('screenforge-concat', 'mp4');
 
@@ -1228,8 +1239,10 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
     probeExportSource(secondPath),
   ]);
 
-  const w = firstInfo.width ?? 1280;
-  const h = firstInfo.height ?? 800;
+  // The first clip sets the size, capped to what the H.264 encoder accepts;
+  // when it's capped, the first clip is scaled down too.
+  const fit = fitH264FrameSize(firstInfo.width ?? 1280, firstInfo.height ?? 800);
+  const { width: w, height: h } = fit;
   const scaleFilter = [
     `scale=${w}:${h}:force_original_aspect_ratio=decrease`,
     `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`,
@@ -1243,7 +1256,10 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
   ]);
   const withAudio = firstHasAudio && secondHasAudio;
 
-  const filterParts = [`[0:v]format=yuv420p,setsar=1[v0]`, `[1:v]${scaleFilter}[v1]`];
+  const filterParts = [
+    fit.scaled ? `[0:v]${scaleFilter}[v0]` : `[0:v]format=yuv420p,setsar=1[v0]`,
+    `[1:v]${scaleFilter}[v1]`,
+  ];
 
   if (withAudio) {
     filterParts.push(
@@ -1283,11 +1299,17 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
   return outPath;
 }
 
-// Re-encodes a video file in-place to a clean H.264/AAC stream, fixing corrupt
-// concat files produced by the old -c copy path (VT -12909 decode error).
+/**
+ * Re-encodes a video file in-place to a clean H.264/AAC stream, fixing corrupt
+ * concat files produced by the old -c copy path (VT -12909 decode error).
+ */
 export async function reencodeRecording(filePath: string): Promise<string> {
   const tempPath = createTempPath('screenforge-reencode', 'mp4');
-  const sourceHasAudio = await hasAudioStream(filePath);
+  const [sourceHasAudio, source] = await Promise.all([
+    hasAudioStream(filePath),
+    probeExportSource(filePath),
+  ]);
+  const fit = source.width && source.height ? fitH264FrameSize(source.width, source.height) : null;
 
   const audioArgs = sourceHasAudio ? ['-c:a', 'aac', '-ar', '44100', '-ac', '2'] : ['-an'];
 
@@ -1296,7 +1318,7 @@ export async function reencodeRecording(filePath: string): Promise<string> {
     '-i',
     filePath,
     '-vf',
-    'format=yuv420p,setsar=1',
+    (fit?.scaled ? `scale=${fit.width}:${fit.height},` : '') + 'format=yuv420p,setsar=1',
     ...buildH264EncodeArgs('20000k'),
     '-r',
     '30',

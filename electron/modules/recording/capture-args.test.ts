@@ -8,7 +8,71 @@ import {
   buildWaylandTranscodeArgs,
   buildX11GrabArgs,
   clampCaptureBounds,
+  fitH264FrameSize,
 } from './capture-args';
+
+describe('fitH264FrameSize', () => {
+  it('keeps sizes H.264 encoders accept, including 4K UHD', () => {
+    expect(fitH264FrameSize(1920, 1080)).toEqual({ width: 1920, height: 1080, scaled: false });
+    expect(fitH264FrameSize(3840, 2160)).toEqual({ width: 3840, height: 2160, scaled: false });
+    expect(fitH264FrameSize(4096, 2304)).toEqual({ width: 4096, height: 2304, scaled: false });
+  });
+
+  it('scales a 5K frame down to the largest 16:9 size H.264 allows', () => {
+    // VideoToolbox refused 5120x2880 when joining clips (Sentry SCREENFORGE-APP-7X).
+    expect(fitH264FrameSize(5120, 2880)).toEqual({ width: 4096, height: 2304, scaled: true });
+    expect(fitH264FrameSize(6016, 3384)).toEqual({ width: 4096, height: 2304, scaled: true });
+  });
+
+  it('keeps the aspect ratio and even sides for other shapes', () => {
+    const portrait = fitH264FrameSize(2880, 5120);
+    expect(portrait.scaled).toBe(true);
+    expect(portrait.width * portrait.height).toBeLessThanOrEqual(4096 * 2304);
+    expect(Math.max(portrait.width, portrait.height)).toBeLessThanOrEqual(4096);
+    expect(portrait.width / portrait.height).toBeCloseTo(2880 / 5120, 2);
+
+    const ultrawide = fitH264FrameSize(5120, 1440);
+    expect(ultrawide.width).toBeLessThanOrEqual(4096);
+    expect(ultrawide.width % 2).toBe(0);
+    expect(ultrawide.height % 2).toBe(0);
+    expect(ultrawide.width / ultrawide.height).toBeCloseTo(5120 / 1440, 2);
+  });
+
+  // The encoder rounds each side up to a 16px macroblock before checking its
+  // 36,864-macroblock limit: OpenH264 rejected 3884x2428 as "3888 x 2432".
+  const macroblocks = (w: number, h: number) => Math.ceil(w / 16) * Math.ceil(h / 16);
+
+  it('fits a 16:10 5K frame within the macroblock limit', () => {
+    const fit = fitH264FrameSize(5120, 3200);
+    expect(fit.scaled).toBe(true);
+    expect(macroblocks(fit.width, fit.height)).toBeLessThanOrEqual(36864);
+    expect(fit.width / fit.height).toBeCloseTo(5120 / 3200, 2);
+  });
+
+  it('scales a size under the pixel area that is over the macroblock limit', () => {
+    const fit = fitH264FrameSize(3884, 2428);
+    expect(fit.scaled).toBe(true);
+    expect(macroblocks(fit.width, fit.height)).toBeLessThanOrEqual(36864);
+  });
+
+  it('passes a size it cannot fit through unchanged instead of looping forever', () => {
+    // A renderer-supplied crop area or a bad probe can be NaN, infinite, zero
+    // or negative. A negative side with an oversized one (-2 x 5000) used to
+    // hang the fitting loop.
+    for (const [w, h] of [
+      [NaN, 1080],
+      [1920, NaN],
+      [Infinity, 1080],
+      [1920, -Infinity],
+      [-2, 5000],
+      [5000, -2],
+      [0, 5000],
+      [-5000, -5000],
+    ]) {
+      expect(fitH264FrameSize(w, h)).toEqual({ width: w, height: h, scaled: false });
+    }
+  });
+});
 
 describe('buildX11GrabArgs', () => {
   const bounds = { x: 0, y: 0, width: 1920, height: 1080 };
