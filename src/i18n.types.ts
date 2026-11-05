@@ -20,6 +20,7 @@ import type timeline from './locales/en/timeline.json';
 import type widgets from './locales/en/widgets.json';
 import type settings from './locales/en/settings.json';
 import type mask from './locales/en/mask.json';
+import type motion from './locales/en/motion.json';
 
 declare module 'i18next' {
   interface CustomTypeOptions {
@@ -47,6 +48,7 @@ declare module 'i18next' {
       widgets: typeof widgets;
       settings: typeof settings;
       mask: typeof mask;
+      motion: typeof motion;
     };
   }
 }

@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../store';
 import { useProjectPersistence } from '../components/ProjectPersistenceProvider';
-import { DEFAULT_CLIP_TRANSITION } from '../types/timeline';
 import { trackEvent } from '../lib/analytics';
 
 export const useImportVideo = () => {
@@ -104,7 +103,6 @@ export const useImportVideo = () => {
           videoEnabled: true as const,
           audioEnabled: true,
           cursorEnabled: false as const,
-          transitionIn: DEFAULT_CLIP_TRANSITION,
         };
 
         appendRecordingSession(mergedResult, [...mediaSegments, newSegment]);

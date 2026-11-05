@@ -1,0 +1,143 @@
+{
+  "id": "mp4-motion-multiclip",
+  "description": "Clip intros and outros (which replaced clip transitions), a push across a cut and an orbit across a gap, over several clips with a gap and a sped-up clip, export at the right length and keep moving.",
+  "recording": {
+    "filePath": "../media/screen-motion-20s.mp4",
+    "mouseData": [],
+    "duration": 20,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 320,
+      "height": 180
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "seg-a",
+      "timelineStart": 0,
+      "timelineEnd": 4,
+      "sourceStart": 0,
+      "sourceEnd": 4,
+      "videoEnabled": true,
+      "audioEnabled": false
+    },
+    {
+      "id": "seg-b",
+      "timelineStart": 4,
+      "timelineEnd": 8,
+      "sourceStart": 6,
+      "sourceEnd": 10,
+      "videoEnabled": true,
+      "audioEnabled": false
+    },
+    {
+      "id": "seg-c",
+      "timelineStart": 9,
+      "timelineEnd": 12,
+      "sourceStart": 12,
+      "sourceEnd": 16.5,
+      "speed": 1.5,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "motionClips": [
+    {
+      "id": "intro",
+      "move": "tiltIn",
+      "start": 0,
+      "end": 1.6,
+      "amount": "default",
+      "feel": "smooth",
+      "clipId": "seg-a"
+    },
+    {
+      "id": "a-out",
+      "move": "fadeOut",
+      "start": 3.65,
+      "end": 4,
+      "amount": "default",
+      "feel": "smooth",
+      "clipId": "seg-a"
+    },
+    {
+      "id": "b-in",
+      "move": "slideLeftIn",
+      "start": 4,
+      "end": 4.4,
+      "amount": "default",
+      "feel": "smooth",
+      "clipId": "seg-b"
+    },
+    {
+      "id": "push",
+      "move": "slowPush",
+      "start": 4.4,
+      "end": 6,
+      "amount": "strong",
+      "feel": "smooth"
+    },
+    {
+      "id": "b-out",
+      "move": "pushThrough",
+      "start": 7.6,
+      "end": 8,
+      "amount": "default",
+      "feel": "smooth",
+      "clipId": "seg-b"
+    },
+    {
+      "id": "orbit",
+      "move": "orbit",
+      "start": 6.2,
+      "end": 7.6,
+      "amount": "default",
+      "feel": "smooth"
+    },
+    {
+      "id": "c-in",
+      "move": "fadeIn",
+      "start": 9,
+      "end": 9.35,
+      "amount": "default",
+      "feel": "smooth",
+      "clipId": "seg-c"
+    },
+    {
+      "id": "outro",
+      "move": "swingOut",
+      "start": 10.6,
+      "end": 12,
+      "amount": "default",
+      "feel": "bouncy",
+      "clipId": "seg-c"
+    }
+  ],
+  "frame": {
+    "background": {
+      "type": "solid",
+      "solidColor": "#0f0f0f",
+      "padding": 0.08,
+      "cornerRadius": 10,
+      "shadowBlur": 18,
+      "shadowOpacity": 0.28
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-motion-multiclip.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.4,
+    "minDistinctFrameHashes": 3
+  }
+}

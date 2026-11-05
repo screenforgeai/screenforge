@@ -19,3 +19,4 @@ export * from './components/main/progress';
 export * from './components/main/context-menu';
 export * from './components/main/tooltip';
 export * from './components/main/tabs';
+export * from './components/main/preview-card';

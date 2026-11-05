@@ -6,6 +6,7 @@ import type { ZoomClip, MediaSegment, CameraClip, MaskClip } from '../types/time
 import { captureTimeline } from '../lib/export/captureTimeline';
 import { setCustomWallpaperUrl } from '../lib/effects/frame/wallpapers';
 import { useStore } from '../store';
+import { normalizeMotionClips } from '../lib/animation/motionClips';
 
 const ExportWorker = () => {
   useEffect(() => {
@@ -39,6 +40,7 @@ const ExportWorker = () => {
         cursorIdleHideSeconds: snap.cursorIdleHideSeconds,
         cameraClips: snap.cameraClips as CameraClip[],
         maskClips: snap.maskClips as MaskClip[],
+        motionClips: normalizeMotionClips(snap.motionClips),
         isCropEditing: false,
       });
 

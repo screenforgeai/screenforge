@@ -1,7 +1,7 @@
 import { IconPlus } from 'src/lib/icons';
 import { GHOST_WIDTH, LANE_H } from '../constants';
 
-type GhostLane = 'video' | 'zoom' | 'text' | 'music' | 'mask';
+type GhostLane = 'video' | 'zoom' | 'text' | 'music' | 'mask' | 'motion';
 
 interface TimelineGhostZoneProps {
   x: number;
@@ -15,6 +15,7 @@ const LANE_COLOR: Record<GhostLane, string> = {
   text: 'rgba(212, 69, 35, 0.18)',
   music: 'rgba(38, 24, 0, 0.55)',
   mask: 'rgba(17, 30, 46, 0.55)',
+  motion: 'rgba(27, 30, 68, 0.55)',
 };
 
 const LANE_BORDER: Record<GhostLane, string> = {
@@ -23,6 +24,7 @@ const LANE_BORDER: Record<GhostLane, string> = {
   text: 'rgba(212, 69, 35, 0.35)',
   music: 'rgba(180, 83, 9, 0.55)',
   mask: 'rgba(45, 96, 128, 0.6)',
+  motion: 'rgba(99, 102, 241, 0.55)',
 };
 
 const LANE_ICON: Record<GhostLane, string> = {
@@ -31,6 +33,7 @@ const LANE_ICON: Record<GhostLane, string> = {
   text: 'rgba(240, 120, 80, 0.7)',
   music: 'rgba(245, 158, 11, 0.8)',
   mask: 'rgba(147, 197, 211, 0.8)',
+  motion: 'rgba(165, 180, 252, 0.8)',
 };
 
 // Fully pointer-events-none so mouse events always reach the parent div.

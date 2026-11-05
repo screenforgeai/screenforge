@@ -197,6 +197,8 @@ export function useVideoExport() {
       musicClips,
       cameraClips,
       maskClips,
+      motionClips,
+      hiddenLayers,
     } = useStore.getState();
     if (!recordingResult) {
       throw new Error('No recording loaded');
@@ -321,6 +323,8 @@ export function useVideoExport() {
           cursorIdleHideSeconds,
           cameraClips,
           maskClips,
+          // A hidden Motion lane exports without motion, matching the preview.
+          motionClips: hiddenLayers.motion ? [] : motionClips,
         },
         captionsOverride,
       );

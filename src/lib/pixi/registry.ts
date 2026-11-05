@@ -7,6 +7,7 @@ import { keyboardPixiEffect } from '../effects/keyboard/pixi';
 import { captionsPixiEffect } from '../effects/captions/pixi';
 import { textPixiEffect } from '../effects/text/pixi';
 import { maskPixiEffect } from '../effects/mask/pixi';
+import { motionPixiEffect } from '../effects/motion/pixi';
 
 /**
  * All active PixiJS effects in execution order.
@@ -17,6 +18,7 @@ import { maskPixiEffect } from '../effects/mask/pixi';
  *   3. mask   — added to overlayContainer before cursor/overlays so it renders beneath them
  *   4. cursor — reads sharedCameraState for zoom-pivot-aware placement
  *   5. camera — reads interpolateCamera directly, independent
+ *   6. motion — transforms motionContainer last; reads only the store
  */
 export const pixiEffectRegistry: PixiEffect<unknown>[] = [
   zoomPixiEffect as PixiEffect<unknown>,
@@ -27,4 +29,5 @@ export const pixiEffectRegistry: PixiEffect<unknown>[] = [
   keyboardPixiEffect as PixiEffect<unknown>,
   captionsPixiEffect as PixiEffect<unknown>,
   textPixiEffect as PixiEffect<unknown>,
+  motionPixiEffect as PixiEffect<unknown>,
 ];

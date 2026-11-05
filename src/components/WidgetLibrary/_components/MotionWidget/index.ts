@@ -1,0 +1,1 @@
+export { MotionWidget } from './MotionWidget';

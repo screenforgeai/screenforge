@@ -3,6 +3,10 @@ import type { HugeiconsProps, IconSvgElement } from '@hugeicons/react';
 import {
   Add01Icon,
   ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArrowDataTransferHorizontalIcon,
+  EaseCurveControlPointsIcon,
   Cancel01Icon,
   ComputerVideoIcon,
   CropIcon,
@@ -109,6 +113,10 @@ export const IconArrowBackUp = createIcon(UndoIcon, 'IconArrowBackUp');
 export const IconArrowForwardUp = createIcon(RedoIcon, 'IconArrowForwardUp');
 export const IconCheck = createIcon(Tick02Icon, 'IconCheck');
 export const IconChevronDown = createIcon(ArrowDown01Icon, 'IconChevronDown');
+export const IconChevronLeft = createIcon(ArrowLeft01Icon, 'IconChevronLeft');
+export const IconChevronRight = createIcon(ArrowRight01Icon, 'IconChevronRight');
+export const IconMotion = createIcon(EaseCurveControlPointsIcon, 'IconMotion');
+export const IconSwap = createIcon(ArrowDataTransferHorizontalIcon, 'IconSwap');
 export const IconCrop = createIcon(CropIcon, 'IconCrop');
 export const IconDeviceDesktop = createIcon(ComputerVideoIcon, 'IconDeviceDesktop');
 export const IconDeviceFloppy = createIcon(SaveIcon, 'IconDeviceFloppy');

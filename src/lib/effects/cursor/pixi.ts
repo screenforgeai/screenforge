@@ -5,8 +5,8 @@
  * instead of Canvas 2D drawImage(). All spring-physics and state-machine
  * logic is copied verbatim from the Canvas 2D version.
  *
- * Lives in scene.overlayContainer — NOT inside cameraContainer, so it is
- * not subject to the zoom Container transform. Canvas-space position is
+ * Lives in scene.motionOverlayContainer — NOT inside cameraContainer, so it is
+ * not subject to the zoom Container transform (but does follow scene motion). Canvas-space position is
  * computed manually using the same pivot math as the zoom effect so the
  * cursor sits correctly within the zoomed frame.
  */
@@ -221,7 +221,7 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
     cursorContainer.eventMode = 'none';
     // Draw order: ghosts → ripples → prevSprite → mainSprite
     cursorContainer.addChild(...ghostSprites, ...ripplePool, prevSprite, mainSprite);
-    scene.overlayContainer.addChild(cursorContainer);
+    scene.motionOverlayContainer.addChild(cursorContainer);
 
     // ── Spring-physics closure state ─────────────────────────────────────────
     // Position spring (normalised 0–1).

@@ -27,7 +27,7 @@ export const maskPixiEffect: PixiEffect<null> = {
   setup(_data, _allData, scene: PixiScene): PixiEffectUpdater {
     const root = new Container();
     root.eventMode = 'none';
-    scene.overlayContainer.addChild(root);
+    scene.motionOverlayContainer.addChild(root);
 
     // Snapshot of the fully-composited scene (compositeContainer only, no overlay).
     // Reused every frame so blur masks sample the exact rendered pixels behind them

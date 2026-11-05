@@ -6,6 +6,7 @@ import {
   DEFAULT_CURSOR_SETTINGS,
   DEFAULT_KEYBOARD_SETTINGS,
 } from './defaults';
+import { MOTION_VERSION } from '../lib/animation/migrateTransitions';
 import type { SavedProject } from '../types';
 
 const CROPPED_RECT = { x: 0.18, y: 0.12, width: 0.58, height: 0.64 };
@@ -122,5 +123,78 @@ describe('useStore.setActiveWidget', () => {
     expect(useStore.getState().zoomClips[0].cinematicTilt).toBe(0.65);
     expect(useStore.getState().zoomClips[0].cinematicMotionBlur).toBe(0.2);
     expect(useStore.getState().zoomClips[0].cinematicTiltMode).toBe('follow');
+  });
+});
+
+describe('clip intros and outros', () => {
+  const project = (patch: Partial<SavedProject>) =>
+    ({
+      id: 'project-2',
+      name: 'Clips',
+      result: RECORDING_RESULT,
+      zoomClips: [],
+      frame: DEFAULT_FRAME,
+      cursor: DEFAULT_CURSOR_SETTINGS,
+      camera: DEFAULT_CAMERA_SETTINGS,
+      keyboard: DEFAULT_KEYBOARD_SETTINGS,
+      savedAt: new Date(0).toISOString(),
+      thumbnail: '',
+      ...patch,
+    }) as unknown as SavedProject;
+  const clip = (id: string, timelineStart: number, timelineEnd: number) => ({
+    id,
+    timelineStart,
+    timelineEnd,
+    sourceStart: timelineStart,
+    sourceEnd: timelineEnd,
+    videoEnabled: true,
+    audioEnabled: true,
+  });
+
+  it('opens a new recording with a quick fade-in on its clip', () => {
+    act(() => {
+      useStore.getState().loadRecordingSession(RECORDING_RESULT as never);
+    });
+
+    const { motionClips, mediaSegments } = useStore.getState();
+    expect(motionClips).toHaveLength(1);
+    expect(motionClips[0]).toMatchObject({ move: 'fadeIn', start: 0, clipId: mediaSegments[0].id });
+  });
+
+  it("converts an old project's clip transitions into intros and outros", () => {
+    act(() => {
+      useStore.getState().loadProjectSession(
+        project({
+          mediaSegments: [
+            { ...clip('a', 0, 4), transitionOut: { type: 'slide-left', duration: 0.5 } },
+            { ...clip('b', 4, 8), transitionIn: { type: 'blur', duration: 0.4 } },
+          ],
+        }),
+      );
+    });
+
+    const { motionClips, mediaSegments } = useStore.getState();
+    expect(motionClips.map((c) => `${c.clipId}:${c.move}`)).toEqual([
+      'a:fadeIn',
+      'a:slideLeftOut',
+      'b:fadeIn',
+    ]);
+    expect(mediaSegments.some((s) => s.transitionIn || s.transitionOut)).toBe(false);
+  });
+
+  it('leaves a project saved with Motion as it is', () => {
+    act(() => {
+      useStore
+        .getState()
+        .loadProjectSession(
+          project({
+            mediaSegments: [clip('a', 0, 4)],
+            motionClips: [],
+            motionVersion: MOTION_VERSION,
+          }),
+        );
+    });
+
+    expect(useStore.getState().motionClips).toEqual([]);
   });
 });

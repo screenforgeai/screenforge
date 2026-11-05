@@ -2,6 +2,7 @@ import {
   IconAiMagic,
   IconBlur,
   IconMicrophone,
+  IconMotion,
   IconMusicNote,
   IconText,
   IconTimer,
@@ -60,6 +61,7 @@ export const ActionClip = ({
   const isText = action.effectId === 'text';
   const isMusic = action.effectId === 'music';
   const isMask = action.effectId === 'mask';
+  const isMotion = action.effectId === 'motion';
   const isCinematicZoom =
     action.effectId === 'zoom' && (action as { preset?: string }).preset === 'cinematic';
 
@@ -107,19 +109,26 @@ export const ActionClip = ({
                   glow: '0 0 0 2px rgba(91,154,191,0.3)',
                   multiGlow: '0 0 0 2px rgba(91,154,191,0.5)',
                 }
-              : isCinematicZoom
+              : isMotion
                 ? {
-                    background: isHighlighted ? '#312255' : '#21183f',
-                    border: isHighlighted ? '#c4b5fd' : '#8b5cf6',
-                    glow: '0 0 0 2px rgba(139,92,246,0.3)',
-                    multiGlow: '0 0 0 2px rgba(196,181,253,0.45)',
+                    background: isHighlighted ? '#262a5c' : '#1b1e44',
+                    border: isHighlighted ? '#a5b4fc' : '#6366f1',
+                    glow: '0 0 0 2px rgba(165,180,252,0.3)',
+                    multiGlow: '0 0 0 2px rgba(165,180,252,0.5)',
                   }
-                : {
-                    background: isHighlighted ? '#0891b2' : '#0e7490',
-                    border: isHighlighted ? '#67e8f9' : '#22d3ee',
-                    glow: '0 0 0 2px rgba(103,232,249,0.3)',
-                    multiGlow: '0 0 0 2px rgba(103,232,249,0.5)',
-                  };
+                : isCinematicZoom
+                  ? {
+                      background: isHighlighted ? '#312255' : '#21183f',
+                      border: isHighlighted ? '#c4b5fd' : '#8b5cf6',
+                      glow: '0 0 0 2px rgba(139,92,246,0.3)',
+                      multiGlow: '0 0 0 2px rgba(196,181,253,0.45)',
+                    }
+                  : {
+                      background: isHighlighted ? '#0891b2' : '#0e7490',
+                      border: isHighlighted ? '#67e8f9' : '#22d3ee',
+                      glow: '0 0 0 2px rgba(103,232,249,0.3)',
+                      multiGlow: '0 0 0 2px rgba(103,232,249,0.5)',
+                    };
 
   const boxShadow = multiSelected ? clipTone.multiGlow : isHighlighted ? clipTone.glow : undefined;
 
@@ -242,6 +251,17 @@ export const ActionClip = ({
                     flexShrink: 0,
                   }}
                 />
+              ) : isMotion ? (
+                <IconMotion
+                  size={14}
+                  style={{
+                    color: '#c7d2fe',
+                    opacity: 0.92,
+                    position: 'relative',
+                    zIndex: 2,
+                    flexShrink: 0,
+                  }}
+                />
               ) : isCinematicZoom ? (
                 <IconAiMagic
                   size={14}
@@ -274,9 +294,11 @@ export const ActionClip = ({
                           ? '#fed7aa'
                           : isMask
                             ? '#bae6fd'
-                            : isCinematicZoom
-                              ? '#ede9fe'
-                              : '#ecfeff',
+                            : isMotion
+                              ? '#e0e7ff'
+                              : isCinematicZoom
+                                ? '#ede9fe'
+                                : '#ecfeff',
                 }}
               >
                 {isVideo
@@ -289,9 +311,11 @@ export const ActionClip = ({
                         ? (action as { content?: string }).content?.slice(0, 25) || 'Text'
                         : isMask
                           ? 'Mask'
-                          : isCinematicZoom
-                            ? 'Cinematic'
-                            : 'Zoom'}
+                          : isMotion
+                            ? ((action as { label?: string }).label ?? 'Motion')
+                            : isCinematicZoom
+                              ? 'Cinematic'
+                              : 'Zoom'}
               </span>
               {(isVideo || isAudio || isCamera) && speed !== undefined && speed !== 1 && (
                 <Tooltip>

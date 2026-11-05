@@ -330,6 +330,7 @@ describe.sequential('export integration', () => {
     'mp4-audio.json',
     'mp4-camera.json',
     'mp4-timeline-edit.json',
+    'mp4-motion-multiclip.json',
     'mp4-duration-overrun.json',
     'mp4-aspect-4x3.json',
     'gif-smoke.json',

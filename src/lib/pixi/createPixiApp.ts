@@ -16,6 +16,8 @@ export function getPreviewRendererResolution(): number {
 function buildSceneGraph(
   app: Application,
 ): Omit<PixiScene, 'app' | 'sourceWidth' | 'sourceHeight'> {
+  const motionContainer = new Container();
+  const motionOverlayContainer = new Container();
   const compositeContainer = new Container();
   const cameraContainer = new Container();
   const backgroundContainer = new Container();
@@ -30,9 +32,14 @@ function buildSceneGraph(
   frameContainer.addChild(videoContainer);
   cameraContainer.addChild(frameContainer, contentContainer);
   compositeContainer.addChild(cameraContainer);
-  app.stage.addChild(backgroundContainer, compositeContainer, overlayContainer);
+  // motionContainer moves the recording and the overlays drawn on it (cursor,
+  // masks) as one piece, over a background and under overlays that stay put.
+  motionContainer.addChild(compositeContainer, motionOverlayContainer);
+  app.stage.addChild(backgroundContainer, motionContainer, overlayContainer);
 
   return {
+    motionContainer,
+    motionOverlayContainer,
     compositeContainer,
     cameraContainer,
     backgroundContainer,

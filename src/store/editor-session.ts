@@ -8,7 +8,26 @@ import {
 } from './defaults';
 import type { EditorSessionState } from './types';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
-import type { CameraClip } from '../types/timeline';
+import type { CameraClip, MediaSegment } from '../types/timeline';
+import {
+  cloneMotionClips,
+  createMotionClip,
+  normalizeMotionClips,
+} from '../lib/animation/motionClips';
+import type { MotionClip } from '../lib/animation/motionClips';
+import { migrateTransitionsToMotion } from '../lib/animation/migrateTransitions';
+
+/** New clips open with a quick fade, as they did when clips had transitions. */
+const DEFAULT_INTRO_LENGTH = 0.35;
+
+export function defaultClipIntro(segment: MediaSegment): MotionClip {
+  return createMotionClip(
+    'fadeIn',
+    segment.timelineStart,
+    segment.timelineStart + DEFAULT_INTRO_LENGTH,
+    segment.id,
+  );
+}
 
 export function cloneEditorSession(session: EditorSessionState): EditorSessionState {
   return {
@@ -33,6 +52,7 @@ export function cloneEditorSession(session: EditorSessionState): EditorSessionSt
     musicClips: session.musicClips.map((clip) => ({ ...clip })),
     cameraClips: session.cameraClips.map((clip) => ({ ...clip })),
     maskClips: session.maskClips.map((clip) => ({ ...clip })),
+    motionClips: cloneMotionClips(session.motionClips),
   };
 }
 
@@ -89,6 +109,7 @@ export function createEmptyEditorSession(): EditorSessionState {
     musicClips: [],
     cameraClips: [],
     maskClips: [],
+    motionClips: [],
     isCropEditing: false,
   };
 }
@@ -96,6 +117,7 @@ export function createEmptyEditorSession(): EditorSessionState {
 export function createRecordingSession(
   recordingResult: NonNullable<EditorSessionState['recordingResult']>,
 ): EditorSessionState {
+  const mediaSegments = createInitialMediaSegments(recordingResult.duration);
   return {
     ...createEmptyEditorSession(),
     recordingResult,
@@ -105,7 +127,8 @@ export function createRecordingSession(
       enabled: Boolean(recordingResult.cameraPath),
     },
     keyboard: { ...DEFAULT_KEYBOARD_SETTINGS },
-    mediaSegments: createInitialMediaSegments(recordingResult.duration),
+    mediaSegments,
+    motionClips: mediaSegments.map(defaultClipIntro),
     cameraMediaSegments: recordingResult.cameraPath
       ? createInitialMediaSegments(recordingResult.duration)
       : [],
@@ -126,9 +149,15 @@ export function createRecordingSession(
 }
 
 export function createProjectSession(project: SavedProject): EditorSessionState {
-  const mediaSegments = (
+  const savedSegments = (
     project.mediaSegments ?? createInitialMediaSegments(project.result.duration)
   ).map((segment) => ({ ...segment }));
+  const savedMotion = normalizeMotionClips(project.motionClips);
+  // Projects saved before Motion replaced clip transitions get them converted
+  // into intros and outros once, so they look exactly as before.
+  const { mediaSegments, motionClips } = project.motionVersion
+    ? { mediaSegments: savedSegments, motionClips: savedMotion }
+    : migrateTransitionsToMotion(savedSegments, savedMotion);
   return {
     ...createEmptyEditorSession(),
     recordingResult: project.result,
@@ -136,7 +165,7 @@ export function createProjectSession(project: SavedProject): EditorSessionState 
     currentProjectId: project.id,
     zoomClips: normalizeZoomClips(project.zoomClips),
     mediaSegments,
-    currentTime: getInitialPlaybackTime(mediaSegments),
+    currentTime: getInitialPlaybackTime(mediaSegments, motionClips),
     frame: project.frame ? cloneFrameSettings(project.frame) : DEFAULT_FRAME,
     cursorEnabled: project.cursor.enabled ?? true,
     cursorStyle: project.cursor.style,
@@ -183,6 +212,7 @@ export function createProjectSession(project: SavedProject): EditorSessionState 
       timelineEnd: clip.timelineEnd ?? clip.duration ?? 60,
     })),
     maskClips: (project.maskClips ?? []).map((c) => ({ ...c })),
+    motionClips,
     cameraClips: (() => {
       const saved = (project as SavedProject & { cameraClips?: unknown }).cameraClips;
       if (Array.isArray(saved) && saved.length > 0) {

@@ -38,6 +38,14 @@ import {
 import type { Layer } from './constants';
 import { ActionClip } from './_components/ActionClip';
 import { IndicatorClip } from './_components/IndicatorClip';
+import { useTranslation } from 'react-i18next';
+import {
+  addMotionAt,
+  getMotionGroup,
+  layoutMotionClips,
+  placeMotionClip,
+  repinMotionClips,
+} from '../../../../lib/animation/motionClips';
 import { ResizeHandle } from './_components/ResizeHandle';
 import { TimelineToolbar } from './_components/TimelineToolbar';
 import { TimelineGutter } from './_components/TimelineGutter';
@@ -89,6 +97,7 @@ const LAYER_ORDER: Record<string, number> = {
   video: 1,
   audio: 2,
   music: 3,
+  motion: 4,
   zoom: 5,
   camera: 6,
   mask: 7,
@@ -170,6 +179,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
     musicClips,
     cameraClips,
     maskClips,
+    motionClips,
     isExporting,
   } = useStore(
     useShallow((s) => ({
@@ -204,10 +214,12 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       musicClips: s.musicClips,
       cameraClips: s.cameraClips,
       maskClips: s.maskClips,
+      motionClips: s.motionClips,
       isExporting: s.isExporting,
     })),
   );
 
+  const { t: tMotion } = useTranslation('motion');
   const recordingFilePath = recordingResult?.filePath ?? null;
   const recordingHasEmbeddedAudio = recordingResult?.hasEmbeddedAudio ?? false;
   const recordingIsImported = recordingResult?.isImported ?? false;
@@ -257,6 +269,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
   const musicClipsRef = useRef<typeof musicClips>([]);
   const cameraClipsRef = useRef<typeof cameraClips>([]);
   const maskClipsRef = useRef<typeof maskClips>([]);
+  const motionClipsRef = useRef<typeof motionClips>([]);
   const orderedSegmentsRef = useRef<typeof orderedSegments>([]);
   const processingSegmentRef = useRef<typeof processingSegment>(null);
   const musicFileInputRef = useRef<HTMLInputElement>(null);
@@ -292,7 +305,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
   const [layers, setLayers] = useState<Layer[]>(INITIAL_LAYERS);
   const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(new Set());
   const [hoverGhost, setHoverGhost] = useState<{
-    lane: 'video' | 'zoom' | 'text' | 'music' | 'camera' | 'mask';
+    lane: 'video' | 'zoom' | 'text' | 'music' | 'camera' | 'mask' | 'motion';
     time: number;
     x: number;
     rowTop: number;
@@ -450,6 +463,9 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
           if (layer.id === 'mask') {
             return maskClips.length > 0;
           }
+          if (layer.id === 'motion') {
+            return Boolean(recordingFilePath);
+          }
           if (layer.id === 'indicators') {
             return true;
           }
@@ -460,7 +476,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
           (LAYER_ORDER[a.id] ?? Number.MAX_SAFE_INTEGER) -
           (LAYER_ORDER[b.id] ?? Number.MAX_SAFE_INTEGER),
       ),
-    [hasAudioLane, maskClips, musicClips, syncedLayers, recordingCameraPath],
+    [hasAudioLane, maskClips, musicClips, syncedLayers, recordingCameraPath, recordingFilePath],
   );
 
   // Keep always-current refs in sync after every render so capture-phase
@@ -472,6 +488,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
     musicClipsRef.current = musicClips;
     cameraClipsRef.current = cameraClips;
     maskClipsRef.current = maskClips;
+    motionClipsRef.current = motionClips;
     orderedSegmentsRef.current = orderedSegments;
     processingSegmentRef.current = processingSegment;
     ghostVideoDropdownRef.current = ghostVideoDropdown;
@@ -591,6 +608,22 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       setActiveWidget('mask');
     },
     [scaleWidth, commitEdit, setActiveWidget],
+  );
+
+  const handleAddMotionAtTime = useCallback(
+    (time: number) => {
+      const { clips, id } = addMotionAt(motionClipsRef.current, orderedSegmentsRef.current, time);
+      const clip = clips.find((c) => c.id === id);
+      if (!clip) {
+        return;
+      }
+      if (clips.length !== motionClipsRef.current.length) {
+        commitEdit('Add motion', () => ({ motionClips: clips }));
+      }
+      setSelectedClip({ id: clip.id, start: clip.start, end: clip.end, effectId: 'motion' });
+      setActiveWidget('motion');
+    },
+    [commitEdit, setActiveWidget, setSelectedClip],
   );
 
   const handleMusicFileSelect = useCallback(
@@ -725,6 +758,10 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         isEmpty = !clips.some((c) => time >= c.timelineStart && time < c.timelineEnd);
       } else if (layer.id === 'mask') {
         isEmpty = !maskClipsRef.current.some((c) => time >= c.start && time < c.end);
+      } else if (layer.id === 'motion') {
+        isEmpty = !layoutMotionClips(motionClipsRef.current, orderedSegmentsRef.current).some(
+          (c) => time >= c.start && time <= c.end,
+        );
       }
 
       if (!isEmpty) {
@@ -735,7 +772,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       // Always keep the time ref current (used on click, not for rendering).
       hoverGhostTimeRef.current = time;
 
-      const laneId = layer.id as 'video' | 'zoom' | 'text' | 'music' | 'camera' | 'mask';
+      const laneId = layer.id as 'video' | 'zoom' | 'text' | 'music' | 'camera' | 'mask' | 'motion';
       // Functional update: bail out without a re-render when the ghost's
       // visible position (integer x, row, lane) has not actually changed.
       setHoverGhost((prev) => {
@@ -790,10 +827,19 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         } else if (hoverGhost.lane === 'mask') {
           handleAddMaskAtTime(hoverGhostTimeRef.current);
           setHoverGhost(null);
+        } else if (hoverGhost.lane === 'motion') {
+          handleAddMotionAtTime(hoverGhostTimeRef.current);
+          setHoverGhost(null);
         }
       }
     },
-    [hoverGhost, handleAddTextAtTime, handleAddMusicAtTime, handleAddMaskAtTime],
+    [
+      hoverGhost,
+      handleAddTextAtTime,
+      handleAddMusicAtTime,
+      handleAddMaskAtTime,
+      handleAddMotionAtTime,
+    ],
   );
 
   const suspendAutoFollow = useCallback((durationMs: number = AUTO_FOLLOW_RELEASE_GRACE_MS) => {
@@ -993,6 +1039,19 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         }));
       }
 
+      if (id === 'motion') {
+        return layoutMotionClips(motionClips, orderedSegments).map((c) => ({
+          id: c.id,
+          start: c.start,
+          end: c.end,
+          effectId: 'motion',
+          // Intros and outros are pinned to their clip's edge; only their length changes.
+          movable: getMotionGroup(c) === 'during',
+          flexible: true,
+          label: tMotion(`move_${c.move}`),
+        }));
+      }
+
       if (id === 'text') {
         return textClips.map((c) => ({
           id: c.id,
@@ -1026,10 +1085,12 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       cameraEnabled,
       hasAudioLane,
       maskClips,
+      motionClips,
       musicClips,
       orderedSegments,
       recordingCameraPath,
       recordingFilePath,
+      tMotion,
       totalDur,
       zoomClips,
       textClips,
@@ -1103,6 +1164,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         }
         commitEdit('Split video clip', (state) => ({
           mediaSegments: nextSegments,
+          motionClips: repinMotionClips(state.motionClips, orderedSegments, nextSegments),
           cameraMediaSegments: splitMediaSegmentsAtTime(state.cameraMediaSegments, splitPoint),
           selectedClip: null,
         }));
@@ -1117,6 +1179,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
 
       commitEdit('Split at playhead', (state) => ({
         mediaSegments: nextSegments,
+        motionClips: repinMotionClips(state.motionClips, orderedSegments, nextSegments),
         cameraMediaSegments: splitMediaSegmentsAtTime(state.cameraMediaSegments, splitPoint),
         zoomClips: splitZoomClipsAtTime(state.zoomClips, splitPoint),
         cameraClips: splitCameraClipsAtTime(state.cameraClips, splitPoint),
@@ -1516,6 +1579,14 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         return;
       }
 
+      if (action.effectId === 'motion') {
+        commitEdit('Delete motion', (state) => ({
+          motionClips: state.motionClips.filter((c) => c.id !== action.id),
+          selectedClip: null,
+        }));
+        return;
+      }
+
       if (action.effectId === 'camera') {
         commitEdit('Delete camera clip', (state) => {
           const nextCameraClips = state.cameraClips.filter((c) => c.id !== action.id);
@@ -1613,6 +1684,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         let textClips = [...state.textClips];
         let cameraClips = [...state.cameraClips];
         let maskClips = [...state.maskClips];
+        let motionClips = [...state.motionClips];
 
         for (const action of actionsToDelete) {
           if (action.effectId === 'zoom') {
@@ -1621,6 +1693,8 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
             textClips = textClips.filter((c) => c.id !== action.id);
           } else if (action.effectId === 'mask') {
             maskClips = maskClips.filter((c) => c.id !== action.id);
+          } else if (action.effectId === 'motion') {
+            motionClips = motionClips.filter((c) => c.id !== action.id);
           } else if (action.effectId === 'camera') {
             cameraClips = cameraClips.filter((c) => c.id !== action.id);
           } else if (action.effectId === 'video' || action.effectId === 'audio') {
@@ -1662,6 +1736,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
             textClips,
             cameraClips,
             maskClips,
+            motionClips,
             selectedClip: null,
             ...cameraUpdate,
           };
@@ -1679,6 +1754,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
           textClips,
           cameraClips,
           maskClips,
+          motionClips,
           selectedClip: null,
           ...cameraUpdate,
         };
@@ -1790,6 +1866,19 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         return;
       }
 
+      if (action.effectId === 'motion') {
+        commitEdit('Resize motion', (state) => ({
+          motionClips: placeMotionClip(
+            state.motionClips,
+            sortMediaSegments(state.mediaSegments),
+            action.id,
+            start,
+            end,
+          ),
+        }));
+        return;
+      }
+
       if (action.effectId === 'mask') {
         commitEdit('Resize mask clip', (state) => ({
           maskClips: state.maskClips
@@ -1876,6 +1965,9 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       }
       if (action.effectId === 'mask') {
         setActiveWidget('mask');
+      }
+      if (action.effectId === 'motion') {
+        setActiveWidget('motion');
       }
     },
     [selectedClipId, setSelectedClip, setActiveWidget],
@@ -2091,6 +2183,18 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
           cameraClips: state.cameraClips
             .map((c) => (c.id === action.id ? { ...c, start, end } : c))
             .sort((a, b) => a.start - b.start),
+        }));
+        return;
+      }
+      if (action.effectId === 'motion') {
+        commitEdit('Move motion', (state) => ({
+          motionClips: placeMotionClip(
+            state.motionClips,
+            sortMediaSegments(state.mediaSegments),
+            action.id,
+            start,
+            end,
+          ),
         }));
         return;
       }
