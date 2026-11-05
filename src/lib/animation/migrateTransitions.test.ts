@@ -106,6 +106,20 @@ describe('migrateTransitionsToMotion', () => {
     expect(outro('blur')).toEqual(['fadeOut']);
   });
 
+  it('keeps a lone clip visible through its slide outro, as before', () => {
+    const segments = [
+      seg({
+        id: 'a',
+        transitionIn: { type: 'none', duration: 0 },
+        transitionOut: { type: 'slide-left', duration: 0.5 },
+      }),
+    ];
+    const { motionClips, mediaSegments } = migrateTransitionsToMotion(segments, []);
+    const end = resolveMotionAt(motionClips, mediaSegments, 3.99);
+    expect(end.opacity).toBe(1);
+    expect(end.x).toBeLessThan(-0.3);
+  });
+
   it('does not add an intro where the clip already has one', () => {
     const existing = {
       id: 'mine',

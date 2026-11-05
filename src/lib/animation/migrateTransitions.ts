@@ -1,5 +1,10 @@
 import type { ClipTransition, MediaSegment, TransitionType } from '../../types/timeline';
-import { createMotionClip, getMotionGroup, getPinnedSegment } from './motionClips';
+import {
+  createMotionClip,
+  getMotionGroup,
+  getPinnedSegment,
+  setClipPoseValue,
+} from './motionClips';
 import type { MotionClip, MotionMoveId } from './motionClips';
 
 /**
@@ -63,19 +68,26 @@ export function migrateTransitionsToMotion(
         createMotionClip(IN_MOVE[inType], seg.timelineStart, seg.timelineStart + len, seg.id),
       );
     }
-    // On a lone clip a fade-out never rendered (its opacity stayed at 1); the
-    // slide, grow, shrink and blur outros moved the video, so they did.
+    // On a lone clip the video's opacity stayed at 1, so a fade-out never
+    // rendered; slide, grow and shrink still moved it (and blur blurred it).
     const tOut = seg.transitionOut;
     const outType = tOut ? normalizeType(tOut) : 'none';
-    const rendered = sorted.length > 1 || (outType !== 'fade' && outType !== 'fade-white');
+    const lone = sorted.length === 1;
+    const rendered = !lone || (outType !== 'fade' && outType !== 'fade-white');
     if (tOut && outType !== 'none' && rendered && !hasPinned(seg.id, 'end')) {
+      // Motion blocks are at least MIN_LENGTH long; a shorter one never shows.
       const len = Math.min(
         Math.max(MIN_LENGTH, tOut.duration),
         seg.timelineEnd - seg.timelineStart,
       );
-      added.push(
-        createMotionClip(OUT_MOVE[outType], seg.timelineEnd - len, seg.timelineEnd, seg.id),
+      const outro = createMotionClip(
+        OUT_MOVE[outType],
+        seg.timelineEnd - len,
+        seg.timelineEnd,
+        seg.id,
       );
+      // Blur becomes a plain fade by choice; the moves keep the clip visible.
+      added.push(lone && outType !== 'blur' ? setClipPoseValue(outro, 'to', 'opacity', 1) : outro);
     }
   }
 
