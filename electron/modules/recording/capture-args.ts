@@ -151,7 +151,9 @@ export function fitH264FrameSize(
   width: number,
   height: number,
 ): { width: number; height: number; scaled: boolean } {
-  if (fitsH264(width, height)) {
+  // Non-finite sizes (a bad crop area or probe) can't be fitted, and would
+  // keep the loop below from ever exiting; FFmpeg rejects them as before.
+  if (!Number.isFinite(width) || !Number.isFinite(height) || fitsH264(width, height)) {
     return { width, height, scaled: false };
   }
   let factor = Math.min(

@@ -54,6 +54,18 @@ describe('fitH264FrameSize', () => {
     expect(fit.scaled).toBe(true);
     expect(macroblocks(fit.width, fit.height)).toBeLessThanOrEqual(36864);
   });
+
+  it('passes a size it cannot fit through unchanged instead of looping forever', () => {
+    // A renderer-supplied crop area or a bad probe can be NaN or Infinity.
+    for (const [w, h] of [
+      [NaN, 1080],
+      [1920, NaN],
+      [Infinity, 1080],
+      [1920, -Infinity],
+    ]) {
+      expect(fitH264FrameSize(w, h)).toEqual({ width: w, height: h, scaled: false });
+    }
+  });
 });
 
 describe('buildX11GrabArgs', () => {
