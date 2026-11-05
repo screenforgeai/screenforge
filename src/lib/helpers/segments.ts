@@ -6,7 +6,9 @@ import type {
   MediaSegment,
   ClipTransition,
 } from '../../types/timeline';
-import { DEFAULT_CLIP_TRANSITION } from '../../types/timeline';
+import { NO_CLIP_TRANSITION } from '../../types/timeline';
+import { getMotionGroup, layoutMotionClips } from '../animation/motionClips';
+import type { MotionClip } from '../animation/motionClips';
 import type { TextClip } from '../../types';
 import type { MusicClip } from '../timeline';
 
@@ -57,7 +59,7 @@ export function setMediaTrackEnabled(
 }
 
 export function getEffectiveTransition(segment: MediaSegment): ClipTransition {
-  const t = segment.transitionIn ?? DEFAULT_CLIP_TRANSITION;
+  const t = segment.transitionIn ?? NO_CLIP_TRANSITION;
   if ((t.type as string) === 'fade-black') {
     return { ...t, type: 'fade' };
   }
@@ -73,19 +75,21 @@ export function getEffectiveTransitionOut(segment: MediaSegment): ClipTransition
 }
 
 /**
- * Returns the initial playback time for a session, offset past any intro
- * transition on the first clip so the preview isn't stuck in a black fade.
+ * Returns the initial playback time for a session, offset past any intro on
+ * the first clip so the preview doesn't open on a faded-out or tilted frame.
  */
-export function getInitialPlaybackTime(segments: MediaSegment[]): number {
+export function getInitialPlaybackTime(
+  segments: MediaSegment[],
+  motionClips: readonly MotionClip[] = [],
+): number {
   const first = sortMediaSegments(segments)[0];
   if (!first) {
     return 0;
   }
-  const transition = getEffectiveTransition(first);
-  if (transition.type === 'none') {
-    return first.timelineStart;
-  }
-  return first.timelineStart + transition.duration + 0.1;
+  const intro = layoutMotionClips(motionClips, segments).find(
+    (c) => getMotionGroup(c) === 'start' && Math.abs(c.start - first.timelineStart) < 0.001,
+  );
+  return intro ? intro.end + 0.1 : first.timelineStart;
 }
 
 export function sortMediaSegments(segments: MediaSegment[]): MediaSegment[] {

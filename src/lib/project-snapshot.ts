@@ -1,6 +1,7 @@
 import type { AppStore } from '../store';
 import type { CaptionSettings, ProjectCursorSettings, SavedProject } from '../types';
 import { normalizeZoomClips } from './effects/zoom/clip';
+import { normalizeMotionClips } from './animation/motionClips';
 
 type CursorStateSource = Pick<
   AppStore,
@@ -43,6 +44,7 @@ type ProjectStateSource = Pick<
   | 'textClips'
   | 'musicClips'
   | 'maskClips'
+  | 'motionClips'
 >;
 
 const EMPTY_CAPTIONS: CaptionSettings = {
@@ -67,6 +69,7 @@ export interface ProjectSnapshot {
   textClips: AppStore['textClips'];
   musicClips: AppStore['musicClips'];
   maskClips: AppStore['maskClips'];
+  motionClips: AppStore['motionClips'];
 }
 
 export function getCursorSnapshot(state: CursorStateSource): ProjectCursorSettings {
@@ -105,6 +108,7 @@ export function createProjectSnapshotFromState(state: ProjectStateSource): Proje
     textClips: state.textClips,
     musicClips: state.musicClips,
     maskClips: state.maskClips,
+    motionClips: state.motionClips,
   };
 }
 
@@ -133,6 +137,7 @@ export function createProjectSnapshotFromProject(project: SavedProject): Project
       timelineStart: clip.timelineStart ?? 0,
       timelineEnd: clip.timelineEnd ?? clip.duration ?? 60,
     })),
+    motionClips: normalizeMotionClips(project.motionClips),
   };
 }
 

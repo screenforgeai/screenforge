@@ -215,6 +215,9 @@ export interface SavedProject {
   textClips?: TextClip[];
   musicClips?: import('../lib/timeline').MusicClip[];
   maskClips?: import('./timeline').MaskClip[];
+  motionClips?: import('../lib/animation/motionClips').MotionClip[];
+  /** Set once clip transitions have been converted to Motion (see migrateTransitions). */
+  motionVersion?: number;
   background?: import('../lib/effects/frame').BackgroundSettings;
   savedAt: string;
   thumbnail: string; // base64 data URL, empty string if none
@@ -262,6 +265,7 @@ export interface CaptureStoreSnapshot {
   captions?: CaptionSettings;
   cameraClips: unknown[];
   maskClips: unknown[];
+  motionClips?: unknown[]; // MotionClip[]
 }
 
 /** Parameters sent to the hidden export-worker BrowserWindow. */

@@ -6,10 +6,12 @@ import {
   createEmptyEditorSession,
   createProjectSession,
   createRecordingSession,
+  defaultClipIntro,
 } from './editor-session';
 import { trackEvent } from '../lib/analytics';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
 import { DEFAULT_CAMERA_SETTINGS } from './defaults';
+import { cloneMotionClips } from '../lib/animation/motionClips';
 
 export type {
   AppStore,
@@ -71,6 +73,7 @@ function cloneSnapshot(snapshot: HistorySnapshot): HistorySnapshot {
     musicClips: snapshot.musicClips.map((clip) => ({ ...clip })),
     cameraClips: snapshot.cameraClips.map((c) => ({ ...c })),
     maskClips: snapshot.maskClips.map((c) => ({ ...c })),
+    motionClips: cloneMotionClips(snapshot.motionClips),
   };
 }
 
@@ -100,6 +103,7 @@ function createSnapshot(state: AppStore): HistorySnapshot {
     musicClips: state.musicClips,
     cameraClips: state.cameraClips,
     maskClips: state.maskClips,
+    motionClips: state.motionClips,
   });
 }
 
@@ -135,6 +139,7 @@ function snapshotToPatch(snapshot: HistorySnapshot): EditableStorePatch {
     musicClips: snapshot.musicClips.map((clip) => ({ ...clip })),
     cameraClips: snapshot.cameraClips.map((c) => ({ ...c })),
     maskClips: snapshot.maskClips.map((c) => ({ ...c })),
+    motionClips: cloneMotionClips(snapshot.motionClips),
   };
 }
 
@@ -220,6 +225,9 @@ function snapshotsEqual(a: HistorySnapshot, b: HistorySnapshot): boolean {
   if (JSON.stringify(a.maskClips) !== JSON.stringify(b.maskClips)) {
     return false;
   }
+  if (JSON.stringify(a.motionClips) !== JSON.stringify(b.motionClips)) {
+    return false;
+  }
   return true;
 }
 
@@ -247,6 +255,7 @@ export const useStore = create<AppStore>((set, get) => {
     zoom: false,
     camera: false,
     mask: false,
+    motion: false,
     text: false,
   } as const;
 
@@ -306,7 +315,14 @@ export const useStore = create<AppStore>((set, get) => {
     pendingPlayFromStartToken: null,
     savedProjects: [],
     activeWidget: 'recordings',
-    hiddenLayers: { video: false, audio: false, zoom: false, camera: false, mask: false },
+    hiddenLayers: {
+      video: false,
+      audio: false,
+      zoom: false,
+      camera: false,
+      mask: false,
+      motion: false,
+    },
     focusMode: false,
     isExporting: false,
     past: [],
@@ -415,9 +431,12 @@ export const useStore = create<AppStore>((set, get) => {
       const state = get();
       const before = createSnapshot(state);
       const nextPast = trimPast([...state.past, { label: 'Append recording', snapshot: before }]);
+      const knownIds = new Set(state.mediaSegments.map((s) => s.id));
+      const newClipIntros = nextSegments.filter((s) => !knownIds.has(s.id)).map(defaultClipIntro);
       set({
         recordingResult: mergedResult,
         mediaSegments: nextSegments,
+        motionClips: [...state.motionClips, ...newClipIntros],
         ...(nextCameraMediaSegments !== undefined
           ? { cameraMediaSegments: nextCameraMediaSegments }
           : {}),

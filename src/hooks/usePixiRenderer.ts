@@ -51,6 +51,13 @@ function clearScene(scene: PixiScene): void {
   scene.videoContainer.filters = null;
   scene.contentContainer.removeChildren();
   scene.overlayContainer.removeChildren();
+  scene.motionOverlayContainer.removeChildren();
+  scene.motionContainer.scale.set(1);
+  scene.motionContainer.pivot.set(0, 0);
+  scene.motionContainer.position.set(0, 0);
+  scene.motionContainer.angle = 0;
+  scene.motionContainer.alpha = 1;
+  scene.motionContainer.filters = null;
   scene.compositeContainer.scale.set(1);
   scene.compositeContainer.pivot.set(0, 0);
   scene.compositeContainer.position.set(0, 0);

@@ -6,6 +6,7 @@ import { getStrictContext } from 'src/lib/get-strict-context';
 import { createProjectSnapshotFromState } from 'src/lib/project-snapshot';
 import { useStore, type AppStore } from '../store';
 import type { SavedProject } from '../types';
+import { MOTION_VERSION } from '../lib/animation/migrateTransitions';
 
 const AUTOSAVE_DELAY_MS = 5_000;
 const SAVE_STATUS_LINGER_MS = 3000;
@@ -70,6 +71,8 @@ function buildProjectFromState(
     textClips: snapshot.textClips,
     musicClips: snapshot.musicClips,
     maskClips: snapshot.maskClips,
+    motionClips: snapshot.motionClips,
+    motionVersion: MOTION_VERSION,
     savedAt: new Date().toISOString(),
     thumbnail,
   };

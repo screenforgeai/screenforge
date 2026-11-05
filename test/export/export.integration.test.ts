@@ -40,7 +40,7 @@ interface HarnessLaunch {
 }
 
 async function readManifest(name: string): Promise<ExportFixtureManifest> {
-  const manifestPath = path.join(MANIFEST_DIR, name);
+  const manifestPath = path.resolve(MANIFEST_DIR, name);
   return JSON.parse(await fs.readFile(manifestPath, 'utf8')) as ExportFixtureManifest;
 }
 
@@ -204,6 +204,31 @@ async function inspectMedia(filePath: string): Promise<MediaInspection> {
 }
 
 async function sampleFrameHash(filePath: string, timeSeconds: number): Promise<string> {
+  const png = ['-f', 'image2pipe', '-vcodec', 'png'];
+  const pngBuffer = await sampleFrame(filePath, timeSeconds, png);
+  return createHash('sha256').update(pngBuffer).digest('hex');
+}
+
+/** Mean per-pixel grey difference (0–255) between two exports at one time. */
+async function meanFrameDifference(a: string, b: string, timeSeconds: number): Promise<number> {
+  const gray = ['-f', 'rawvideo', '-pix_fmt', 'gray'];
+  const [pa, pb] = await Promise.all([
+    sampleFrame(a, timeSeconds, gray),
+    sampleFrame(b, timeSeconds, gray),
+  ]);
+  expect(pa.length).toBe(pb.length);
+  let sum = 0;
+  for (let i = 0; i < pa.length; i++) {
+    sum += Math.abs(pa[i] - pb[i]);
+  }
+  return sum / pa.length;
+}
+
+async function sampleFrame(
+  filePath: string,
+  timeSeconds: number,
+  outputArgs: string[],
+): Promise<Buffer> {
   const child = spawn(
     ffmpegPath,
     [
@@ -216,10 +241,7 @@ async function sampleFrameHash(filePath: string, timeSeconds: number): Promise<s
       filePath,
       '-frames:v',
       '1',
-      '-f',
-      'image2pipe',
-      '-vcodec',
-      'png',
+      ...outputArgs,
       'pipe:1',
     ],
     {
@@ -246,12 +268,12 @@ async function sampleFrameHash(filePath: string, timeSeconds: number): Promise<s
     throw new Error(`ffmpeg frame extraction failed for ${filePath} at ${timeSeconds}s\n${stderr}`);
   }
 
-  const pngBuffer = Buffer.concat(chunks);
-  if (pngBuffer.length === 0) {
+  const frame = Buffer.concat(chunks);
+  if (frame.length === 0) {
     throw new Error(`ffmpeg returned an empty frame for ${filePath} at ${timeSeconds}s`);
   }
 
-  return createHash('sha256').update(pngBuffer).digest('hex');
+  return frame;
 }
 
 async function runHarnessScenario(manifestFileName: string): Promise<{
@@ -262,7 +284,7 @@ async function runHarnessScenario(manifestFileName: string): Promise<{
 }> {
   const manifest = await readManifest(manifestFileName);
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `screenforge-export-${manifest.id}-`));
-  const manifestPath = path.join(MANIFEST_DIR, manifestFileName);
+  const manifestPath = path.resolve(MANIFEST_DIR, manifestFileName);
   const resultPath = path.join(tempDir, 'result.json');
   const launch = launchHarnessProcess(manifestPath, resultPath);
 
@@ -330,6 +352,7 @@ describe.sequential('export integration', () => {
     'mp4-audio.json',
     'mp4-camera.json',
     'mp4-timeline-edit.json',
+    'mp4-motion-multiclip.json',
     'mp4-duration-overrun.json',
     'mp4-aspect-4x3.json',
     'gif-smoke.json',
@@ -374,4 +397,42 @@ describe.sequential('export integration', () => {
       expect(result.elapsedMs).toBeLessThanOrEqual(manifest.expected.maxElapsedMs);
     }
   }, EXPORT_HARNESS_TIMEOUT_MS);
+
+  it(
+    'moves the picture only where the motion blocks are',
+    async () => {
+      const name = 'mp4-motion-multiclip.json';
+      const manifest = await readManifest(name);
+      // The same project with no Motion, written beside its output so the
+      // recording path is absolute.
+      const controlDir = await fs.mkdtemp(path.join(os.tmpdir(), 'screenforge-export-control-'));
+      const controlPath = path.join(controlDir, 'control.json');
+      await fs.writeFile(
+        controlPath,
+        JSON.stringify({
+          ...manifest,
+          id: `${manifest.id}-control`,
+          export: {
+            ...manifest.export,
+            outputFileName: `control-${manifest.export.outputFileName}`,
+          },
+          recording: {
+            ...manifest.recording,
+            filePath: path.resolve(MANIFEST_DIR, manifest.recording.filePath),
+          },
+          motionClips: [],
+        }),
+      );
+      const withMotion = (await runHarnessScenario(name)).result.outputPath as string;
+      const without = (await runHarnessScenario(controlPath)).result.outputPath as string;
+      // Two encodes of the same frames differ by well under 1 grey level on
+      // average; a playing move differs by several.
+      const differenceAt = (time: number) => meanFrameDifference(withMotion, without, time);
+
+      expect(await differenceAt(2.5)).toBeLessThan(1); // clip a, between its intro and outro
+      expect(await differenceAt(0.8)).toBeGreaterThan(1.5); // tilt-in intro
+      expect(await differenceAt(5.2)).toBeGreaterThan(1.5); // strong slow push
+    },
+    EXPORT_HARNESS_TIMEOUT_MS * 2,
+  );
 });

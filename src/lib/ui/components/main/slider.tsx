@@ -24,6 +24,7 @@ const Slider = React.forwardRef<React.ElementRef<typeof SliderPrimitive.Root>, S
       valueLabel,
       onPointerDown,
       onValueCommit,
+      'aria-describedby': ariaDescribedBy,
       ...props
     },
     ref,
@@ -140,6 +141,10 @@ const Slider = React.forwardRef<React.ElementRef<typeof SliderPrimitive.Root>, S
 
         {/* Thumb — invisible → thin bar → pill */}
         <SliderPrimitive.Thumb
+          // The thumb is what takes focus, so it carries the name (the visible
+          // label is hidden from screen readers) and the description.
+          aria-label={inlineLabel}
+          aria-describedby={ariaDescribedBy}
           className={cn(
             'relative z-20 block rounded-full focus-visible:outline-none',
             'disabled:pointer-events-none',

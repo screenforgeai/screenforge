@@ -16,6 +16,7 @@ import type {
 import type { CursorStyle as BaseCursorStyle } from '../lib/effects/cursor/cursors';
 import type { BackgroundSettings, BackgroundType, FrameSettings } from '../lib/effects/frame';
 import type { MusicClip } from '../lib/timeline';
+import type { MotionClip } from '../lib/animation/motionClips';
 
 export type { MusicClip };
 
@@ -33,7 +34,8 @@ export type WidgetTab =
   | 'keyboard'
   | 'captions'
   | 'text'
-  | 'music';
+  | 'music'
+  | 'motion';
 
 export type SceneStatus = 'planned' | 'recorded' | 'done';
 
@@ -82,6 +84,7 @@ export interface EditorSessionState {
   musicClips: MusicClip[];
   cameraClips: CameraClip[];
   maskClips: MaskClip[];
+  motionClips: MotionClip[];
   isCropEditing: boolean;
 }
 
@@ -110,6 +113,7 @@ export interface HistorySnapshot {
   musicClips: MusicClip[];
   cameraClips: CameraClip[];
   maskClips: MaskClip[];
+  motionClips: MotionClip[];
 }
 
 export interface HistoryEntry {
@@ -148,10 +152,19 @@ export interface EditableStorePatch {
   musicClips?: MusicClip[];
   cameraClips?: CameraClip[];
   maskClips?: MaskClip[];
+  motionClips?: MotionClip[];
   selectedClip?: SelectedZoomAction;
 }
 
-export type TimelineLayerId = 'video' | 'audio' | 'zoom' | 'camera' | 'mask' | 'text' | 'music';
+export type TimelineLayerId =
+  | 'video'
+  | 'audio'
+  | 'zoom'
+  | 'camera'
+  | 'mask'
+  | 'text'
+  | 'music'
+  | 'motion';
 
 export interface AppStore extends EditorSessionState {
   scenes: Scene[];

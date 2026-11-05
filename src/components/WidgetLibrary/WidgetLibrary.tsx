@@ -12,6 +12,7 @@ import {
   IconHeart,
   IconKeyboard,
   IconFilm,
+  IconMotion,
   IconMusic3,
   IconPhoto,
   IconPlus,
@@ -50,6 +51,7 @@ import { VideoWidget } from './_components/VideoWidget';
 import { CaptionWidget } from './_components/CaptionWidget';
 import { TextWidget } from './_components/TextWidget';
 import { MusicWidget } from './_components/MusicWidget';
+import { MotionWidget } from './_components/MotionWidget';
 import { useNewRecordingFlow } from './_hooks/useNewRecordingFlow';
 import { FeedbackModal } from './_components/FeedbackModal';
 import { ShortcutsModal } from './_components/ShortcutsModal';
@@ -68,6 +70,7 @@ const WIDGET_MAP: Record<WidgetTab, React.ReactNode> = {
   recordings: <RecordingWidget />,
   video: <VideoWidget />,
   zoom: <ZoomWidget />,
+  motion: <MotionWidget />,
   cursor: <CursorWidget />,
   frame: <FrameWidget />,
   camera: <CameraWidget />,
@@ -97,6 +100,7 @@ export const WidgetLibrary = () => {
     { id: 'frame', icon: <IconPhoto className="size-5" />, label: t('frame') },
     { id: 'video', icon: <IconFilm className="size-5" />, label: t('video') },
     { id: 'zoom', icon: <IconZoom className="size-5" />, label: t('zoom') },
+    { id: 'motion', icon: <IconMotion className="size-5" />, label: t('motion') },
     { id: 'cursor', icon: <IconPointer className="size-5" />, label: t('cursor') },
     { id: 'keyboard', icon: <IconKeyboard className="size-5" />, label: t('keyboard') },
     { id: 'camera', icon: <IconVideo className="size-5" />, label: t('camera') },

@@ -8,15 +8,19 @@ import type { RenderContext } from '../effects/types';
  * Hierarchy (outermost → innermost):
  *   stage
  *   ├── backgroundContainer  ← solid / gradient / blur / wallpaper (always full canvas)
- *   ├── compositeContainer   ← always identity; recording panel position driven by frame effect geometry
- *   │   └── cameraContainer  ← zoom pivot: scale + position applied here
- *   │       ├── frameContainer   ← cinematic tilt target: shadow + preview
- *   │       │   └── videoContainer  ← content mask + video sprite
- *   │       └── contentContainer ← reserved for content-phase overlays
- *   └── overlayContainer  ← cursor, camera PIP — NOT zoomed (absolute to stage)
+ *   ├── motionContainer      ← motion clips: scale, offset, rotation, 3D tilt, opacity
+ *   │   ├── compositeContainer   ← always identity; recording panel position driven by frame effect geometry
+ *   │   │   └── cameraContainer  ← zoom pivot: scale + position applied here
+ *   │   │       ├── frameContainer   ← cinematic tilt target: shadow + preview
+ *   │   │       │   └── videoContainer  ← content mask + video sprite
+ *   │   │       └── contentContainer ← reserved for content-phase overlays
+ *   │   └── motionOverlayContainer ← cursor, masks — NOT zoomed, but move with the recording
+ *   └── overlayContainer  ← camera PIP, text, captions, keys — fixed to the canvas
  */
 export interface PixiScene {
   app: Application;
+  motionContainer: Container;
+  motionOverlayContainer: Container;
   compositeContainer: Container;
   cameraContainer: Container;
   backgroundContainer: Container;

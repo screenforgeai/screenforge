@@ -4,18 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  Button,
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-  Slider,
-} from 'src/lib/ui';
+import { Button, Slider } from 'src/lib/ui';
 import { useStore } from 'src/store';
 import {
   WIDGET_EMPTY_STATE_CLASS,
@@ -24,103 +13,7 @@ import {
   WIDGET_SECTION_HEADING_CLASS,
 } from 'src/components/layout';
 import { cn, formatTime } from 'src/lib/utils';
-import { sortMediaSegments, getEffectiveTransitionOut } from 'src/lib/helpers/segments';
-import type { ClipTransition, TransitionType } from 'src/types/timeline';
-import { DEFAULT_CLIP_TRANSITION } from 'src/types/timeline';
-
-// ── Transition picker data ────────────────────────────────────────────────────
-
-interface TransitionOption {
-  type: TransitionType;
-  labelKey: string;
-}
-
-const TRANSITION_CATEGORIES: { labelKey: string; options: TransitionOption[] }[] = [
-  {
-    labelKey: 'categoryBasic',
-    options: [
-      { type: 'none', labelKey: 'transitionNone' },
-      { type: 'fade', labelKey: 'transitionFade' },
-      { type: 'fade-white', labelKey: 'transitionFadeWhite' },
-    ],
-  },
-  {
-    labelKey: 'categorySlide',
-    options: [
-      { type: 'slide-up', labelKey: 'transitionSlideUp' },
-      { type: 'slide-down', labelKey: 'transitionSlideDown' },
-      { type: 'slide-left', labelKey: 'transitionSlideLeft' },
-      { type: 'slide-right', labelKey: 'transitionSlideRight' },
-    ],
-  },
-  {
-    labelKey: 'categoryScale',
-    options: [
-      { type: 'grow', labelKey: 'transitionGrow' },
-      { type: 'shrink', labelKey: 'transitionShrink' },
-    ],
-  },
-  {
-    labelKey: 'categoryBlur',
-    options: [{ type: 'blur', labelKey: 'transitionBlur' }],
-  },
-];
-
-// ── TransitionPicker ──────────────────────────────────────────────────────────
-
-const TransitionPicker = ({
-  value,
-  onChange,
-  onDurationPointerDown,
-  onDurationCommit,
-}: {
-  value: ClipTransition;
-  onChange: (t: ClipTransition) => void;
-  onDurationPointerDown: () => void;
-  onDurationCommit: () => void;
-}) => {
-  const { t } = useTranslation('video');
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Select
-        value={value.type}
-        onValueChange={(v) => onChange({ ...value, type: v as TransitionType })}
-      >
-        <SelectTrigger className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="max-h-64">
-          {TRANSITION_CATEGORIES.map((cat, i) => (
-            <SelectGroup key={cat.labelKey}>
-              {i > 0 && <SelectSeparator />}
-              <SelectLabel>{t(cat.labelKey)}</SelectLabel>
-              {cat.options.map((opt) => (
-                <SelectItem key={opt.type} value={opt.type}>
-                  {t(opt.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {value.type !== 'none' && (
-        <Slider
-          min={0.05}
-          max={1.5}
-          step={0.05}
-          inlineLabel={t('duration')}
-          valueLabel={`${value.duration.toFixed(2)}s`}
-          value={[value.duration]}
-          onPointerDown={onDurationPointerDown}
-          onValueChange={([v]) => onChange({ ...value, duration: v })}
-          onValueCommit={onDurationCommit}
-        />
-      )}
-    </div>
-  );
-};
+import { sortMediaSegments } from 'src/lib/helpers/segments';
 
 // ── VideoWidget ───────────────────────────────────────────────────────────────
 
@@ -168,32 +61,6 @@ export const VideoWidget = () => {
     }
     clipRefs.current[playheadSegmentId]?.scrollIntoView({ block: 'nearest' });
   }, [playheadSegmentId]);
-
-  const updateTransitionOut = (segmentId: string, transition: ClipTransition) => {
-    trackEvent('widget_config_changed', {
-      widget: 'video',
-      property: 'transitionOut',
-      value: transition.type,
-    });
-    commitEdit('Update transition out', (state) => ({
-      mediaSegments: state.mediaSegments.map((s) =>
-        s.id === segmentId ? { ...s, transitionOut: transition } : s,
-      ),
-    }));
-  };
-
-  const updateTransitionIn = (segmentId: string, transition: ClipTransition) => {
-    trackEvent('widget_config_changed', {
-      widget: 'video',
-      property: 'transitionIn',
-      value: transition.type,
-    });
-    commitEdit('Update transition in', (state) => ({
-      mediaSegments: state.mediaSegments.map((s) =>
-        s.id === segmentId ? { ...s, transitionIn: transition } : s,
-      ),
-    }));
-  };
 
   const updateSpeed = (segmentId: string, speed: number) => {
     trackEvent('widget_config_changed', {
@@ -330,8 +197,6 @@ export const VideoWidget = () => {
           const isPlayheadActive = playheadSegmentId === seg.id;
           const isHighlighted = isExpanded || isPlayheadActive;
           const clipDuration = seg.timelineEnd - seg.timelineStart;
-          const effectiveIn: ClipTransition = seg.transitionIn ?? DEFAULT_CLIP_TRANSITION;
-          const effectiveOut: ClipTransition = getEffectiveTransitionOut(seg);
           const effectiveSpeed = seg.speed ?? 1;
           const speedLabel = effectiveSpeed % 1 === 0 ? `${effectiveSpeed}×` : `${effectiveSpeed}×`;
 
@@ -455,32 +320,6 @@ export const VideoWidget = () => {
                           }
                           onValueChange={([v]) => updateSpeed(seg.id, v)}
                           onValueCommit={() => endHistoryGroup(`speed-${seg.id}`)}
-                        />
-                      </div>
-
-                      {/* Transition In */}
-                      <div className="flex flex-col gap-2">
-                        <div className={WIDGET_SECTION_HEADING_CLASS}>{t('tabIn')}</div>
-                        <TransitionPicker
-                          value={effectiveIn}
-                          onChange={(tr) => updateTransitionIn(seg.id, tr)}
-                          onDurationPointerDown={() =>
-                            beginHistoryGroup(`tr-in-dur-${seg.id}`, 'Adjust transition duration')
-                          }
-                          onDurationCommit={() => endHistoryGroup(`tr-in-dur-${seg.id}`)}
-                        />
-                      </div>
-
-                      {/* Transition Out */}
-                      <div className="flex flex-col gap-2">
-                        <div className={WIDGET_SECTION_HEADING_CLASS}>{t('tabOut')}</div>
-                        <TransitionPicker
-                          value={effectiveOut}
-                          onChange={(tr) => updateTransitionOut(seg.id, tr)}
-                          onDurationPointerDown={() =>
-                            beginHistoryGroup(`tr-out-dur-${seg.id}`, 'Adjust transition duration')
-                          }
-                          onDurationCommit={() => endHistoryGroup(`tr-out-dur-${seg.id}`)}
                         />
                       </div>
                     </div>

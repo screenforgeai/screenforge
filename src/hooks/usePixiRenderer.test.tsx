@@ -51,6 +51,8 @@ const fakeScene = () => {
     videoContainer: fakeContainer(),
     contentContainer: fakeContainer(),
     overlayContainer: fakeContainer(),
+    motionContainer: fakeContainer(),
+    motionOverlayContainer: fakeContainer(),
     compositeContainer: fakeContainer(),
     cameraContainer: fakeContainer(),
   };

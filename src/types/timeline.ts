@@ -26,9 +26,14 @@ export interface ClipTransition {
   duration: number; // seconds, 0.0–1.5
 }
 
-export const DEFAULT_CLIP_TRANSITION: ClipTransition = {
-  type: 'fade',
-  duration: 0.35,
+/**
+ * Clip transitions are no longer edited: Motion intros and outros pinned to a
+ * clip do this job now, and old projects are converted when they open (see
+ * lib/animation/migrateTransitions). The fields stay so old data still reads.
+ */
+export const NO_CLIP_TRANSITION: ClipTransition = {
+  type: 'none',
+  duration: 0,
 };
 
 // ── Primary media segments (video/audio timeline model) ──────────────────────

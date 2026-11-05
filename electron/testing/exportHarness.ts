@@ -75,6 +75,7 @@ export async function runExportHarness(
       cursorIdleHideSeconds: manifest.cursor.idleHideSeconds,
       cameraClips: [],
       maskClips: [],
+      motionClips: manifest.motionClips ?? [],
     });
 
     const captureParams: CaptureWindowParams = {

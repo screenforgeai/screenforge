@@ -2,6 +2,7 @@ import type { CaptureStoreSnapshot, CaptionSettings } from '../../types';
 import type { AppStore } from '../../store';
 import { cloneFrameSettings } from '../effects/frame';
 import { normalizeZoomClips } from '../effects/zoom/clip';
+import { cloneMotionClips } from '../animation/motionClips';
 
 type CaptureStoreSnapshotSource = Pick<
   AppStore,
@@ -21,6 +22,7 @@ type CaptureStoreSnapshotSource = Pick<
   | 'cursorIdleHideSeconds'
   | 'cameraClips'
   | 'maskClips'
+  | 'motionClips'
 >;
 
 export function createCaptureStoreSnapshot(
@@ -48,5 +50,6 @@ export function createCaptureStoreSnapshot(
     captions: captionsOverride,
     cameraClips: state.cameraClips.map((c) => ({ ...c })),
     maskClips: state.maskClips.map((c) => ({ ...c })),
+    motionClips: cloneMotionClips(state.motionClips),
   };
 }

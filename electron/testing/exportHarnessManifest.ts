@@ -9,6 +9,8 @@ import type {
   ExportCapturePerfStats,
 } from '../../src/types';
 import type { MediaSegment, ZoomClip } from '../../src/types/timeline';
+import type { MotionClip } from '../../src/lib/animation/motionClips';
+import { normalizeMotionClips } from '../../src/lib/animation/motionClips';
 import type { FrameSettings } from '../../src/lib/effects/frame';
 import { cloneFrameSettings, DEFAULT_FRAME } from '../../src/lib/effects/frame';
 import {
@@ -32,6 +34,7 @@ export interface ExportFixtureManifest {
   recording: RecordingResult;
   mediaSegments: MediaSegment[];
   zoomClips?: ZoomClip[];
+  motionClips?: MotionClip[];
   frame?: PartialFrameSettings;
   camera?: PartialCameraSettings;
   keyboard?: Partial<ProjectKeyboardSettings>;
@@ -171,6 +174,7 @@ export async function readResolvedExportFixtureManifest(
     manifestPath,
     recording: resolveRecordingPaths(manifestPath, parsed.recording),
     zoomClips: parsed.zoomClips ?? [],
+    motionClips: normalizeMotionClips(parsed.motionClips),
     frame: mergeFrameSettings(parsed.frame),
     camera: mergeCameraSettings(parsed.camera),
     keyboard: mergeKeyboardSettings(parsed.keyboard),

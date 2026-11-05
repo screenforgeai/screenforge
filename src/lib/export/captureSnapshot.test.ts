@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_FRAME } from '../effects/frame';
 import { DEFAULT_CAMERA_SETTINGS, DEFAULT_KEYBOARD_SETTINGS } from '../../store/defaults';
 import { createCaptureStoreSnapshot } from './captureSnapshot';
+import type { MotionClip } from '../animation/motionClips';
 
 describe('createCaptureStoreSnapshot', () => {
   it('deep-clones export-visible editor state', () => {
@@ -57,6 +58,7 @@ describe('createCaptureStoreSnapshot', () => {
       cursorHideWhenIdle: false,
       cursorIdleHideSeconds: 5,
       maskClips: [],
+      motionClips: [] as MotionClip[],
     };
 
     const snapshot = createCaptureStoreSnapshot(state);

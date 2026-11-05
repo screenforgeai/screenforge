@@ -273,3 +273,75 @@
 .sf-timeline-wrapper .timeline-editor-edit-row-drag-handle {
   display: none !important;
 }
+
+/* Hover preview card (src/lib/ui/components/main/preview-card.tsx).
+   CSS keyframes rather than JS animation: they hold their end state, so the
+   card never flashes on the frame an animation finishes. */
+@keyframes sf-preview-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sf-preview-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-4px) scale(0.98);
+  }
+}
+
+@keyframes sf-preview-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.sf-preview-card {
+  transform-origin: left center;
+}
+
+/* Follows the hovered row with a soft glide (retargets smoothly mid-move),
+   never on its first placement. */
+.sf-preview-card {
+  will-change: translate;
+}
+
+.sf-preview-card[data-glide='true'] {
+  transition: translate 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Only a card appearing from nothing animates in; swapping options doesn't. */
+.sf-preview-card[data-state='open'][data-enter='true'] {
+  animation: sf-preview-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.sf-preview-card[data-state='closed'] {
+  animation: sf-preview-out 120ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sf-preview-card[data-glide='true'] {
+    transition: none;
+  }
+
+  .sf-preview-card[data-state='open'][data-enter='true'] {
+    animation-name: sf-preview-fade-out;
+    animation-direction: reverse;
+  }
+
+  .sf-preview-card[data-state='closed'] {
+    animation-name: sf-preview-fade-out;
+  }
+}

@@ -42,7 +42,7 @@ import {
   getEffectiveTransition,
   getEffectiveTransitionOut,
 } from '../../helpers/segments';
-import { DEFAULT_CLIP_TRANSITION } from '../../../types/timeline';
+import { NO_CLIP_TRANSITION } from '../../../types/timeline';
 import { DEFAULT_CROP_RECT, getFrameGeometry, getFrameGeometryForPanel } from './analyze';
 import { GRADIENT_PRESETS } from './presets';
 import { resolveWallpaperPreset, getWallpaperImage } from './wallpapers';
@@ -670,7 +670,7 @@ export const framePixiEffect: PixiEffect<null> = {
       let fadeInProgress = 1;
 
       const currentTransition =
-        segIdx >= 0 ? getEffectiveTransition(sortedSegs[segIdx]) : DEFAULT_CLIP_TRANSITION;
+        segIdx >= 0 ? getEffectiveTransition(sortedSegs[segIdx]) : NO_CLIP_TRANSITION;
       const fadeDur = currentTransition.type === 'none' ? 0 : currentTransition.duration;
       // For fade/fade-white: alpha duration = user-controlled fadeDur.
       // For slide/scale/blur: alpha duration = fixed NON_FADE_ALPHA_DUR; transform

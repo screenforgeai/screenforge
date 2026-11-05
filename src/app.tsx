@@ -14,7 +14,6 @@ import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
 import { trackEvent } from './lib/analytics';
 import i18n from './i18n';
-import { DEFAULT_CLIP_TRANSITION } from './types/timeline';
 
 type AppShellProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -169,7 +168,6 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
             sourceEnd: actualMergedDuration,
             videoEnabled: true as const,
             audioEnabled: true,
-            transitionIn: DEFAULT_CLIP_TRANSITION,
           };
           const appendedEnd = appendTimelineStart + result.duration;
           const cameraRangeAlreadyCovered = cameraClips.some(

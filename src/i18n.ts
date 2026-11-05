@@ -27,6 +27,7 @@ import timeline from './locales/en/timeline.json';
 import widgets from './locales/en/widgets.json';
 import settings from './locales/en/settings.json';
 import mask from './locales/en/mask.json';
+import motion from './locales/en/motion.json';
 
 // Spanish
 import commonEs from './locales/es/common.json';
@@ -206,6 +207,7 @@ i18n.use(initReactI18next).init({
     'widgets',
     'settings',
     'mask',
+    'motion',
   ],
   defaultNS: 'common',
   resources: {
@@ -233,6 +235,7 @@ i18n.use(initReactI18next).init({
       widgets,
       settings,
       mask,
+      motion,
     },
     es: {
       common: commonEs,

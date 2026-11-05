@@ -21,6 +21,7 @@ export const EFFECTS = {
   video: { id: 'video', name: 'Video' },
   audio: { id: 'audio', name: 'Audio' },
   zoom: { id: 'zoom', name: 'Zoom' },
+  motion: { id: 'motion', name: 'Motion' },
   camera: { id: 'camera', name: 'Camera' },
   mask: { id: 'mask', name: 'Mask' },
   text: { id: 'text', name: 'Text' },
@@ -59,6 +60,12 @@ export const INITIAL_LAYERS: Layer[] = [
   {
     id: 'audio',
     label: 'Audio',
+    hidden: false,
+    actions: [],
+  },
+  {
+    id: 'motion',
+    label: 'Motion',
     hidden: false,
     actions: [],
   },
