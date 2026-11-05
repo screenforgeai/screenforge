@@ -151,9 +151,10 @@ export function fitH264FrameSize(
   width: number,
   height: number,
 ): { width: number; height: number; scaled: boolean } {
-  // Non-finite sizes (a bad crop area or probe) can't be fitted, and would
-  // keep the loop below from ever exiting; FFmpeg rejects them as before.
-  if (!Number.isFinite(width) || !Number.isFinite(height) || fitsH264(width, height)) {
+  // Only positive, finite sizes can be fitted: a bad crop area or probe (NaN,
+  // Infinity, zero or negative) passes through and FFmpeg rejects it as before.
+  const fittable = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+  if (!fittable || fitsH264(width, height)) {
     return { width, height, scaled: false };
   }
   let factor = Math.min(
@@ -163,8 +164,9 @@ export function fitH264FrameSize(
   );
   // The epsilon keeps exact fits (6016x3384 → 4096x2304) from rounding down.
   const even = (n: number) => Math.floor((n * factor) / 2 + 1e-6) * 2;
-  // Macroblock rounding can tip an area-sized fit just over; shrink until it fits.
-  while (!fitsH264(even(width), even(height))) {
+  // Macroblock rounding can tip an area-sized fit just over; shrink until it
+  // fits. A few steps always do; the cap only guarantees the loop ends.
+  for (let step = 0; step < 1000 && !fitsH264(even(width), even(height)); step++) {
     factor *= 0.995;
   }
   return { width: even(width), height: even(height), scaled: true };

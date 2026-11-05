@@ -56,12 +56,18 @@ describe('fitH264FrameSize', () => {
   });
 
   it('passes a size it cannot fit through unchanged instead of looping forever', () => {
-    // A renderer-supplied crop area or a bad probe can be NaN or Infinity.
+    // A renderer-supplied crop area or a bad probe can be NaN, infinite, zero
+    // or negative. A negative side with an oversized one (-2 x 5000) used to
+    // hang the fitting loop.
     for (const [w, h] of [
       [NaN, 1080],
       [1920, NaN],
       [Infinity, 1080],
       [1920, -Infinity],
+      [-2, 5000],
+      [5000, -2],
+      [0, 5000],
+      [-5000, -5000],
     ]) {
       expect(fitH264FrameSize(w, h)).toEqual({ width: w, height: h, scaled: false });
     }
