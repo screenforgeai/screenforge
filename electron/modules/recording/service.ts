@@ -1063,6 +1063,10 @@ export function clearActiveCropArea(): void {
   activeCropArea = null;
 }
 
+/**
+ * Crops a recording to `area` (logical pixels, scaled by `scaleFactor`) and
+ * re-encodes it, scaled down when the crop is too large for H.264.
+ */
 export async function cropRecording(
   filePath: string,
   area: { x: number; y: number; width: number; height: number },
@@ -1218,6 +1222,10 @@ export function clearAppendMode(): void {
   appendMode = false;
 }
 
+/**
+ * Joins two clips into one H.264/AAC file at the first clip's size, capped to
+ * what the encoder accepts, and returns its temp path.
+ */
 export async function concatRecordings(firstPath: string, secondPath: string): Promise<string> {
   const outPath = createTempPath('screenforge-concat', 'mp4');
 
@@ -1291,8 +1299,10 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
   return outPath;
 }
 
-// Re-encodes a video file in-place to a clean H.264/AAC stream, fixing corrupt
-// concat files produced by the old -c copy path (VT -12909 decode error).
+/**
+ * Re-encodes a video file in-place to a clean H.264/AAC stream, fixing corrupt
+ * concat files produced by the old -c copy path (VT -12909 decode error).
+ */
 export async function reencodeRecording(filePath: string): Promise<string> {
   const tempPath = createTempPath('screenforge-reencode', 'mp4');
   const [sourceHasAudio, source] = await Promise.all([
