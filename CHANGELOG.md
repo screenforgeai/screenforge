@@ -1,5 +1,15 @@
 # screenforge
 
+## 0.7.0
+
+### Minor Changes
+
+- 58d2d35: Add Motion: camera-style moves (tilts, slides, pushes, orbits and more) as blocks on a new timeline lane, with a hover preview for every option. Each clip can have its own intro and outro, which replace Transition in/out on the Video panel; projects with transitions convert to Motion automatically when opened.
+
+### Patch Changes
+
+- 33b08d7: Adding a clip or a new recording no longer fails on 5K and larger displays; the joined video is saved at 4096x2304 when the source is too large for the H.264 encoder.
+
 ## 0.6.19
 
 ### Patch Changes
