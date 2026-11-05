@@ -18,6 +18,8 @@ export const MOTION_VERSION = 1;
 
 // Before Motion, a clip without a transition faded in for 0.35s by default.
 const LEGACY_DEFAULT_IN: ClipTransition = { type: 'fade', duration: 0.35 };
+// The fixed fade non-fade transitions added on top of their own movement.
+const LEGACY_NON_FADE_ALPHA = 0.18;
 
 // Fade white and Blur have no Motion equivalent; they become a plain fade.
 const IN_MOVE: Record<Exclude<TransitionType, 'none'>, MotionMoveId> = {
@@ -74,10 +76,21 @@ export function migrateTransitionsToMotion(
     const outType = tOut ? normalizeType(tOut) : 'none';
     const lone = sorted.length === 1;
     const rendered = !lone || (outType !== 'fade' && outType !== 'fade-white');
-    if (tOut && outType !== 'none' && tOut.duration > 0 && rendered && !hasPinned(seg.id, 'end')) {
-      const len = Math.min(tOut.duration, seg.timelineEnd - seg.timelineStart);
+    // Between clips, a slide, grow, shrink or blur outro also faded the clip out
+    // over a fixed 0.18s, even when its own length was zero.
+    const fixedFadeOnly =
+      tOut?.duration === 0 && !lone && outType !== 'fade' && outType !== 'fade-white';
+    if (
+      tOut &&
+      outType !== 'none' &&
+      (tOut.duration > 0 || fixedFadeOnly) &&
+      rendered &&
+      !hasPinned(seg.id, 'end')
+    ) {
+      const room = seg.timelineEnd - seg.timelineStart;
+      const len = Math.min(fixedFadeOnly ? LEGACY_NON_FADE_ALPHA : tOut.duration, room);
       const outro = createMotionClip(
-        OUT_MOVE[outType],
+        fixedFadeOnly ? 'fadeOut' : OUT_MOVE[outType],
         seg.timelineEnd - len,
         seg.timelineEnd,
         seg.id,

@@ -148,6 +148,28 @@ describe('migrateTransitionsToMotion', () => {
     ]);
   });
 
+  it('keeps the short fade a zero-length slide outro still had between clips', () => {
+    const { motionClips } = migrateTransitionsToMotion(
+      [
+        seg({
+          id: 'a',
+          transitionIn: { type: 'none', duration: 0 },
+          transitionOut: { type: 'slide-left', duration: 0 },
+        }),
+        seg({
+          id: 'b',
+          timelineStart: 4,
+          timelineEnd: 8,
+          transitionIn: { type: 'none', duration: 0 },
+        }),
+      ],
+      [],
+    );
+    expect(motionClips.map((c) => [c.move, c.clipId, +(c.end - c.start).toFixed(2)])).toEqual([
+      ['fadeOut', 'a', 0.18],
+    ]);
+  });
+
   it('does not add an intro where the clip already has one', () => {
     const existing = {
       id: 'mine',
