@@ -12,6 +12,7 @@ import {
   placeMotionClip,
   repinMotionClips,
   resolveMotionAt,
+  rippleMotionClips,
   setClipMove,
   swapClipPoses,
 } from './motionClips';
@@ -244,6 +245,38 @@ describe('placeMotionClip', () => {
     const a = placeMotionClip(clips, cuts, 'a', 4.5, 6.5)[0];
     expect(a.start).toBe(4);
     expect(a.end).toBe(6);
+  });
+});
+
+describe('rippleMotionClips', () => {
+  // Deleting clip b (4–8) closes its 4s gap.
+  const ripple = (clips: MotionClip[]) =>
+    rippleMotionClips(clips, new Set(['b']), [{ start: 4, end: 8 }]);
+
+  it("drops the intro and outro of a deleted clip and keeps the others'", () => {
+    const kept = ripple([
+      clip({ id: 'a-in', move: 'fadeIn', start: 0, end: 0.4, clipId: 'a' }),
+      clip({ id: 'b-in', move: 'fadeIn', start: 4, end: 4.4, clipId: 'b' }),
+      clip({ id: 'b-out', move: 'fadeOut', start: 7.6, end: 8, clipId: 'b' }),
+      clip({ id: 'c-out', move: 'fadeOut', start: 11.6, end: 12, clipId: 'c' }),
+    ]);
+    expect(kept.map((c) => [c.id, c.start, c.end])).toEqual([
+      ['a-in', 0, 0.4],
+      ['c-out', 7.6, 8],
+    ]);
+  });
+
+  it('pulls a later move back by the deleted length', () => {
+    const [push] = ripple([clip({ start: 9.5, end: 11 })]);
+    expect([push.start, push.end]).toEqual([5.5, 7]);
+  });
+
+  it('shortens a move that ran into the deleted clip, and drops one inside it', () => {
+    const kept = ripple([
+      clip({ id: 'across', start: 3, end: 10 }),
+      clip({ id: 'inside', start: 5, end: 7 }),
+    ]);
+    expect(kept.map((c) => [c.id, c.start, c.end])).toEqual([['across', 3, 6]]);
   });
 });
 

@@ -609,6 +609,24 @@ export function repinMotionClips(
   });
 }
 
+/**
+ * After a ripple delete: blocks on a deleted clip go with it, and every other
+ * block's times close up over the deleted ranges, the way zoom clips do. A
+ * move left with no length (it sat inside a deleted clip) is dropped.
+ */
+export function rippleMotionClips(
+  clips: readonly MotionClip[],
+  deletedIds: ReadonlySet<string>,
+  deletedRanges: readonly { start: number; end: number }[],
+): MotionClip[] {
+  const shift = (t: number) =>
+    t - deletedRanges.reduce((acc, r) => acc + Math.max(0, Math.min(t, r.end) - r.start), 0);
+  return clips
+    .filter((clip) => !clip.clipId || !deletedIds.has(clip.clipId))
+    .map((clip) => ({ ...clip, start: shift(clip.start), end: shift(clip.end) }))
+    .filter((clip) => clip.end - clip.start > EDGE_EPSILON);
+}
+
 export function setClipMove(clip: MotionClip, move: MotionMoveId): MotionClip {
   return { ...resetClipCustom(clip), move };
 }

@@ -20,6 +20,13 @@ const previewLength = (clip: MotionClip) => {
   return Math.min(2.2, Math.max(1, clip.end - clip.start));
 };
 
+const poseAt = (c: MotionClip, local: number) => {
+  const length = previewLength(c);
+  // Preview the move on its own stand-in clip, wherever the real block sits.
+  const loop: MotionClip = { ...c, start: 0, end: length, clipId: undefined };
+  return resolveMotionAt([loop], [{ id: 'preview', timelineStart: 0, timelineEnd: length }], local);
+};
+
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
@@ -69,21 +76,14 @@ export const MotionPreviewStage = ({
     el.style.outlineOffset = ghost ? '2px' : '0';
   };
 
-  const poseAt = (c: MotionClip, local: number) => {
-    const length = previewLength(c);
-    // Preview the move on its own stand-in clip, wherever the real block sits.
-    const loop: MotionClip = { ...c, start: 0, end: length, clipId: undefined };
-    return resolveMotionAt(
-      [loop],
-      [{ id: 'preview', timelineStart: 0, timelineEnd: length }],
-      local,
-    );
-  };
-
   // The loop reads the latest clip from a ref; held poses repaint right away.
   useLayoutEffect(() => {
     clipRef.current = clip;
     if (mode === 'loop') {
+      // Reduced motion shows one still pose, so it follows the hovered option.
+      if (prefersReducedMotion()) {
+        paint(poseAt(clip, previewLength(clip) * 0.4));
+      }
       return;
     }
     const length = previewLength(clip);
@@ -95,7 +95,6 @@ export const MotionPreviewStage = ({
       return;
     }
     if (prefersReducedMotion()) {
-      paint(poseAt(clipRef.current, previewLength(clipRef.current) * 0.4));
       return;
     }
     let raf = 0;

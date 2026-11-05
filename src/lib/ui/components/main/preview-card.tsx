@@ -293,7 +293,8 @@ export const PreviewCardProvider = ({ children }: { children: React.ReactNode })
         onPointerLeave: scheduleClose,
         onFocus: (e) => {
           if (
-            e.currentTarget.matches(':focus-visible') ||
+            // e.target, not currentTarget: a slider's focus lands on its thumb.
+            (e.target as HTMLElement).matches(':focus-visible') ||
             e.currentTarget.closest('[role="listbox"]')
           ) {
             show({ id, render, anchor: e.currentTarget });

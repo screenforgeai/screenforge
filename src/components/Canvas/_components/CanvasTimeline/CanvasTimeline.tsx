@@ -45,6 +45,7 @@ import {
   layoutMotionClips,
   placeMotionClip,
   repinMotionClips,
+  rippleMotionClips,
 } from '../../../../lib/animation/motionClips';
 import { ResizeHandle } from './_components/ResizeHandle';
 import { TimelineToolbar } from './_components/TimelineToolbar';
@@ -1645,12 +1646,18 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
           }
 
           // Fully removed — ripple: shift subsequent segments left to close the gap.
-          const { segments: rippleSegments, zoomClips: rippleZoomClips } = applyRippleDelete(
-            state.mediaSegments,
-            state.zoomClips,
-            new Set([segmentId]),
-          );
-          return { mediaSegments: rippleSegments, zoomClips: rippleZoomClips, selectedClip: null };
+          const deletedIds = new Set([segmentId]);
+          const {
+            segments: rippleSegments,
+            zoomClips: rippleZoomClips,
+            deletedRanges,
+          } = applyRippleDelete(state.mediaSegments, state.zoomClips, deletedIds);
+          return {
+            mediaSegments: rippleSegments,
+            zoomClips: rippleZoomClips,
+            motionClips: rippleMotionClips(state.motionClips, deletedIds, deletedRanges),
+            selectedClip: null,
+          };
         });
 
         // Shift the playhead left if it was past the deleted segment.
@@ -1743,18 +1750,18 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         }
 
         // Ripple using the original positions for the deleted segments.
-        const { segments: rippleSegments, zoomClips: rippleZoomClips } = applyRippleDelete(
-          state.mediaSegments,
-          clips,
-          fullyRemovedIds,
-        );
+        const {
+          segments: rippleSegments,
+          zoomClips: rippleZoomClips,
+          deletedRanges,
+        } = applyRippleDelete(state.mediaSegments, clips, fullyRemovedIds);
         return {
           mediaSegments: rippleSegments,
           zoomClips: rippleZoomClips,
           textClips,
           cameraClips,
           maskClips,
-          motionClips,
+          motionClips: rippleMotionClips(motionClips, fullyRemovedIds, deletedRanges),
           selectedClip: null,
           ...cameraUpdate,
         };

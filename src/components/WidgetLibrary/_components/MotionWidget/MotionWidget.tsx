@@ -197,6 +197,12 @@ const MotionWidgetBody = () => {
     return renderPose;
   };
 
+  const endPoseDrag = (groupKey: string) => {
+    endHistoryGroup(groupKey);
+    sliderAnchor.current = null;
+    preview.release();
+  };
+
   const presentPose = (clipId: string, side: keyof MotionPoses, prop: SceneMotionProp) => {
     const anchor = sliderAnchor.current;
     if (anchor) {
@@ -668,6 +674,15 @@ const MotionWidgetBody = () => {
                                           beginHistoryGroup(groupKey, t(`prop_${prop}`));
                                           sliderAnchor.current = e.currentTarget;
                                           presentPose(clip.id, poseSide, prop);
+                                          // Radix commits only when the value changed, so a
+                                          // press that ends where it began lets go here.
+                                          const end = () => {
+                                            window.removeEventListener('pointerup', end);
+                                            window.removeEventListener('pointercancel', end);
+                                            endPoseDrag(groupKey);
+                                          };
+                                          window.addEventListener('pointerup', end);
+                                          window.addEventListener('pointercancel', end);
                                         }}
                                         onValueChange={([v]) => {
                                           if (v !== undefined) {
@@ -677,11 +692,7 @@ const MotionWidgetBody = () => {
                                             presentPose(clip.id, poseSide, prop);
                                           }
                                         }}
-                                        onValueCommit={() => {
-                                          endHistoryGroup(groupKey);
-                                          sliderAnchor.current = null;
-                                          preview.release();
-                                        }}
+                                        onValueCommit={() => endPoseDrag(groupKey)}
                                       />
                                     );
                                   })}

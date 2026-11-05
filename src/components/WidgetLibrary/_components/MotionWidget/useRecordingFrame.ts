@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createScreenforgeFileUrl } from 'src/lib/screenforge-url';
 
 const FRAME_WIDTH = 480;
+const GRAB_TIMEOUT_MS = 8000;
 const cache = new Map<string, Promise<string | null>>();
 
 /** Decodes one frame of a recording to a small JPEG, once per path and time. */
@@ -13,11 +14,22 @@ function grabFrame(videoPath: string, time: number): Promise<string | null> {
   }
   const promise = new Promise<string | null>((resolve) => {
     const video = document.createElement('video');
+    let settled = false;
     const done = (url: string | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.clearTimeout(timeout);
       video.removeAttribute('src');
       video.load();
+      // A failed grab (say, a recording still being written) is retried next time.
+      if (!url) {
+        cache.delete(key);
+      }
       resolve(url);
     };
+    const timeout = window.setTimeout(() => done(null), GRAB_TIMEOUT_MS);
     video.muted = true;
     video.preload = 'auto';
     // Without CORS the canvas is tainted and toDataURL throws.
