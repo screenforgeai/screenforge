@@ -110,6 +110,13 @@ export const CH = {
     GET: 'settings:get',
     SAVE: 'settings:save',
   },
+  director: {
+    GET_ACCOUNT: 'director:get-account',
+    SIGN_IN: 'director:sign-in',
+    CANCEL_SIGN_IN: 'director:cancel-sign-in',
+    SIGN_OUT: 'director:sign-out',
+    ACCOUNT_CHANGED: 'director:account-changed',
+  },
   presets: {
     SAVE: 'presets:save',
     GET_ALL: 'presets:get-all',

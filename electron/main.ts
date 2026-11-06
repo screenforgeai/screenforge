@@ -52,6 +52,9 @@ import { registerImportChannels } from './modules/import/channel';
 import { pickAndImportVideo } from './modules/import/service';
 import { getAreaSelectorWindow } from './modules/area-selector/service';
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
+import { registerDirectorChannels } from './modules/director/channel';
+import { initDirectorAccount } from './modules/director/service';
+import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
 
 log.initialize();
 log.info('[app] logger initialized', { logFilePath: getLogFilePath() });
@@ -209,6 +212,58 @@ if (IS_EXPORT_HARNESS_MODE && EXPORT_HARNESS_RESULT) {
     // Best-effort harness breadcrumb only.
   }
 }
+
+// ── App links (screenforge-app://) ─────────────────────────────────────────────
+// One Screenforge handles links: a second launch (how Windows and Linux
+// deliver a clicked link) hands its link to the first and quits. The export
+// harness runs headless next to a normal instance, so it never takes the lock.
+if (!IS_EXPORT_HARNESS_MODE && !app.requestSingleInstanceLock()) {
+  app.quit();
+}
+
+if (!IS_EXPORT_HARNESS_MODE) {
+  if (process.defaultApp && process.argv.length >= 2) {
+    // `electron .` in development: register the dev binary with its entry script.
+    app.setAsDefaultProtocolClient(APP_LINK_SCHEME, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  } else {
+    app.setAsDefaultProtocolClient(APP_LINK_SCHEME);
+  }
+}
+
+// A link that arrives before the main window is up waits for it.
+let pendingAppLink: string | null = findAppLinkInArgv(process.argv);
+
+function handleAppLink(url: string): void {
+  if (!startupCompleted || !mainWindow || mainWindow.isDestroyed()) {
+    pendingAppLink = url;
+    return;
+  }
+  const link = parseAppLink(url);
+  log.info('[app-link] received', { type: link?.type ?? 'unknown' });
+  // Every link we handle today brings Screenforge forward: after a Director
+  // sign-in the app finishes it on its own, by polling.
+  mainWindow.show();
+  mainWindow.focus();
+  app.dock?.show();
+}
+
+// macOS delivers links as open-url, possibly before 'ready'.
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleAppLink(url);
+});
+
+app.on('second-instance', (_event, argv) => {
+  const url = findAppLinkInArgv(argv);
+  if (url) {
+    handleAppLink(url);
+  } else if (startupCompleted && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
 
 let splashWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -444,6 +499,8 @@ app.on('ready', async () => {
   });
   registerAreaSelectorChannels(PRELOAD_PATH, loadURL);
   registerImportChannels();
+  registerDirectorChannels();
+  void initDirectorAccount();
   registerSceneOverlayChannels({
     preloadPath: PRELOAD_PATH,
     loadURL,
@@ -547,6 +604,12 @@ app.on('ready', async () => {
   startUpdater({
     isAppBusy: () => isRecordingBusy() || isExportBusy(),
   });
+
+  if (pendingAppLink) {
+    const url = pendingAppLink;
+    pendingAppLink = null;
+    handleAppLink(url);
+  }
 });
 
 // ── App lifecycle ──────────────────────────────────────────────────────────────

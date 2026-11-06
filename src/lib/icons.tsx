@@ -72,6 +72,7 @@ import {
   Settings01Icon,
   LogoutSquare01Icon,
   UserAccountIcon,
+  Link01Icon,
   GlobeIcon,
   Camera01Icon,
   MusicNote01Icon,
@@ -179,6 +180,7 @@ export const IconChatFeedback = createIcon(ChatFeedbackIcon, 'IconChatFeedback')
 export const IconSettings = createIcon(Settings01Icon, 'IconSettings');
 export const IconLogoutSquare = createIcon(LogoutSquare01Icon, 'IconLogoutSquare');
 export const IconUserAccount = createIcon(UserAccountIcon, 'IconUserAccount');
+export const IconLink = createIcon(Link01Icon, 'IconLink');
 export const IconGlobe = createIcon(GlobeIcon, 'IconGlobe');
 export const IconBlur = createIcon(BlurIcon, 'IconBlur');
 export const IconCamera = createIcon(Camera01Icon, 'IconCamera');
