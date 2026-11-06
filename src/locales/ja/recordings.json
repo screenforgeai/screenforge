@@ -75,5 +75,18 @@
   "scenes_recorded": "録画済み",
   "scenes_markDone": "完了としてマーク",
   "scenes_prevScene": "前のシーン",
-  "scenes_nextScene": "次のシーン"
+  "scenes_nextScene": "次のシーン",
+  "moreActions": "その他の操作",
+  "openProject": "プロジェクトを開く…",
+  "directorProject_downloading": "Director の録画を開いています…",
+  "directorProject_downloadingFiles": "Director の録画をダウンロードしています（{{total}} 個中 {{done}} 個）…",
+  "directorProject_needsSignIn": "この録画を開くには Director にサインインしてください。",
+  "directorProject_signIn": "サインイン",
+  "directorProject_opened": "「{{name}}」を開きました。編集内容はこのコンピュータに保存されます。",
+  "directorProject_inLibrary": "「{{name}}」は録画一覧にあります。今の録画に名前を付けてから、そこから開いてください。",
+  "directorProject_failed_not-available": "この録画は Screenforge で開けません。開けるのは完了した最近の録画だけです。編集するには Director で録画し直してください。",
+  "directorProject_failed_not-found": "この録画は、サインイン中の Director ワークスペースにありません。",
+  "directorProject_failed_invalid": "このファイルは Screenforge のプロジェクトではありません。",
+  "directorProject_failed_missing-recording": "プロジェクトの動画ファイルが見つかりません。recording.mp4 を project.json と同じ場所に置いてください。",
+  "directorProject_failed_failed": "録画を開けませんでした。接続を確認して、もう一度お試しください。"
 }

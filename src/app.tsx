@@ -14,6 +14,7 @@ import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
 import { trackEvent } from './lib/analytics';
 import i18n from './i18n';
+import { useDirectorProjectEvents } from './hooks/useDirectorProjectEvents';
 
 type AppShellProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -30,6 +31,7 @@ function getErrorMessage(error: unknown): string {
 
 const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   const { beginNewRecording } = useProjectPersistence();
+  useDirectorProjectEvents();
   const {
     setIsProcessing,
     setSavedProjects,

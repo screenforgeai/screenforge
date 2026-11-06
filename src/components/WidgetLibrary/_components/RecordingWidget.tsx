@@ -161,23 +161,29 @@ export const RecordingWidget = () => {
           {t('header')}
         </div>
 
-        {savedProjects.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="icon-sm" variant="ghost">
-                <IconMoreVertical size={14} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" sideOffset={4}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon-sm" variant="ghost" aria-label={t('moreActions')}>
+              <IconMoreVertical size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={4}>
+            <DropdownMenuItem
+              className="gap-2"
+              onClick={() => void window.screenforge.openProjectBundleFromDisk()}
+            >
+              {t('openProject')}
+            </DropdownMenuItem>
+            {savedProjects.length > 0 && (
               <DropdownMenuItem
                 className="gap-2 text-red-300 focus:bg-red-500/15 focus:text-red-100"
                 onClick={() => setShowDeleteAll(true)}
               >
                 {t('deleteAll')}
               </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <motion.div

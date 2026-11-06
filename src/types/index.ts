@@ -143,6 +143,12 @@ export interface RecordingResult {
   audioPath?: string;
   cameraPath?: string;
   isImported?: boolean; // true for user-imported videos (no native cursor data)
+  /**
+   * The cursor path was generated (a Director recording), not captured: skip
+   * the median filter that removes native-capture spikes, which would also
+   * flatten a generated path's deliberate curves. Same flag as render-core's.
+   */
+  syntheticCursor?: boolean;
 }
 
 export interface ProjectCursorSettings {
@@ -515,6 +521,16 @@ export type DirectorAccountState =
       remembered: boolean;
     };
 
+/** Opening a Director recording or a project bundle (screenforgeai/screenforge#28). */
+export type DirectorProjectEvent =
+  | { status: 'downloading'; name: string | null; filesDone: number; filesTotal: number }
+  | { status: 'needs-sign-in' }
+  | { status: 'opened'; source: 'director' | 'file'; project: SavedProject; existing?: boolean }
+  | {
+      status: 'failed';
+      reason: 'not-available' | 'not-found' | 'invalid' | 'missing-recording' | 'failed';
+    };
+
 export interface ScreenforgeAPI {
   onPreloadProgress: (cb: (p: PreloadProgress) => void) => () => void;
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void;
@@ -583,6 +599,9 @@ export interface ScreenforgeAPI {
   cancelDirectorSignIn: () => Promise<void>;
   signOutOfDirector: () => Promise<void>;
   onDirectorAccountChanged: (cb: (state: DirectorAccountState) => void) => () => void;
+  /** Pick a project.json from disk and add its bundle to the library. */
+  openProjectBundleFromDisk: () => Promise<void>;
+  onDirectorProjectEvent: (cb: (event: DirectorProjectEvent) => void) => () => void;
   getSettings: () => Promise<{ profile: { name: string; email: string }; language: string }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };

@@ -75,5 +75,18 @@
   "scenes_recorded": "Recorded",
   "scenes_markDone": "Mark done",
   "scenes_prevScene": "Previous scene",
-  "scenes_nextScene": "Next scene"
+  "scenes_nextScene": "Next scene",
+  "moreActions": "More actions",
+  "openProject": "Open project…",
+  "directorProject_downloading": "Opening the Director recording…",
+  "directorProject_downloadingFiles": "Downloading the Director recording ({{done}} of {{total}} files)…",
+  "directorProject_needsSignIn": "Sign in to Director to open this recording.",
+  "directorProject_signIn": "Sign in",
+  "directorProject_opened": "Opened “{{name}}”. Edits stay on this computer.",
+  "directorProject_inLibrary": "“{{name}}” is in Recordings. Name your current recording, then open it from there.",
+  "directorProject_failed_not-available": "This recording can't be opened in Screenforge. Only finished recordings made recently can; record it again in Director to edit it.",
+  "directorProject_failed_not-found": "This recording isn't in the Director workspace you're signed in to.",
+  "directorProject_failed_invalid": "That file isn't a Screenforge project.",
+  "directorProject_failed_missing-recording": "The project's video file is missing. Keep recording.mp4 next to project.json.",
+  "directorProject_failed_failed": "Couldn't open the recording. Check your connection and try again."
 }

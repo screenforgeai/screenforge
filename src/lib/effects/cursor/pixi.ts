@@ -164,6 +164,7 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
         recording.startTime,
         recording.recordingArea,
         recording.captureBoundsTimeline,
+        recording.syntheticCursor,
       ),
       clickEvents: getClickEvents(
         recording.mouseData,

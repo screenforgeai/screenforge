@@ -75,5 +75,18 @@
   "scenes_recorded": "Gravado",
   "scenes_markDone": "Marcar como feito",
   "scenes_prevScene": "Cena anterior",
-  "scenes_nextScene": "Próxima cena"
+  "scenes_nextScene": "Próxima cena",
+  "moreActions": "Mais ações",
+  "openProject": "Abrir projeto…",
+  "directorProject_downloading": "Abrindo a gravação do Director…",
+  "directorProject_downloadingFiles": "Baixando a gravação do Director ({{done}} de {{total}} arquivos)…",
+  "directorProject_needsSignIn": "Entre no Director para abrir esta gravação.",
+  "directorProject_signIn": "Entrar",
+  "directorProject_opened": "“{{name}}” aberto. As edições ficam neste computador.",
+  "directorProject_inLibrary": "“{{name}}” está em Gravações. Dê um nome à gravação atual e abra-o por lá.",
+  "directorProject_failed_not-available": "Esta gravação não pode ser aberta no Screenforge. Só é possível abrir gravações concluídas e recentes; grave de novo no Director para editar.",
+  "directorProject_failed_not-found": "Esta gravação não está no espaço de trabalho do Director em que você entrou.",
+  "directorProject_failed_invalid": "Esse arquivo não é um projeto do Screenforge.",
+  "directorProject_failed_missing-recording": "O arquivo de vídeo do projeto está faltando. Mantenha recording.mp4 ao lado de project.json.",
+  "directorProject_failed_failed": "Não foi possível abrir a gravação. Verifique sua conexão e tente novamente."
 }
