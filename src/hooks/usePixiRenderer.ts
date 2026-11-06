@@ -4,7 +4,11 @@ import type { RecordingResult } from '../types/index';
 import { useStore } from '../store';
 import { DEFAULT_CROP_RECT, getFrameGeometry } from '../lib/effects/frame';
 import type { CursorData } from '../lib/effects/cursor';
-import { playCursorClickSound } from '../lib/effects/cursor/audio';
+import {
+  buildClickSoundHits,
+  playCursorClickSound,
+  type ClickSoundHit,
+} from '../lib/effects/cursor/audio';
 import { createPreviewPixiApp, getPreviewRendererResolution } from '../lib/pixi/createPixiApp';
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
 import {
@@ -16,10 +20,7 @@ import {
 
 // ── Cursor click audio helpers ────────────────────────────────────────────────
 
-function findLastClickIndexAtOrBefore(
-  clickEvents: CursorData['clickEvents'],
-  time: number,
-): number {
+function findLastClickIndexAtOrBefore(clickEvents: readonly { t: number }[], time: number): number {
   let lo = 0;
   let hi = clickEvents.length - 1;
   let prev = -1;
@@ -126,11 +127,14 @@ export const usePixiRenderer = (
   }, [cursorClickSoundVolume]);
 
   // Audio playback state — reset when cursor data (recording) changes.
-  const audioClickEventsRef = useRef<CursorData['clickEvents']>([]);
+  // Press and release hits, sorted by source time.
+  const audioClickEventsRef = useRef<ClickSoundHit[]>([]);
   const audioLastVideoTimeRef = useRef<number | null>(null);
   const audioLastPlayedIndexRef = useRef(-1);
   useEffect(() => {
-    audioClickEventsRef.current = cursorData?.clickEvents ?? [];
+    audioClickEventsRef.current = cursorData
+      ? buildClickSoundHits(cursorData.clickEvents, cursorData.pressEvents)
+      : [];
     audioLastVideoTimeRef.current = null;
     audioLastPlayedIndexRef.current = -1;
   }, [cursorData]);
@@ -307,7 +311,11 @@ export const usePixiRenderer = (
               clickEvents[currentIndex].t <= currentTime + 0.0001
             ) {
               if (lastVideoTime !== null && clickEvents[currentIndex].t > lastVideoTime + 0.0001) {
-                void playCursorClickSound(sound, volume);
+                const hit = clickEvents[currentIndex];
+                void playCursorClickSound(sound, volume, {
+                  release: hit.release,
+                  index: hit.index,
+                });
               }
               currentIndex += 1;
             }

@@ -3,7 +3,7 @@ import type { RecordingResult, ProjectCursorSettings } from '../../types/index';
 import type { MediaSegment } from '../../types/timeline';
 import type { CursorData } from '../effects/cursor';
 import type { MusicClip } from '../timeline';
-import { scheduleCursorClickSound } from '../effects/cursor/audio';
+import { buildClickSoundHits, scheduleCursorClickSound } from '../effects/cursor/audio';
 import { isMediaTrackEnabled } from '../helpers/segments';
 import { resolveAudioDecodeCandidates } from '../recording/audioSource';
 
@@ -154,6 +154,8 @@ export interface RenderTimelineAudioOptions {
   includeAudio: boolean;
   cursor: Pick<ProjectCursorSettings, 'clickSound' | 'clickSoundVolume'>;
   clickEvents: CursorData['clickEvents'];
+  /** Mouse-down/up events; mouse-ups add a release sound to each click. */
+  pressEvents?: CursorData['pressEvents'];
   musicClips?: MusicClip[];
   signal?: AbortSignal;
 }
@@ -168,6 +170,7 @@ export async function renderTimelineAudio(
     includeAudio,
     cursor,
     clickEvents,
+    pressEvents,
     musicClips,
     signal,
   } = options;
@@ -280,8 +283,8 @@ export async function renderTimelineAudio(
   }
 
   if (hasCursorClickAudio) {
-    for (const clickEvent of clickEvents) {
-      if (clickEvent.t < 0 || clickEvent.t > duration) {
+    for (const hit of buildClickSoundHits(clickEvents, pressEvents)) {
+      if (hit.t < 0 || hit.t > duration) {
         continue;
       }
 
@@ -289,7 +292,9 @@ export async function renderTimelineAudio(
         offline,
         cursor.clickSound,
         cursor.clickSoundVolume,
-        Math.max(0, clickEvent.t),
+        Math.max(0, hit.t),
+        offline.destination,
+        { release: hit.release, index: hit.index },
       );
     }
   }
