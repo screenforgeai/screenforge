@@ -15,7 +15,7 @@
 
 **Free, open-source screen recorder that zooms in and follows your cursor automatically.**
 
-Record your screen, webcam and mic, polish it in a full timeline editor, and export a ready-to-share video. No watermark, no paywalled features.
+Record your screen, webcam and mic, polish it in a full timeline editor, and export a ready-to-share video. Free for commercial use, no account, no watermark.
 
 [![Latest release](https://img.shields.io/github/v/release/screenforgeai/screenforge?label=release&color=d44523)](https://github.com/screenforgeai/screenforge/releases/latest)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
@@ -48,7 +48,7 @@ Making a good product demo or tutorial usually means recording, then spending an
 
 - **Automatic zoom and cursor tracking.** Clicks and typing drive smooth zooms that follow the cursor, so viewers always see what matters.
 - **Fast, built-in captions.** Whisper transcription is part of the app, with word-level timing you can edit.
-- **Actually free.** No watermark, no export limits, no "Pro" tier. The full app is open source under AGPL-3.0.
+- **Actually free, including for commercial use.** No account, no watermark, no export limits, no "Pro" tier. Use it for client work, product demos and paid courses. The full app is open source under AGPL-3.0.
 - **A real editor.** Multi-track timeline with zoom, camera, captions, text, masks, music and transitions.
 
 ## Download
@@ -183,3 +183,5 @@ Found a security issue? Please report it privately; see [`SECURITY.md`](./SECURI
 ## License
 
 Screenforge is licensed under the [GNU Affero General Public License v3.0 or later](./LICENSE). Third-party licenses (FFmpeg, libuiohook, Whisper) are listed in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+
+**The license covers the app, not your videos.** AGPL-3.0 sets the terms for copying, modifying and redistributing Screenforge itself: if you ship a modified version, you share its source under the same license. It places no limits on what you record or export. The videos you make are yours, for any use, commercial included.

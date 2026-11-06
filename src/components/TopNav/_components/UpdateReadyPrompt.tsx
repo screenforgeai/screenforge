@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconUpload } from 'src/lib/icons';
+import { CHANGELOG_URL } from 'src/lib/siteLinks';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -134,9 +135,7 @@ export const UpdateReadyPrompt = ({
             <button
               type="button"
               className="group flex items-center gap-1 text-sm text-sf-secondary transition-colors duration-150 hover:text-sf-primary"
-              onClick={() =>
-                window.screenforge.openExternalUrl('https://screenforgeai.com/changelog')
-              }
+              onClick={() => window.screenforge.openExternalUrl(CHANGELOG_URL)}
             >
               {t('viewChangelog')}
               <span className="text-sf-muted transition-colors duration-150 group-hover:text-sf-primary">
