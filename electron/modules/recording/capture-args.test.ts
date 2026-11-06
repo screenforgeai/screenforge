@@ -6,6 +6,8 @@ import {
   buildSegmentConcatArgs,
   buildSegmentConcatList,
   buildWaylandTranscodeArgs,
+  BT709_TAG_ARGS,
+  RGB_TO_BT709_FILTER,
   buildX11GrabArgs,
   clampCaptureBounds,
   fitH264FrameSize,
@@ -95,11 +97,30 @@ describe('buildX11GrabArgs', () => {
       'libopenh264',
       '-b:v',
       '20000k',
+      '-vf',
+      'scale=out_color_matrix=bt709:out_range=tv',
       '-pix_fmt',
       'yuv420p',
+      '-colorspace',
+      'bt709',
+      '-color_primaries',
+      'bt709',
+      '-color_trc',
+      'bt709',
+      '-color_range',
+      'tv',
       '-y',
       '/tmp/out.mp4',
     ]);
+  });
+
+  it('converts with the BT.709 matrix and says so, matching how Chromium decodes it', () => {
+    // swscale's default RGB->YUV matrix is BT.601 and leaves the file
+    // untagged; Chromium (preview and export decode) reads untagged H.264 as
+    // BT.709, which shifted reds and oranges (#d44523 came back as #e15224).
+    const args = buildX11GrabArgs(bounds, ':0', '/tmp/out.mp4');
+    expect(args[args.indexOf('-vf') + 1]).toBe(RGB_TO_BT709_FILTER);
+    expect(args).toEqual(expect.arrayContaining(BT709_TAG_ARGS));
   });
 
   it('uses an LGPL-safe encoder (bundled Linux FFmpeg has no x264)', () => {
