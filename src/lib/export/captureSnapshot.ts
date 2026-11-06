@@ -2,12 +2,14 @@ import type { CaptureStoreSnapshot, CaptionSettings } from '../../types';
 import type { AppStore } from '../../store';
 import { cloneFrameSettings } from '../effects/frame';
 import { normalizeZoomClips } from '../effects/zoom/clip';
+import { normalizeZoomStyle } from '../effects/zoom/style';
 import { cloneMotionClips } from '../animation/motionClips';
 
 type CaptureStoreSnapshotSource = Pick<
   AppStore,
   | 'frame'
   | 'zoomClips'
+  | 'zoomStyle'
   | 'textClips'
   | 'camera'
   | 'keyboard'
@@ -32,6 +34,7 @@ export function createCaptureStoreSnapshot(
   return {
     frame: cloneFrameSettings(state.frame),
     zoomClips: normalizeZoomClips(state.zoomClips),
+    zoomStyle: normalizeZoomStyle(state.zoomStyle),
     textClips: state.textClips.map((clip) => ({ ...clip })),
     camera: {
       ...state.camera,

@@ -6,6 +6,7 @@ import type { Effect } from '../types';
 import { detectZoomClips } from './analyze';
 import { resolveAutoFollowAxis, type FollowDirection } from './follow';
 import { interpolateCamera } from './render';
+import { getZoomEasingProfile, prepareDetectedZoomClips } from './style';
 
 export {
   ADD_ZOOM_FALLBACK_SCALE,
@@ -281,9 +282,9 @@ export const zoomEffect: Effect<ZoomClip[]> = {
   analyze: (recording) => detectZoomClips(recording),
 
   onLoad(data) {
-    const { zoomClips, setZoom } = useStore.getState();
+    const { zoomClips, zoomStyle, setZoom } = useStore.getState();
     if (zoomClips.length === 0) {
-      setZoom(data);
+      setZoom(prepareDetectedZoomClips(data, zoomStyle));
     }
   },
 
@@ -468,8 +469,9 @@ export const zoomEffect: Effect<ZoomClip[]> = {
       const targetCx = clamp(lazyCx, bounds.min, bounds.max);
       const targetCy = clamp(lazyCy, bounds.min, bounds.max);
 
-      [camCx, camVelCx] = springDamp(camCx, camVelCx, targetCx, CAM_HALFLIFE, dt);
-      [camCy, camVelCy] = springDamp(camCy, camVelCy, targetCy, CAM_HALFLIFE, dt);
+      const camHalflife = CAM_HALFLIFE * getZoomEasingProfile(target.easing).panHalflifeScale;
+      [camCx, camVelCx] = springDamp(camCx, camVelCx, targetCx, camHalflife, dt);
+      [camCy, camVelCy] = springDamp(camCy, camVelCy, targetCy, camHalflife, dt);
 
       // Clamp to frame-padding-extended camera bounds.
       [camCx, camVelCx] = clampSpringToBounds(camCx, camVelCx, bounds.min, bounds.max);

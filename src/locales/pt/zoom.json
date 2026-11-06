@@ -32,5 +32,11 @@
   "advanced": "Advanced",
   "easing": "Suavização",
   "easeIn": "Entrada suave",
-  "easeOut": "Saída suave"
+  "easeOut": "Saída suave",
+  "autoZoomStyle": "Estilo do zoom automático",
+  "intensity": "Intensidade",
+  "intensityHint": "Aplica-se aos zooms detectados automaticamente que você não ajustou manualmente.",
+  "easingGentle": "Suave",
+  "easingStandard": "Padrão",
+  "easingSnappy": "Ágil"
 }

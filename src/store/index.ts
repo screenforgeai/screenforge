@@ -43,6 +43,7 @@ function cloneSnapshot(snapshot: HistorySnapshot): HistorySnapshot {
   return {
     recordingResult: snapshot.recordingResult ? { ...snapshot.recordingResult } : null,
     zoomClips: snapshot.zoomClips.map((clip) => ({ ...clip })),
+    zoomStyle: { ...snapshot.zoomStyle },
     mediaSegments: snapshot.mediaSegments.map((seg) => ({ ...seg })),
     cameraMediaSegments: snapshot.cameraMediaSegments.map((seg) => ({ ...seg })),
     cursorEnabled: snapshot.cursorEnabled,
@@ -81,6 +82,7 @@ function createSnapshot(state: AppStore): HistorySnapshot {
   return cloneSnapshot({
     recordingResult: state.recordingResult,
     zoomClips: state.zoomClips,
+    zoomStyle: state.zoomStyle,
     mediaSegments: state.mediaSegments,
     cameraMediaSegments: state.cameraMediaSegments,
     cursorEnabled: state.cursorEnabled,
@@ -111,6 +113,7 @@ function snapshotToPatch(snapshot: HistorySnapshot): EditableStorePatch {
   return {
     recordingResult: snapshot.recordingResult ? { ...snapshot.recordingResult } : null,
     zoomClips: snapshot.zoomClips.map((clip) => ({ ...clip })),
+    zoomStyle: { ...snapshot.zoomStyle },
     mediaSegments: snapshot.mediaSegments.map((seg) => ({ ...seg })),
     cameraMediaSegments: snapshot.cameraMediaSegments.map((seg) => ({ ...seg })),
     cursorEnabled: snapshot.cursorEnabled,
@@ -182,6 +185,12 @@ function snapshotsEqual(a: HistorySnapshot, b: HistorySnapshot): boolean {
     return false;
   }
   if (a.cursorContinuousTracking !== b.cursorContinuousTracking) {
+    return false;
+  }
+  if (
+    a.zoomStyle.intensity !== b.zoomStyle.intensity ||
+    a.zoomStyle.easing !== b.zoomStyle.easing
+  ) {
     return false;
   }
   // Array length checks before deep comparison

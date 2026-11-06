@@ -32,5 +32,11 @@
   "advanced": "Advanced",
   "easing": "イージング",
   "easeIn": "イーズイン",
-  "easeOut": "イーズアウト"
+  "easeOut": "イーズアウト",
+  "autoZoomStyle": "自動ズームのスタイル",
+  "intensity": "強さ",
+  "intensityHint": "手動で調整していない自動検出ズームに適用されます。",
+  "easingGentle": "ゆったり",
+  "easingStandard": "標準",
+  "easingSnappy": "キビキビ"
 }

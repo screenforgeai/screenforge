@@ -35,6 +35,7 @@ describe('createCaptureStoreSnapshot', () => {
           cinematicMotionBlur: 0.4,
           cinematicTiltMode: 'static' as const,
           cinematicTiltDirection: 'left' as const,
+          easing: 'gentle' as const,
         },
       ],
       textClips: [],
@@ -59,6 +60,7 @@ describe('createCaptureStoreSnapshot', () => {
       cursorIdleHideSeconds: 5,
       maskClips: [],
       motionClips: [] as MotionClip[],
+      zoomStyle: { intensity: 0.8, easing: 'gentle' as const },
     };
 
     const snapshot = createCaptureStoreSnapshot(state);
@@ -90,5 +92,30 @@ describe('createCaptureStoreSnapshot', () => {
     expect(state.zoomClips[0].cinematicTiltMode).toBe('static');
     expect(state.camera.shadow.blur).toBe(DEFAULT_CAMERA_SETTINGS.shadow.blur);
     expect(state.keyboard.enabled).toBe(true);
+  });
+
+  it('carries the zoom style so the export worker can match the preview', () => {
+    const snapshot = createCaptureStoreSnapshot({
+      frame: DEFAULT_FRAME,
+      zoomClips: [],
+      textClips: [],
+      cameraClips: [],
+      camera: { ...DEFAULT_CAMERA_SETTINGS, shadow: { ...DEFAULT_CAMERA_SETTINGS.shadow } },
+      keyboard: { ...DEFAULT_KEYBOARD_SETTINGS },
+      cursorEnabled: true,
+      cursorStyle: 'cursor01',
+      cursorSize: 125,
+      cursorClickEffect: 'none',
+      cursorHalflife: 0.06,
+      cursorMotionBlur: true,
+      cursorMaxTilt: 4,
+      cursorHideWhenIdle: false,
+      cursorIdleHideSeconds: 5,
+      maskClips: [],
+      motionClips: [],
+      zoomStyle: { intensity: 1.25, easing: 'snappy' },
+    });
+
+    expect(snapshot.zoomStyle).toEqual({ intensity: 1.25, easing: 'snappy' });
   });
 });

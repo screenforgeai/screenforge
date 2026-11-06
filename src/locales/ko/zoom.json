@@ -32,5 +32,11 @@
   "advanced": "Advanced",
   "easing": "이징",
   "easeIn": "이즈 인",
-  "easeOut": "이즈 아웃"
+  "easeOut": "이즈 아웃",
+  "autoZoomStyle": "자동 줌 스타일",
+  "intensity": "강도",
+  "intensityHint": "직접 조정하지 않은 자동 감지 줌에 적용됩니다.",
+  "easingGentle": "부드럽게",
+  "easingStandard": "표준",
+  "easingSnappy": "빠르게"
 }

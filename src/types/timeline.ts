@@ -57,6 +57,15 @@ export interface MediaSegment {
 export type ZoomPreset = 'standard' | 'cinematic';
 export type CinematicTiltMode = 'static' | 'follow';
 export type CinematicTiltDirection = 'left' | 'right';
+/** Pace of the zoom ramps and camera panning; 'standard' is the original feel. */
+export type ZoomEasing = 'gentle' | 'standard' | 'snappy';
+
+/** Project-wide auto-zoom style, also saved in style presets. */
+export interface ZoomStyleSettings {
+  /** Multiplier on the zoom depth (scale above 1×) of auto-detected zooms; 1 = as analysed. */
+  intensity: number;
+  easing: ZoomEasing;
+}
 
 export interface ZoomClip {
   id: string;
@@ -77,6 +86,8 @@ export interface ZoomClip {
   cinematicMotionBlur: number; // 0–1
   cinematicTiltMode: CinematicTiltMode; // locked at clip start
   cinematicTiltDirection: CinematicTiltDirection; // auto = cursor-based, left/right = forced direction
+  easing: ZoomEasing; // ramp curve + pan pace, stamped from the project's zoom style
+  autoScale?: number; // auto-detected clips only: the analysed scale before zoom intensity
 }
 
 // ── Inspector form config ─────────────────────────────────────────────────────

@@ -19,7 +19,14 @@ import {
   defaultZoomClip,
   inferZoomDefaultsAtTime,
 } from 'src/lib/effects/zoom';
-import type { CinematicTiltDirection } from 'src/types/timeline';
+import {
+  applyZoomStyle,
+  normalizeZoomEasing,
+  ZOOM_EASINGS,
+  ZOOM_INTENSITY_MAX,
+  ZOOM_INTENSITY_MIN,
+} from 'src/lib/effects/zoom/style';
+import type { CinematicTiltDirection, ZoomEasing } from 'src/types/timeline';
 import {
   Button,
   DropdownMenu,
@@ -41,6 +48,12 @@ import { cn, formatTime } from 'src/lib/utils';
 
 const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 
+const EASING_LABEL_KEYS: Record<ZoomEasing, string> = {
+  gentle: 'easingGentle',
+  standard: 'easingStandard',
+  snappy: 'easingSnappy',
+};
+
 export const ZoomWidget = () => {
   const { t } = useTranslation('zoom');
   const [manualExpandedId, setManualExpandedId] = useState<string | null>(null);
@@ -49,6 +62,7 @@ export const ZoomWidget = () => {
   const {
     recordingResult,
     zoomClips,
+    zoomStyle,
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
@@ -60,6 +74,7 @@ export const ZoomWidget = () => {
     useShallow((state) => ({
       recordingResult: state.recordingResult,
       zoomClips: state.zoomClips,
+      zoomStyle: state.zoomStyle,
       commitEdit: state.commitEdit,
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
@@ -98,7 +113,9 @@ export const ZoomWidget = () => {
           )
         : defaultZoomClip(`zoom-${Date.now()}`, start, start + 3, defaults.cx, defaults.cy, scale);
     commitEdit(preset === 'cinematic' ? 'Add cinematic zoom clip' : 'Add zoom clip', (state) => ({
-      zoomClips: [...state.zoomClips, clip].sort((a, b) => a.start - b.start),
+      zoomClips: [...state.zoomClips, { ...clip, easing: state.zoomStyle.easing }].sort(
+        (a, b) => a.start - b.start,
+      ),
     }));
     trackEvent('zoom_clip_added', { source: 'widget', scale: clip.scale, preset });
     setManualExpandedId(clip.id);
@@ -175,6 +192,55 @@ export const ZoomWidget = () => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+
+      {/* Auto-zoom style — project-wide, saved in style presets */}
+      <div className="mt-4 shrink-0 px-3 flex flex-col gap-3">
+        <div className={WIDGET_SECTION_HEADING_CLASS}>{t('autoZoomStyle')}</div>
+        <div className="flex flex-col gap-1.5">
+          <Slider
+            min={ZOOM_INTENSITY_MIN}
+            max={ZOOM_INTENSITY_MAX}
+            step={0.05}
+            inlineLabel={t('intensity')}
+            valueLabel={formatPercent(zoomStyle.intensity)}
+            value={[zoomStyle.intensity]}
+            onPointerDown={() => beginHistoryGroup('zoom-intensity', 'Adjust zoom intensity')}
+            onValueChange={([v]) =>
+              commitEdit('Adjust zoom intensity', (state) =>
+                applyZoomStyle(state, { intensity: v }),
+              )
+            }
+            onValueCommit={([v]) => {
+              endHistoryGroup('zoom-intensity');
+              trackZoom('intensity', v);
+            }}
+          />
+          <p className="text-[11.5px] text-sf-muted">{t('intensityHint')}</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <span className={WIDGET_SECTION_HEADING_CLASS}>{t('easing')}</span>
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={zoomStyle.easing}
+            onValueChange={(v) => {
+              if (v) {
+                commitEdit('Change zoom easing', (state) =>
+                  applyZoomStyle(state, { easing: normalizeZoomEasing(v) }),
+                );
+                trackZoom('easing', v);
+              }
+            }}
+            className="w-full"
+          >
+            {ZOOM_EASINGS.map((easing) => (
+              <ToggleGroupItem key={easing} value={easing} size="sm" className="flex-1 text-md">
+                {t(EASING_LABEL_KEYS[easing])}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
       </div>
 
       {/* Clip list */}

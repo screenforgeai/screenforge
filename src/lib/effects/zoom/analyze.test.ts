@@ -76,6 +76,24 @@ describe('detectZoomClips', () => {
     expect(clip.start).toBeLessThan(1);
   });
 
+  it('remembers the analysed scale so zoom intensity can be re-applied later', () => {
+    const recording = makeRecording([
+      move(0.35, 0.46, 0.48),
+      move(0.55, 0.48, 0.49),
+      move(0.75, 0.495, 0.5),
+      click(1.0, 0.5, 0.5),
+      move(1.1, 0.501, 0.499),
+      click(1.28, 0.503, 0.5),
+      move(1.45, 0.502, 0.501),
+      move(1.7, 0.5, 0.5),
+      move(2.4, 0.7, 0.72),
+    ]);
+
+    const [clip] = detectZoomClips(recording);
+    expect(clip.autoScale).toBe(clip.scale);
+    expect(clip.easing).toBe('standard');
+  });
+
   it('backs off scale for broader interaction regions', () => {
     const recording = makeRecording([
       move(0.4, 0.22, 0.2),

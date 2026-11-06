@@ -5,9 +5,11 @@ import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CURSOR_SETTINGS,
   DEFAULT_KEYBOARD_SETTINGS,
+  DEFAULT_ZOOM_STYLE,
 } from './defaults';
 import type { EditorSessionState } from './types';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
+import { migrateLegacyAutoZoomClips, normalizeZoomStyle } from '../lib/effects/zoom/style';
 import type { CameraClip, MediaSegment } from '../types/timeline';
 import {
   cloneMotionClips,
@@ -33,6 +35,7 @@ export function cloneEditorSession(session: EditorSessionState): EditorSessionSt
   return {
     ...session,
     zoomClips: normalizeZoomClips(session.zoomClips),
+    zoomStyle: { ...session.zoomStyle },
     mediaSegments: session.mediaSegments.map((segment) => ({ ...segment })),
     cameraMediaSegments: session.cameraMediaSegments.map((segment) => ({ ...segment })),
     camera: {
@@ -82,6 +85,7 @@ export function createEmptyEditorSession(): EditorSessionState {
     currentProjectId: null,
     selectedClip: null,
     zoomClips: [],
+    zoomStyle: { ...DEFAULT_ZOOM_STYLE },
     mediaSegments: [],
     cameraMediaSegments: [],
     isGapPlayback: false,
@@ -163,7 +167,12 @@ export function createProjectSession(project: SavedProject): EditorSessionState 
     recordingResult: project.result,
     recordingName: project.name,
     currentProjectId: project.id,
-    zoomClips: normalizeZoomClips(project.zoomClips),
+    // Projects saved before zoom style existed get their auto-detected clips
+    // tagged so the intensity slider can still re-apply to them.
+    zoomClips: project.zoomStyle
+      ? normalizeZoomClips(project.zoomClips)
+      : migrateLegacyAutoZoomClips(normalizeZoomClips(project.zoomClips)),
+    zoomStyle: normalizeZoomStyle(project.zoomStyle),
     mediaSegments,
     currentTime: getInitialPlaybackTime(mediaSegments, motionClips),
     frame: project.frame ? cloneFrameSettings(project.frame) : DEFAULT_FRAME,

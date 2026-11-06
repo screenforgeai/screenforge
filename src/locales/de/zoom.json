@@ -32,5 +32,11 @@
   "advanced": "Advanced",
   "easing": "Easing",
   "easeIn": "Einblenden",
-  "easeOut": "Ausblenden"
+  "easeOut": "Ausblenden",
+  "autoZoomStyle": "Auto-Zoom-Stil",
+  "intensity": "Intensität",
+  "intensityHint": "Gilt für automatisch erkannte Zooms, die Sie nicht von Hand angepasst haben.",
+  "easingGentle": "Sanft",
+  "easingStandard": "Standard",
+  "easingSnappy": "Zackig"
 }

@@ -1,6 +1,7 @@
 import type { AppStore } from '../store';
 import type { CaptionSettings, ProjectCursorSettings, SavedProject } from '../types';
 import { normalizeZoomClips } from './effects/zoom/clip';
+import { normalizeZoomStyle } from './effects/zoom/style';
 import { normalizeMotionClips } from './animation/motionClips';
 
 type CursorStateSource = Pick<
@@ -23,6 +24,7 @@ type ProjectStateSource = Pick<
   | 'recordingName'
   | 'recordingResult'
   | 'zoomClips'
+  | 'zoomStyle'
   | 'mediaSegments'
   | 'frame'
   | 'cursorStyle'
@@ -58,6 +60,7 @@ export interface ProjectSnapshot {
   recordingName: string;
   recordingResult: NonNullable<AppStore['recordingResult']>;
   zoomClips: AppStore['zoomClips'];
+  zoomStyle: AppStore['zoomStyle'];
   mediaSegments: AppStore['mediaSegments'];
   cameraMediaSegments: AppStore['cameraMediaSegments'];
   frame: AppStore['frame'];
@@ -97,6 +100,7 @@ export function createProjectSnapshotFromState(state: ProjectStateSource): Proje
     recordingName: state.recordingName,
     recordingResult: state.recordingResult,
     zoomClips: normalizeZoomClips(state.zoomClips),
+    zoomStyle: normalizeZoomStyle(state.zoomStyle),
     mediaSegments: state.mediaSegments,
     cameraMediaSegments: state.cameraMediaSegments,
     frame: state.frame,
@@ -117,6 +121,7 @@ export function createProjectSnapshotFromProject(project: SavedProject): Project
     recordingName: project.name,
     recordingResult: project.result,
     zoomClips: normalizeZoomClips(project.zoomClips),
+    zoomStyle: normalizeZoomStyle(project.zoomStyle),
     mediaSegments: project.mediaSegments ?? [],
     frame: project.frame,
     cursor: project.cursor,

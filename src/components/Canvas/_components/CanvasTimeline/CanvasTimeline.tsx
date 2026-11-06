@@ -529,7 +529,9 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
           ? defaultCinematicZoomClip(`zoom-${Date.now()}`, start, end)
           : defaultZoomClip(`zoom-${Date.now()}`, start, end);
       commitEdit(preset === 'cinematic' ? 'Add cinematic zoom clip' : 'Add zoom clip', (state) => ({
-        zoomClips: [...state.zoomClips, clip].sort((a, b) => a.start - b.start),
+        zoomClips: [...state.zoomClips, { ...clip, easing: state.zoomStyle.easing }].sort(
+          (a, b) => a.start - b.start,
+        ),
       }));
       trackEvent('zoom_clip_added', { source: 'timeline', preset });
     },

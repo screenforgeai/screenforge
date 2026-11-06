@@ -19,6 +19,7 @@ import {
   setSharedPerspectiveState,
 } from './index';
 import { detectZoomClips } from './analyze';
+import { getZoomEasingProfile, prepareDetectedZoomClips } from './style';
 import { SharpenFilter } from '../../pixi/filters/SharpenFilter';
 import { CinematicZoomFilter } from '../../pixi/filters/CinematicZoomFilter';
 import { sortMediaSegments } from '../../helpers/segments';
@@ -676,9 +677,9 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
   },
 
   onLoad(data) {
-    const { zoomClips, setZoom } = useStore.getState();
+    const { zoomClips, zoomStyle, setZoom } = useStore.getState();
     if (zoomClips.length === 0) {
-      setZoom(data);
+      setZoom(prepareDetectedZoomClips(data, zoomStyle));
     }
   },
 
@@ -1083,8 +1084,9 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
 
       const targetCx = clamp(lazyCx, bounds.min, bounds.max);
       const targetCy = clamp(lazyCy, bounds.min, bounds.max);
-      [camCx, camVelCx] = springDamp(camCx, camVelCx, targetCx, CAM_HALFLIFE, dt);
-      [camCy, camVelCy] = springDamp(camCy, camVelCy, targetCy, CAM_HALFLIFE, dt);
+      const camHalflife = CAM_HALFLIFE * getZoomEasingProfile(target.easing).panHalflifeScale;
+      [camCx, camVelCx] = springDamp(camCx, camVelCx, targetCx, camHalflife, dt);
+      [camCy, camVelCy] = springDamp(camCy, camVelCy, targetCy, camHalflife, dt);
       [camCx, camVelCx] = clampSpringToBounds(camCx, camVelCx, bounds.min, bounds.max);
       [camCy, camVelCy] = clampSpringToBounds(camCy, camVelCy, bounds.min, bounds.max);
 

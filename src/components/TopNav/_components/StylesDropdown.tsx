@@ -15,6 +15,7 @@ import {
   Spinner,
 } from 'src/lib/ui';
 import { useStore } from '../../../store';
+import { applyStylePresetZoom } from '../../../lib/effects/zoom/style';
 import type { CaptionAppearance, StylePreset } from '../../../types';
 
 export const StylesDropdown = () => {
@@ -42,6 +43,7 @@ export const StylesDropdown = () => {
     cursorContinuousTracking,
     camera,
     keyboard,
+    zoomStyle,
     commitEdit,
   } = useStore(
     useShallow((state) => ({
@@ -62,6 +64,7 @@ export const StylesDropdown = () => {
       cursorContinuousTracking: state.cursorContinuousTracking,
       camera: state.camera,
       keyboard: state.keyboard,
+      zoomStyle: state.zoomStyle,
       commitEdit: state.commitEdit,
     })),
   );
@@ -115,6 +118,7 @@ export const StylesDropdown = () => {
         backgroundRadius: preset.captionsAppearance.backgroundRadius,
         position: preset.captionsAppearance.position,
       },
+      ...applyStylePresetZoom(state, preset),
     }));
   };
 
@@ -167,6 +171,7 @@ export const StylesDropdown = () => {
         camera,
         keyboard,
         captionsAppearance,
+        zoomStyle: { ...zoomStyle },
       };
       const saved = await window.screenforge.savePreset(preset);
       setPresets((prev) => [...prev, saved]);
