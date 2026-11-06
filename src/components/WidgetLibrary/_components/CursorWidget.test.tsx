@@ -34,56 +34,83 @@ afterEach(() => {
 });
 
 const clickSoundSection = () => screen.getByText('Click sound').parentElement as HTMLElement;
-const tile = (name: string) => within(clickSoundSection()).getByRole('radio', { name });
+const trigger = () => within(clickSoundSection()).getByRole('combobox');
+
+async function openDropdown(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(trigger());
+  return screen.getByRole('listbox');
+}
 
 describe('CursorWidget click sound', () => {
   it('starts with no sound and no volume slider', () => {
     render(<CursorWidget />);
 
-    expect(screen.getByText('Click sound')).toBeInTheDocument();
-    expect(tile('None')).toHaveAttribute('aria-checked', 'true');
-    expect(screen.queryByText('Volume')).not.toBeInTheDocument();
+    expect(trigger()).toHaveTextContent('None');
+    expect(within(clickSoundSection()).queryByText('Volume')).not.toBeInTheDocument();
+  });
+
+  it('lists every sound with a play button, except None', async () => {
+    const user = userEvent.setup();
+    render(<CursorWidget />);
+
+    const listbox = await openDropdown(user);
+
+    expect(
+      within(listbox)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['None', 'Soft', 'Mouse', 'Trackpad', 'Pop', 'Tick']);
+    for (const name of ['Soft', 'Mouse', 'Trackpad', 'Pop', 'Tick']) {
+      expect(screen.getByRole('button', { name: `Play ${name}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: 'Play None' })).not.toBeInTheDocument();
+  });
+
+  it('plays an option without selecting it or closing the list', async () => {
+    const user = userEvent.setup();
+    render(<CursorWidget />);
+
+    await openDropdown(user);
+    await user.click(screen.getByRole('button', { name: 'Play Pop' }));
+
+    expect(audition).toHaveBeenCalledWith('pop', 0.5);
+    expect(useStore.getState().cursorClickSound).toBe('none');
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
   });
 
   it('selects a sound, plays it, and shows the volume slider', async () => {
     const user = userEvent.setup();
     render(<CursorWidget />);
 
-    await user.click(tile('Trackpad'));
+    await openDropdown(user);
+    await user.click(screen.getByRole('option', { name: 'Trackpad' }));
 
     expect(useStore.getState().cursorClickSound).toBe('trackpad');
     expect(audition).toHaveBeenCalledWith('trackpad', 0.5);
-    expect(screen.getByText('Volume')).toBeInTheDocument();
-    expect(within(clickSoundSection()).getAllByText('50%').length).toBeGreaterThan(0);
-  });
-
-  it('replays the selected sound when its tile is clicked again', async () => {
-    const user = userEvent.setup();
-    render(<CursorWidget />);
-
-    await user.click(tile('Soft'));
-    await user.click(tile('Soft'));
-
-    expect(useStore.getState().cursorClickSound).toBe('soft');
-    expect(audition).toHaveBeenCalledTimes(2);
+    expect(trigger()).toHaveTextContent('Trackpad');
+    expect(within(clickSoundSection()).getByText('Volume')).toBeInTheDocument();
   });
 
   it('hides the volume slider when the sound is turned off', async () => {
     const user = userEvent.setup();
+    act(() => {
+      useStore.getState().setCursorClickSound('pop');
+    });
     render(<CursorWidget />);
 
-    await user.click(tile('Pop'));
-    await user.click(tile('None'));
+    await openDropdown(user);
+    await user.click(screen.getByRole('option', { name: 'None' }));
 
     expect(useStore.getState().cursorClickSound).toBe('none');
-    expect(screen.queryByText('Volume')).not.toBeInTheDocument();
+    expect(within(clickSoundSection()).queryByText('Volume')).not.toBeInTheDocument();
   });
 
   it('can be undone', async () => {
     const user = userEvent.setup();
     render(<CursorWidget />);
 
-    await user.click(tile('Mouse'));
+    await openDropdown(user);
+    await user.click(screen.getByRole('option', { name: 'Mouse' }));
     act(() => {
       useStore.getState().undo();
     });

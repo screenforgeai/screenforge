@@ -19,6 +19,7 @@
   "pop": "팝",
   "tick": "틱",
   "volume": "볼륨",
+  "playSound": "{{sound}} 재생",
   "cameraFollow": "카메라 팔로우",
   "cameraFollowSmooth": "부드럽게",
   "cameraFollowFixed": "고정",

@@ -1,9 +1,15 @@
 import { motion } from 'motion/react';
 import { useCallback, useState } from 'react';
+import type { SyntheticEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trackEvent } from 'src/lib/analytics';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Slider,
   ToggleGroup,
   ToggleGroupItem,
@@ -16,7 +22,7 @@ import type { CursorClickEffect, CursorClickSound } from '../../../store';
 import { CLICK_SOUND_OPTIONS, auditionCursorClickSound } from '../../../lib/effects/cursor/audio';
 import { CURSOR_PREVIEW_STATES, CURSOR_REGISTRY } from '../../../lib/effects/cursor/cursors';
 import type { CursorStyle } from '../../../lib/effects/cursor/cursors';
-import { IconPointer, IconInfo, IconVolumeOff } from 'src/lib/icons';
+import { IconPointer, IconInfo, IconPlayerPlayFilled } from 'src/lib/icons';
 import {
   WIDGET_EMPTY_STATE_CLASS,
   WIDGET_EMPTY_TITLE_CLASS,
@@ -32,38 +38,33 @@ const EASING_PRESETS = [
 
 const clampValue = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-/* Waveform silhouettes for the click sound tiles (press, then release). */
-const CLICK_SOUND_GLYPHS: Record<Exclude<CursorClickSound, 'none'>, number[]> = {
-  soft: [0.55, 0.8, 0.45, 0.25, 0.12, 0, 0, 0, 0.25, 0.15, 0.06, 0, 0],
-  mouse: [1, 0.55, 0.3, 0.15, 0.06, 0, 0, 0, 0.55, 0.3, 0.12, 0, 0],
-  trackpad: [0.7, 1, 0.75, 0.45, 0.25, 0.1, 0, 0, 0.5, 0.4, 0.2, 0.08, 0],
-  pop: [0.2, 0.5, 0.85, 1, 0.8, 0.55, 0.35, 0.2, 0.1, 0.04, 0, 0, 0],
-  tick: [1, 0.35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-};
+/**
+ * Preview button inside a dropdown option. It stops pointer and click events so
+ * the Select neither picks the option nor closes; you can audition several in a row.
+ */
+const ClickSoundPlayButton = ({ label, onPlay }: { label: string; onPlay: () => void }) => {
+  const stop = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
 
-// `size-auto` opts out of the toggle's default 16px icon size, which would squash the glyph.
-const ClickSoundGlyph = ({ bars }: { bars: number[] }) => (
-  <svg
-    className="size-auto"
-    style={{ width: bars.length * 4 - 2, height: 18 }}
-    viewBox={`0 0 ${bars.length * 4 - 2} 18`}
-    aria-hidden
-  >
-    {bars.map((height, i) =>
-      height > 0 ? (
-        <rect
-          key={i}
-          x={i * 4}
-          y={9 - Math.max(1, height * 8)}
-          width={2}
-          height={Math.max(2, height * 16)}
-          rx={1}
-          fill="currentColor"
-        />
-      ) : null,
-    )}
-  </svg>
-);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onPointerDown={stop}
+      onPointerUp={stop}
+      onClick={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onPlay();
+      }}
+      className="flex size-6 items-center justify-center rounded-full text-sf-secondary transition-colors hover:bg-sf-border-lt hover:text-sf-primary"
+    >
+      <IconPlayerPlayFilled size={11} />
+    </button>
+  );
+};
 const PREVIEW_STATE_DURATION = 0.7;
 const PREVIEW_LOOP_DURATION = PREVIEW_STATE_DURATION * CURSOR_PREVIEW_STATES.length;
 const PREVIEW_HOVER_ORDER = [...CURSOR_PREVIEW_STATES.slice(1), CURSOR_PREVIEW_STATES[0]];
@@ -353,42 +354,39 @@ export const CursorWidget = () => {
           {/* Click Sound */}
           <div className="flex flex-col gap-2.5 py-4">
             <span className={WIDGET_SECTION_HEADING_CLASS}>{t('clickSound')}</span>
-            <ToggleGroup
-              type="single"
+            <Select
               value={cursorClickSound}
               onValueChange={(v) => {
-                // Clicking the selected tile reports '' (a deselect): keep it and replay it.
-                const sound = (v || cursorClickSound) as CursorClickSound;
-                if (v) {
-                  updateCursor('Change click sound', { cursorClickSound: sound });
-                  trackCursor('click_sound', sound);
-                }
+                const sound = v as CursorClickSound;
+                updateCursor('Change click sound', { cursorClickSound: sound });
+                trackCursor('click_sound', sound);
                 void auditionCursorClickSound(sound, cursorClickSoundVolume);
               }}
-              framed={false}
-              className="grid grid-cols-3 gap-1.5 w-full"
-              highlightClassName="bg-transparent"
             >
-              {CLICK_SOUND_OPTIONS.map((sound) => (
-                <ToggleGroupItem
-                  key={sound}
-                  value={sound}
-                  aria-label={t(sound)}
-                  className={`flex h-14 w-full flex-col items-center justify-center gap-1 rounded-lg border p-0 text-xs font-medium transition-all ${
-                    cursorClickSound === sound
-                      ? 'border-sf-border-lt bg-[#151519] ring-1 ring-sf-border-lt text-sf-primary not-focus:text-sf-primary'
-                      : 'border-[#262629] bg-[#0d0d10] text-sf-secondary not-focus:text-sf-secondary opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  {sound === 'none' ? (
-                    <IconVolumeOff size={18} />
-                  ) : (
-                    <ClickSoundGlyph bars={CLICK_SOUND_GLYPHS[sound]} />
-                  )}
-                  <span>{t(sound)}</span>
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+              <SelectTrigger aria-label={t('clickSound')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CLICK_SOUND_OPTIONS.map((sound) => (
+                  <SelectItem
+                    key={sound}
+                    value={sound}
+                    endAdornment={
+                      sound === 'none' ? null : (
+                        <ClickSoundPlayButton
+                          label={t('playSound', { sound: t(sound) })}
+                          onPlay={() => {
+                            void auditionCursorClickSound(sound, cursorClickSoundVolume);
+                          }}
+                        />
+                      )
+                    }
+                  >
+                    {t(sound)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {cursorClickSound !== 'none' ? (
               <Slider

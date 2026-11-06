@@ -19,6 +19,7 @@
   "pop": "ポップ",
   "tick": "ティック",
   "volume": "音量",
+  "playSound": "{{sound}}を再生",
   "cameraFollow": "カメラフォロー",
   "cameraFollowSmooth": "スムーズ",
   "cameraFollowFixed": "固定",

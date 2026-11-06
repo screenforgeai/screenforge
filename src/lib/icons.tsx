@@ -80,7 +80,6 @@ import {
   Timer02Icon,
   Layers01Icon,
   Coffee01Icon,
-  VolumeOffIcon,
   // @ts-expect-error hugeicons free icon exports are not fully represented in the package types.
 } from '@hugeicons/core-free-icons';
 import { forwardRef } from 'react';
@@ -189,6 +188,5 @@ export const IconMusic3 = createIcon(MusicThreeIcon, 'IconMusic3');
 export const IconTimer = createIcon(Timer02Icon, 'IconTimer');
 export const IconLayers = createIcon(Layers01Icon, 'IconLayers');
 export const IconCoffee = createIcon(Coffee01Icon, 'IconCoffee');
-export const IconVolumeOff = createIcon(VolumeOffIcon, 'IconVolumeOff');
 
 export type { CompatIconProps };

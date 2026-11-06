@@ -19,6 +19,7 @@
   "pop": "Pop",
   "tick": "Tick",
   "volume": "Volume",
+  "playSound": "Play {{sound}}",
   "cameraFollow": "Camera Follow",
   "cameraFollowSmooth": "Smooth",
   "cameraFollowFixed": "Fixed",
