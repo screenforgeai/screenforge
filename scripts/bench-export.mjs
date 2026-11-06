@@ -4,6 +4,16 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import ffmpegPaths from '../shared/ffmpeg-paths.js';
 import processTree from '../shared/process-tree.js';
+import {
+  RELEASE_BENCHMARKS,
+  buildBenchmarkReport,
+  buildHarnessLaunch,
+  buildSampleMediaArgs,
+  formatMarkdownRow,
+  pickSampleEncoder,
+  resolveBenchmarkManifest,
+  summarizeHarnessResult,
+} from './bench-export-lib.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const MANIFEST_DIR = path.join(ROOT, 'test/fixtures/export/manifests');
@@ -123,7 +133,8 @@ async function runProcess(command, args, options = {}) {
 }
 
 function launchHarnessProcess(manifestPath, resultPath) {
-  const child = spawn('/bin/zsh', ['-lc', 'tail -f /dev/null | script -q /dev/null pnpm start'], {
+  const launch = buildHarnessLaunch(process.platform);
+  const child = spawn(launch.command, launch.args, {
     cwd: ROOT,
     env: {
       ...process.env,
@@ -131,8 +142,10 @@ function launchHarnessProcess(manifestPath, resultPath) {
       SCREENFORGE_EXPORT_TEST_MANIFEST: manifestPath,
       SCREENFORGE_EXPORT_TEST_RESULT: resultPath,
     },
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    // Windows has no script(1): keep a stdin pipe open for electron-forge instead.
+    detached: process.platform !== 'win32',
+    shell: launch.shell,
+    stdio: [process.platform === 'win32' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
 
   let stdout = '';
@@ -188,6 +201,9 @@ async function stopHarnessProcess(launch) {
 
 async function assertPrerequisites() {
   const ffmpegPath = await resolveBenchFFmpegPath();
+  if (process.platform === 'win32') {
+    return;
+  }
 
   await runProcess(ffmpegPath, ['-version'], {
     cwd: ROOT,
@@ -206,12 +222,14 @@ async function assertPrerequisites() {
       timeoutMs: 15_000,
     },
   ).catch((error) => {
-    throw new Error(`A PTY-capable 'script' command is required for bench:export.\n${String(error)}`);
+    throw new Error(
+      `A PTY-capable 'script' command is required for bench:export.\n${String(error)}`,
+    );
   });
 }
 
-async function runScenario(manifestFileName) {
-  const manifestPath = path.join(MANIFEST_DIR, manifestFileName);
+async function runScenario(manifestFileName, manifestDir = MANIFEST_DIR) {
+  const manifestPath = path.join(manifestDir, manifestFileName);
   const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `screenforge-bench-${manifest.id}-`));
   const resultPath = path.join(tempDir, 'result.json');
@@ -243,10 +261,16 @@ async function runScenario(manifestFileName) {
 function parseArgs(argv) {
   const manifestNames = [];
   let jsonPath = null;
+  let release = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--') {
+      continue;
+    }
+
+    if (arg === '--release') {
+      release = true;
       continue;
     }
 
@@ -259,17 +283,93 @@ function parseArgs(argv) {
     manifestNames.push(arg);
   }
 
-  return { manifestNames, jsonPath };
+  return { manifestNames, jsonPath, release };
+}
+
+async function readFirstLine(command, args) {
+  try {
+    const { stdout } = await runProcess(command, args, { cwd: ROOT, timeoutMs: 15_000 });
+    return stdout.split('\n')[0].trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function collectEnvironment(ffmpegPath) {
+  const pkg = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8'));
+  const cpus = os.cpus();
+  return {
+    appVersion: pkg.version,
+    gitCommit: await readFirstLine('git', ['rev-parse', '--short', 'HEAD']),
+    platform: process.platform,
+    arch: process.arch,
+    osRelease: os.release(),
+    cpuModel: cpus[0]?.model?.trim() ?? 'unknown',
+    cpuCount: cpus.length,
+    totalMemoryGb: Math.round(os.totalmem() / 1024 ** 3),
+    nodeVersion: process.version,
+    ffmpegVersion: await readFirstLine(ffmpegPath, ['-version']),
+  };
+}
+
+/**
+ * Generates the release sample media (cached across runs) and writes the
+ * manifests that point at it. Returns the directory holding those manifests.
+ */
+async function prepareReleaseBenchmarks(ffmpegPath) {
+  const cacheDir = path.join(os.tmpdir(), 'screenforge-bench-export');
+  await fs.mkdir(cacheDir, { recursive: true });
+  const { stdout: encoders } = await runProcess(ffmpegPath, ['-hide_banner', '-encoders'], {
+    cwd: ROOT,
+    timeoutMs: 15_000,
+  });
+  const encoder = pickSampleEncoder(encoders);
+  if (!encoder) {
+    throw new Error(`No H.264 encoder found in ${ffmpegPath} to generate the benchmark sample.`);
+  }
+
+  const manifestNames = [];
+  for (const preset of RELEASE_BENCHMARKS) {
+    const mediaPath = path.join(cacheDir, `sample-${preset.id}.mp4`);
+    if (!(await canAccess(mediaPath))) {
+      console.log(`[bench:export] generating ${preset.label} sample with ${encoder}...`);
+      const generated = await runProcess(
+        ffmpegPath,
+        buildSampleMediaArgs(preset, encoder, mediaPath),
+        { cwd: ROOT, timeoutMs: 600_000 },
+      );
+      if (generated.exitCode !== 0) {
+        await fs.rm(mediaPath, { force: true });
+        throw new Error(`Could not generate the ${preset.label} sample:\n${generated.stderr}`);
+      }
+    }
+    const manifest = resolveBenchmarkManifest(preset, mediaPath);
+    const manifestName = `${manifest.id}.json`;
+    await fs.writeFile(path.join(cacheDir, manifestName), JSON.stringify(manifest, null, 2));
+    manifestNames.push(manifestName);
+  }
+  return { manifestDir: cacheDir, manifestNames, encoder };
 }
 
 async function main() {
-  const { manifestNames, jsonPath } = parseArgs(process.argv.slice(2));
-  const scenarios =
+  const { manifestNames, jsonPath, release } = parseArgs(process.argv.slice(2));
+
+  await assertPrerequisites();
+  const ffmpegPath = await resolveBenchFFmpegPath();
+  const environment = await collectEnvironment(ffmpegPath);
+
+  let manifestDir = MANIFEST_DIR;
+  let scenarios =
     manifestNames.length > 0
       ? manifestNames
       : (await fs.readdir(MANIFEST_DIR)).filter((entry) => entry.endsWith('.json')).sort();
-
-  await assertPrerequisites();
+  if (release) {
+    const prepared = await prepareReleaseBenchmarks(ffmpegPath);
+    manifestDir = prepared.manifestDir;
+    scenarios = prepared.manifestNames;
+    // The sample's encoding is the one thing that can differ between machines.
+    environment.sampleEncoder = prepared.encoder;
+  }
 
   console.log(`Running ${scenarios.length} export benchmark scenario(s)...`);
 
@@ -278,29 +378,16 @@ async function main() {
   for (const scenario of scenarios) {
     console.log(`\n[bench:export] ${scenario}`);
     const startedAt = Date.now();
-    const { manifest, result, outputSizeBytes } = await runScenario(scenario);
-    const overBudget =
-      manifest.expected?.maxElapsedMs != null && result.elapsedMs > manifest.expected.maxElapsedMs;
-
-    summary.push({
-      manifest: scenario,
-      id: manifest.id,
-      elapsedMs: result.elapsedMs,
-      budgetMs: manifest.expected?.maxElapsedMs ?? null,
-      overBudget,
-      captureFrameCount: result.captureFrameCount ?? null,
-      outputFps: result.outputInfo?.fps ?? null,
-      outputWidth: result.outputInfo?.width ?? null,
-      outputHeight: result.outputInfo?.height ?? null,
-      outputDuration: result.outputInfo?.duration ?? null,
-      capturePerf: result.capturePerf ?? null,
-      realtimeFactor:
-        result.outputInfo?.duration != null
-          ? result.outputInfo.duration / Math.max(result.elapsedMs / 1000, 0.001)
-          : null,
+    const { manifest, result, outputSizeBytes } = await runScenario(scenario, manifestDir);
+    const entry = summarizeHarnessResult(
+      scenario,
+      manifest,
+      result,
       outputSizeBytes,
-      wallClockMs: Date.now() - startedAt,
-    });
+      Date.now() - startedAt,
+    );
+    const overBudget = entry.overBudget;
+    summary.push(entry);
 
     console.log(
       [
@@ -318,9 +405,21 @@ async function main() {
   }
 
   if (jsonPath) {
+    const report = buildBenchmarkReport({
+      environment,
+      generatedAt: new Date().toISOString(),
+      results: summary,
+    });
     await fs.mkdir(path.dirname(path.resolve(jsonPath)), { recursive: true });
-    await fs.writeFile(path.resolve(jsonPath), JSON.stringify(summary, null, 2));
+    await fs.writeFile(path.resolve(jsonPath), JSON.stringify(report, null, 2));
     console.log(`\nWrote benchmark report to ${path.resolve(jsonPath)}`);
+  }
+
+  if (release) {
+    console.log('\nRows for docs/EXPORT_BENCHMARKS.md:');
+    for (const entry of summary) {
+      console.log(formatMarkdownRow(environment, entry));
+    }
   }
 
   const overBudgetCount = summary.filter((entry) => entry.overBudget).length;
@@ -328,11 +427,11 @@ async function main() {
   console.table(
     summary.map((entry) => ({
       manifest: entry.manifest,
-      elapsed: formatMs(entry.elapsedMs),
+      elapsed: formatMs(entry.seconds * 1000),
       budget: formatBudget(entry.budgetMs),
       frames: entry.captureFrameCount ?? 'n/a',
       output: `${entry.outputWidth ?? '?'}x${entry.outputHeight ?? '?'}@${entry.outputFps ?? '?'}fps`,
-      duration: entry.outputDuration?.toFixed(2) ?? 'n/a',
+      duration: entry.contentSeconds?.toFixed(2) ?? 'n/a',
       realtime: entry.realtimeFactor == null ? 'n/a' : `${entry.realtimeFactor.toFixed(2)}x`,
       size: entry.outputSizeBytes == null ? 'n/a' : formatFileSize(entry.outputSizeBytes),
       perf: formatPerfBreakdown(entry.capturePerf),
