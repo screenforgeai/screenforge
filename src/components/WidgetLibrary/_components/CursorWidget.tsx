@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trackEvent } from 'src/lib/analytics';
@@ -96,6 +96,10 @@ const PREVIEW_LOOP_KEYFRAMES = CURSOR_PREVIEW_STATES.map((_, stateIndex) => {
 export const CursorWidget = () => {
   const { t } = useTranslation('cursor');
   const [hoveredStyle, setHoveredStyle] = useState<CursorStyle | null>(null);
+  // True while the click sound list is being moved through with the keyboard,
+  // so each option reached plays as a preview. Mouse movement turns it off:
+  // hovering an option stays silent and its play button is used instead.
+  const isKeyboardBrowsingSoundsRef = useRef(false);
 
   const {
     recordingResult,
@@ -356,6 +360,9 @@ export const CursorWidget = () => {
             <span className={WIDGET_SECTION_HEADING_CLASS}>{t('clickSound')}</span>
             <Select
               value={cursorClickSound}
+              onOpenChange={() => {
+                isKeyboardBrowsingSoundsRef.current = false;
+              }}
               onValueChange={(v) => {
                 const sound = v as CursorClickSound;
                 updateCursor('Change click sound', { cursorClickSound: sound });
@@ -366,11 +373,23 @@ export const CursorWidget = () => {
               <SelectTrigger aria-label={t('clickSound')}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent
+                onKeyDown={() => {
+                  isKeyboardBrowsingSoundsRef.current = true;
+                }}
+                onPointerMove={() => {
+                  isKeyboardBrowsingSoundsRef.current = false;
+                }}
+              >
                 {CLICK_SOUND_OPTIONS.map((sound) => (
                   <SelectItem
                     key={sound}
                     value={sound}
+                    onFocus={() => {
+                      if (isKeyboardBrowsingSoundsRef.current) {
+                        void auditionCursorClickSound(sound, cursorClickSoundVolume);
+                      }
+                    }}
                     endAdornment={
                       sound === 'none' ? null : (
                         <ClickSoundPlayButton

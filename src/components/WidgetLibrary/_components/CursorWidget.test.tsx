@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from 'src/store';
@@ -76,6 +76,35 @@ describe('CursorWidget click sound', () => {
     expect(audition).toHaveBeenCalledWith('pop', 0.5);
     expect(useStore.getState().cursorClickSound).toBe('none');
     expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('plays each option reached with the arrow keys, without selecting it', async () => {
+    const user = userEvent.setup();
+    render(<CursorWidget />);
+
+    await openDropdown(user);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'None' })).toHaveFocus());
+    expect(audition).not.toHaveBeenCalled();
+
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(audition).toHaveBeenLastCalledWith('mouse', 0.5));
+
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(audition).toHaveBeenLastCalledWith('trackpad', 0.5));
+
+    expect(useStore.getState().cursorClickSound).toBe('none');
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('stays silent when moving the mouse over options', async () => {
+    const user = userEvent.setup();
+    render(<CursorWidget />);
+
+    await openDropdown(user);
+    await user.hover(screen.getByRole('option', { name: 'Pop' }));
+    await user.hover(screen.getByRole('option', { name: 'Tick' }));
+
+    expect(audition).not.toHaveBeenCalled();
   });
 
   it('selects a sound, plays it, and shows the volume slider', async () => {
