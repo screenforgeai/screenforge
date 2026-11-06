@@ -92,8 +92,8 @@ describe('normalizeCursorClickSound', () => {
 });
 
 describe('CLICK_SOUND_OPTIONS', () => {
-  it('lists none first, then the five sounds', () => {
-    expect(CLICK_SOUND_OPTIONS).toEqual(['none', 'soft', 'mouse', 'trackpad', 'pop', 'tick']);
+  it('lists none first, then mouse and trackpad, then the rest', () => {
+    expect(CLICK_SOUND_OPTIONS).toEqual(['none', 'mouse', 'trackpad', 'soft', 'pop', 'tick']);
   });
 });
 

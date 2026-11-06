@@ -58,9 +58,9 @@ export type ClickSoundHit = {
 
 export const CLICK_SOUND_OPTIONS: readonly CursorClickSound[] = [
   'none',
-  'soft',
   'mouse',
   'trackpad',
+  'soft',
   'pop',
   'tick',
 ];

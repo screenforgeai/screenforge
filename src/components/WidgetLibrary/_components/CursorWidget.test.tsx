@@ -59,7 +59,7 @@ describe('CursorWidget click sound', () => {
       within(listbox)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['None', 'Soft', 'Mouse', 'Trackpad', 'Pop', 'Tick']);
+    ).toEqual(['None', 'Mouse', 'Trackpad', 'Soft', 'Pop', 'Tick']);
     for (const name of ['Soft', 'Mouse', 'Trackpad', 'Pop', 'Tick']) {
       expect(screen.getByRole('button', { name: `Play ${name}` })).toBeInTheDocument();
     }
