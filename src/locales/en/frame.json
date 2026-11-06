@@ -20,5 +20,18 @@
   "pickColor": "Pick color",
   "startColor": "Start color",
   "endColor": "End color",
-  "direction": "Direction"
+  "direction": "Direction",
+  "logo": "Logo",
+  "logoAdd": "Add logo",
+  "logoReplace": "Replace",
+  "logoRemove": "Remove logo",
+  "logoImage": "Logo image",
+  "logoCorner": "Logo position",
+  "logoCornerTopLeft": "Top left",
+  "logoCornerTopRight": "Top right",
+  "logoCornerBottomLeft": "Bottom left",
+  "logoCornerBottomRight": "Bottom right",
+  "logoSize": "Size",
+  "logoTooLarge": "That image is too large for a logo. Use one under 2 MB.",
+  "logoUnreadable": "Screenforge couldn't read that image."
 }

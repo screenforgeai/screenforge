@@ -11,6 +11,7 @@ import w11 from '../../../assets/wallpapers/wallpaper-11.webp';
 import w12 from '../../../assets/wallpapers/wallpaper-12.webp';
 import w13 from '../../../assets/wallpapers/wallpaper-13.webp';
 import w14 from '../../../assets/wallpapers/wallpaper-14.webp';
+import { CUSTOM_WALLPAPER_SEED } from './constants';
 
 export interface WallpaperPreset {
   id: string;
@@ -18,8 +19,7 @@ export interface WallpaperPreset {
   url: string;
 }
 
-/** Sentinel wallpaperSeed value meaning "use the user-picked custom image". */
-export const CUSTOM_WALLPAPER_SEED = -1;
+export { CUSTOM_WALLPAPER_SEED };
 
 export const WALLPAPER_PRESETS: WallpaperPreset[] = [
   { id: 'night', label: 'Night', url: w2 },
@@ -37,16 +37,33 @@ export const WALLPAPER_PRESETS: WallpaperPreset[] = [
   { id: 'sparkle', label: 'Sparkle', url: w14 },
 ];
 
-// ── Custom user wallpaper (session-only, not persisted) ──────────────────────
+// ── Custom user wallpaper ────────────────────────────────────────────────────
+// Session-only for projects; a style preset saves it with its own copy of
+// the image and sets it again when applied.
 
 /** Data URL of the user-picked custom wallpaper. Cleared on app restart. */
 let customWallpaperUrl: string | null = null;
+const customWallpaperListeners = new Set<() => void>();
 
 export function setCustomWallpaperUrl(url: string | null): void {
+  if (url === customWallpaperUrl) {
+    return;
+  }
   customWallpaperUrl = url;
   if (url) {
     getWallpaperImage(url);
   }
+  for (const listener of customWallpaperListeners) {
+    listener();
+  }
+}
+
+/** For useSyncExternalStore: the Frame widget shows a wallpaper a preset sets. */
+export function subscribeCustomWallpaper(listener: () => void): () => void {
+  customWallpaperListeners.add(listener);
+  return () => {
+    customWallpaperListeners.delete(listener);
+  };
 }
 
 export function getCustomWallpaperUrl(): string | null {

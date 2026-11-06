@@ -85,6 +85,8 @@ beforeEach(() => {
       restartToApplyUpdate: vi.fn().mockResolvedValue(undefined),
       revealExportInFolder: vi.fn().mockResolvedValue(undefined),
       getPresets: vi.fn().mockResolvedValue([]),
+      onPresetsChanged: vi.fn(() => () => undefined),
+      refreshBrandKit: vi.fn().mockResolvedValue(undefined),
     },
     writable: true,
     configurable: true,

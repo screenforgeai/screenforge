@@ -39,6 +39,8 @@ export interface FrameSettings {
   aspectRatioId: string;
   cropRect: CropRect;
   background: BackgroundSettings;
+  /** A logo in a corner of the video (from a style preset). Absent: none. */
+  logo?: import('../logo/layout').LogoSettings | null;
 }
 
 export * from './analyze';

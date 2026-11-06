@@ -121,6 +121,10 @@ export const CH = {
     SAVE: 'presets:save',
     GET_ALL: 'presets:get-all',
     DELETE: 'presets:delete',
+    DUPLICATE: 'presets:duplicate',
+    GET_ASSETS: 'presets:get-assets',
+    REFRESH_BRAND_KIT: 'presets:refresh-brand-kit',
+    CHANGED: 'presets:changed',
   },
   music: {
     PICK_FILE: 'music:pick-file',

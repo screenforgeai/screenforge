@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
-import { IconChevronDown, IconLayers, IconPlus, IconX } from 'src/lib/icons';
+import {
+  IconBuilding,
+  IconChevronDown,
+  IconCopy,
+  IconLayers,
+  IconPlus,
+  IconX,
+} from 'src/lib/icons';
 import {
   Button,
   Dialog,
@@ -9,113 +17,101 @@ import {
   DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Spinner,
 } from 'src/lib/ui';
+import { getCustomWallpaperUrl, setCustomWallpaperUrl } from 'src/lib/effects/frame/wallpapers';
+import { BRAND_FONT_FAMILIES } from 'src/lib/fonts';
+import { presetDraftFromState, stylePresetPatch } from 'src/lib/presets/style-preset';
 import { useStore } from '../../../store';
-import type { CaptionAppearance, StylePreset } from '../../../types';
+import type { StylePreset, StylePresetAssets } from '../../../types';
+
+/** Select needs a non-empty value for "don't set a font". */
+const KEEP_FONTS = 'keep';
+
+const FONT_OPTIONS = [
+  { value: KEEP_FONTS, labelKey: 'presets_fontKeep' },
+  { value: BRAND_FONT_FAMILIES.sans, labelKey: 'presets_fontSans' },
+  { value: BRAND_FONT_FAMILIES.serif, labelKey: 'presets_fontSerif' },
+  { value: BRAND_FONT_FAMILIES.system, labelKey: 'presets_fontSystem' },
+] as const;
+
+const NO_ASSETS: StylePresetAssets = { logoDataUrl: null, customWallpaperDataUrl: null };
+
+type SaveDialog = { mode: 'create' } | { mode: 'duplicate'; preset: StylePreset };
+
+const isWorkspacePreset = (preset: StylePreset) => preset.source === 'director';
 
 export const StylesDropdown = () => {
+  const { t } = useTranslation('topnav');
   const [open, setOpen] = useState(false);
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [dialog, setDialog] = useState<SaveDialog | null>(null);
   const [saveName, setSaveName] = useState('');
+  const [saveFont, setSaveFont] = useState<string>(KEEP_FONTS);
   const [isSaving, setIsSaving] = useState(false);
   const [presets, setPresets] = useState<StylePreset[]>([]);
 
-  const {
-    recordingResult,
-    frame,
-    captions,
-    cursorEnabled,
-    cursorStyle,
-    cursorClickEffect,
-    cursorSize,
-    cursorHalflife,
-    cursorMotionBlur,
-    cursorMaxTilt,
-    cursorHideWhenIdle,
-    cursorIdleHideSeconds,
-    cursorClickSound,
-    cursorClickSoundVolume,
-    cursorContinuousTracking,
-    camera,
-    keyboard,
-    commitEdit,
-  } = useStore(
+  const { recordingResult, commitEdit } = useStore(
     useShallow((state) => ({
       recordingResult: state.recordingResult,
-      frame: state.frame,
-      captions: state.captions,
-      cursorEnabled: state.cursorEnabled,
-      cursorStyle: state.cursorStyle,
-      cursorClickEffect: state.cursorClickEffect,
-      cursorSize: state.cursorSize,
-      cursorHalflife: state.cursorHalflife,
-      cursorMotionBlur: state.cursorMotionBlur,
-      cursorMaxTilt: state.cursorMaxTilt,
-      cursorHideWhenIdle: state.cursorHideWhenIdle,
-      cursorIdleHideSeconds: state.cursorIdleHideSeconds,
-      cursorClickSound: state.cursorClickSound,
-      cursorClickSoundVolume: state.cursorClickSoundVolume,
-      cursorContinuousTracking: state.cursorContinuousTracking,
-      camera: state.camera,
-      keyboard: state.keyboard,
       commitEdit: state.commitEdit,
     })),
   );
 
-  useEffect(() => {
+  const loadPresets = useCallback(() => {
     void window.screenforge
       .getPresets()
       .then(setPresets)
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    loadPresets();
+    // The brand kit syncs in the background; show its latest copy.
+    return window.screenforge.onPresetsChanged(loadPresets);
+  }, [loadPresets]);
+
   if (!recordingResult) {
     return null;
   }
 
-  const handleApply = (preset: StylePreset) => {
+  const displayName = (preset: StylePreset) =>
+    isWorkspacePreset(preset) ? t('presets_brandKit') : preset.name;
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      void window.screenforge.refreshBrandKit().catch(() => undefined);
+    }
+  };
+
+  const handleApply = async (preset: StylePreset) => {
     setOpen(false);
-    toast.success(`"${preset.name}" applied`);
-    commitEdit('Apply style preset', (state) => ({
-      frame: { ...state.frame, background: preset.background },
-      cursorEnabled: preset.cursor.enabled,
-      cursorStyle: preset.cursor.style,
-      cursorClickEffect: preset.cursor.clickEffect,
-      cursorSize: preset.cursor.size,
-      cursorHalflife: preset.cursor.halflife,
-      cursorMotionBlur: preset.cursor.motionBlur,
-      cursorMaxTilt: preset.cursor.maxTilt,
-      cursorHideWhenIdle: preset.cursor.hideWhenIdle,
-      cursorIdleHideSeconds: preset.cursor.idleHideSeconds,
-      cursorClickSound: preset.cursor.clickSound,
-      cursorClickSoundVolume: preset.cursor.clickSoundVolume,
-      cursorContinuousTracking: preset.cursor.continuousTracking,
-      camera: {
-        ...preset.camera,
-        enabled: state.camera.enabled,
-        zoomRadiusScale: preset.camera.zoomRadiusScale ?? 1.0,
-      },
-      keyboard: preset.keyboard,
-      captions: {
-        ...state.captions,
-        fontFamily: preset.captionsAppearance.fontFamily,
-        fontScale: preset.captionsAppearance.fontScale,
-        bold: preset.captionsAppearance.bold,
-        italic: preset.captionsAppearance.italic,
-        textColor: preset.captionsAppearance.textColor,
-        highlightColor: preset.captionsAppearance.highlightColor,
-        textOpacity: preset.captionsAppearance.textOpacity,
-        backgroundEnabled: preset.captionsAppearance.backgroundEnabled,
-        backgroundColor: preset.captionsAppearance.backgroundColor,
-        backgroundOpacity: preset.captionsAppearance.backgroundOpacity,
-        backgroundRadius: preset.captionsAppearance.backgroundRadius,
-        position: preset.captionsAppearance.position,
-      },
-    }));
+    let assets = NO_ASSETS;
+    let assetsMissing = false;
+    if (preset.logo || preset.customWallpaperPath) {
+      assets = await window.screenforge.getPresetAssets(preset.id).catch(() => NO_ASSETS);
+      assetsMissing =
+        (Boolean(preset.logo) && !assets.logoDataUrl) ||
+        (Boolean(preset.customWallpaperPath) && !assets.customWallpaperDataUrl);
+    }
+    if (assets.customWallpaperDataUrl) {
+      setCustomWallpaperUrl(assets.customWallpaperDataUrl);
+    }
+    commitEdit('Apply style preset', (state) => stylePresetPatch(state, preset, assets));
+    if (assetsMissing) {
+      toast.warning(t('presets_appliedWithoutImages', { name: displayName(preset) }));
+    } else {
+      toast.success(t('presets_applied', { name: displayName(preset) }));
+    }
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -124,57 +120,40 @@ export const StylesDropdown = () => {
     setPresets((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const openDialog = (next: SaveDialog) => {
+    setOpen(false);
+    setSaveName(next.mode === 'duplicate' ? t('presets_copyName', { name: next.preset.name }) : '');
+    setSaveFont(KEEP_FONTS);
+    setDialog(next);
+  };
+
+  const closeDialog = () => {
+    setDialog(null);
+    setSaveName('');
+  };
+
   const handleConfirmSave = async () => {
     const name = saveName.trim();
-    if (!name) {
+    if (!name || !dialog) {
       return;
     }
     setIsSaving(true);
     try {
-      const captionsAppearance: CaptionAppearance = {
-        fontFamily: captions.fontFamily,
-        fontScale: captions.fontScale,
-        bold: captions.bold,
-        italic: captions.italic,
-        textColor: captions.textColor,
-        highlightColor: captions.highlightColor,
-        textOpacity: captions.textOpacity,
-        backgroundEnabled: captions.backgroundEnabled,
-        backgroundColor: captions.backgroundColor,
-        backgroundOpacity: captions.backgroundOpacity,
-        backgroundRadius: captions.backgroundRadius,
-        position: captions.position,
-      };
-      const preset: StylePreset = {
-        id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        name,
-        savedAt: new Date().toISOString(),
-        background: frame.background,
-        cursor: {
-          enabled: cursorEnabled,
-          style: cursorStyle,
-          clickEffect: cursorClickEffect,
-          size: cursorSize,
-          halflife: cursorHalflife,
-          motionBlur: cursorMotionBlur,
-          maxTilt: cursorMaxTilt,
-          hideWhenIdle: cursorHideWhenIdle,
-          idleHideSeconds: cursorIdleHideSeconds,
-          clickSound: cursorClickSound,
-          clickSoundVolume: cursorClickSoundVolume,
-          continuousTracking: cursorContinuousTracking,
-        },
-        camera,
-        keyboard,
-        captionsAppearance,
-      };
-      const saved = await window.screenforge.savePreset(preset);
+      const saved =
+        dialog.mode === 'duplicate'
+          ? await window.screenforge.duplicatePreset(dialog.preset.id, name)
+          : await window.screenforge.savePreset(
+              presetDraftFromState(useStore.getState(), {
+                name,
+                font: saveFont === KEEP_FONTS ? null : saveFont,
+                customWallpaperDataUrl: getCustomWallpaperUrl(),
+              }),
+            );
       setPresets((prev) => [...prev, saved]);
-      setSaveDialogOpen(false);
-      setSaveName('');
-      toast.success(`Preset "${name}" saved`);
+      closeDialog();
+      toast.success(t('presets_saved', { name }));
     } catch {
-      toast.error('Failed to save style');
+      toast.error(t('presets_saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -182,14 +161,14 @@ export const StylesDropdown = () => {
 
   return (
     <>
-      <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenu open={open} onOpenChange={handleOpenChange} modal={false}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             className="group flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-sf-border bg-transparent px-2 py-0 text-sm font-medium tracking-[-0.01em] text-sf-secondary transition-[border-color,color,background-color,box-shadow,transform] duration-150 ease-out hover:border-sf-border-lt hover:bg-sf-panel/70 hover:text-sf-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-0 data-[state=open]:border-sf-border-lt data-[state=open]:bg-sf-panel data-[state=open]:text-sf-primary data-[state=open]:shadow-[0_1px_1px_rgba(0,0,0,0.12),0_10px_24px_rgba(0,0,0,0.18)]"
           >
             <IconLayers size={14} className="shrink-0 text-sf-secondary" />
-            <span className="text-sf-secondary">Preset</span>
+            <span className="text-sf-secondary">{t('presets_menu')}</span>
             <IconChevronDown
               size={14}
               className="shrink-0 text-sf-muted transition-transform duration-200 ease-out group-data-[state=open]:rotate-180"
@@ -197,78 +176,95 @@ export const StylesDropdown = () => {
           </button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" className="w-44">
-          {presets.map((preset) => (
-            <div
-              key={preset.id}
-              className="group relative flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm text-sf-primary transition-colors hover:bg-[#1a1a20]"
-              onClick={() => handleApply(preset)}
-            >
-              <span className="flex-1 truncate text-sm">{preset.name}</span>
-              <button
-                type="button"
-                aria-label={`Delete ${preset.name}`}
-                className="invisible ml-auto rounded p-0.5 text-sf-muted transition-colors hover:text-sf-primary group-hover:visible"
-                onClick={(e) => void handleDelete(preset.id, e)}
+        <DropdownMenuContent align="start" className="w-56">
+          {presets.map((preset) => {
+            const name = displayName(preset);
+            const workspace = isWorkspacePreset(preset);
+            return (
+              <DropdownMenuItem
+                key={preset.id}
+                className="group gap-2 px-2.5 text-sm"
+                title={workspace ? t('presets_brandKitHint') : undefined}
+                onSelect={() => void handleApply(preset)}
               >
-                <IconX size={12} />
-              </button>
-            </div>
-          ))}
+                {workspace && <IconBuilding size={14} className="text-sf-muted" />}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm">{name}</span>
+                  {workspace && (
+                    <span className="truncate text-xs text-sf-muted">{preset.name}</span>
+                  )}
+                </span>
+                {workspace ? (
+                  <button
+                    type="button"
+                    aria-label={t('presets_saveAsNew', { name })}
+                    title={t('presets_saveAsNew', { name })}
+                    className="invisible ml-auto rounded p-0.5 text-sf-muted transition-colors hover:text-sf-primary group-hover:visible group-focus:visible"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDialog({ mode: 'duplicate', preset });
+                    }}
+                  >
+                    <IconCopy size={12} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={t('presets_delete', { name })}
+                    className="invisible ml-auto rounded p-0.5 text-sf-muted transition-colors hover:text-sf-primary group-hover:visible group-focus:visible"
+                    onClick={(e) => void handleDelete(preset.id, e)}
+                  >
+                    <IconX size={12} />
+                  </button>
+                )}
+              </DropdownMenuItem>
+            );
+          })}
 
           {presets.length > 0 && <DropdownMenuSeparator />}
 
           <button
             type="button"
-            className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-sf-primary transition-colors hover:bg-[#1a1a20]"
-            onClick={() => {
-              setOpen(false);
-              setSaveDialogOpen(true);
-            }}
+            className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-sf-primary transition-colors hover:bg-sf-panel"
+            onClick={() => openDialog({ mode: 'create' })}
           >
             <IconPlus size={14} className="shrink-0" />
-            Create new
+            {t('presets_createNew')}
           </button>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <Dialog
-        open={saveDialogOpen}
+        open={dialog !== null}
         onOpenChange={(o) => {
-          setSaveDialogOpen(o);
           if (!o) {
-            setSaveName('');
+            closeDialog();
           }
         }}
       >
         <DialogContent
           showCloseButton={false}
           className="w-[360px] max-w-[94vw] gap-0 overflow-hidden rounded-[14px] border-sf-border bg-sf-bg p-0 shadow-2xl"
-          onPointerDownOutside={() => {
-            setSaveDialogOpen(false);
-            setSaveName('');
-          }}
+          onPointerDownOutside={closeDialog}
         >
           <div className="flex items-center justify-between px-6 pt-5">
             <DialogTitle className="text-lg font-semibold tracking-tight text-sf-primary">
-              Name this preset
+              {t('presets_nameTitle')}
             </DialogTitle>
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => {
-                setSaveDialogOpen(false);
-                setSaveName('');
-              }}
+              aria-label={t('presets_cancel')}
+              onClick={closeDialog}
             >
               <IconX size={14} />
             </Button>
           </div>
 
-          <div className="px-6 py-5">
+          <div className="flex flex-col gap-3 px-6 py-5">
             <Input
               autoFocus
-              placeholder="e.g. Dark Studio"
+              placeholder={t('presets_namePlaceholder')}
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
               onKeyDown={(e) => {
@@ -277,12 +273,25 @@ export const StylesDropdown = () => {
                   void handleConfirmSave();
                 }
                 if (e.key === 'Escape') {
-                  setSaveDialogOpen(false);
-                  setSaveName('');
+                  closeDialog();
                 }
               }}
               className="h-9 border-sf-border bg-sf-panel text-md text-sf-primary placeholder:text-sf-muted"
             />
+            {dialog?.mode === 'create' && (
+              <Select value={saveFont} onValueChange={setSaveFont}>
+                <SelectTrigger aria-label={t('presets_font')} className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FONT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {t(option.labelKey)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-sf-border/40 px-6 pb-5 pt-3.5">
@@ -290,12 +299,9 @@ export const StylesDropdown = () => {
               variant="outline"
               size="md"
               className="border-sf-border text-sf-secondary hover:text-sf-primary"
-              onClick={() => {
-                setSaveDialogOpen(false);
-                setSaveName('');
-              }}
+              onClick={closeDialog}
             >
-              Cancel
+              {t('presets_cancel')}
             </Button>
             <Button
               size="md"
@@ -303,7 +309,7 @@ export const StylesDropdown = () => {
               onClick={() => void handleConfirmSave()}
             >
               {isSaving && <Spinner className="size-3.5 fill-white text-white/30" />}
-              {isSaving ? 'Saving...' : 'Save'}
+              {isSaving ? t('saving') : t('save')}
             </Button>
           </div>
         </DialogContent>

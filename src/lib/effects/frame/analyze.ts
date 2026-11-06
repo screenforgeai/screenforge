@@ -5,6 +5,7 @@ import type {
   StoredProjectLike,
 } from '../../../types';
 import type { BackgroundSettings, CropRect, FrameSettings } from './index';
+import { normalizeLogoSettings } from '../logo/layout';
 import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CURSOR_SETTINGS,
@@ -131,6 +132,7 @@ export function cloneFrameSettings(frame: FrameSettings): FrameSettings {
     aspectRatioId: frame.aspectRatioId,
     cropRect: { ...frame.cropRect },
     background: { ...frame.background },
+    ...(frame.logo ? { logo: { ...frame.logo } } : {}),
   };
 }
 
@@ -389,6 +391,7 @@ export function normalizeFrameSettings(
     ...(legacyBackground ?? {}),
     ...(frame?.background ?? {}),
   };
+  const logo = normalizeLogoSettings(frame?.logo);
 
   return {
     aspectRatioId,
@@ -398,6 +401,7 @@ export function normalizeFrameSettings(
       sourceHeight,
     ),
     background,
+    ...(logo ? { logo } : {}),
   };
 }
 

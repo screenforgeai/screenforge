@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { useStore } from '../../../store';
 import type { PixiEffect, PixiEffectUpdater, PixiScene } from '../../pixi/types';
 import type { TextClip } from '../../../types';
+import { fontStack } from '../../fonts';
 
 const REFERENCE_HEIGHT = 1080;
 
@@ -140,7 +141,7 @@ export const textPixiEffect: PixiEffect<null> = {
 
         // Update text style
         label.style.fontSize = fontSize;
-        label.style.fontFamily = `"${clip.fontFamily}", sans-serif`;
+        label.style.fontFamily = fontStack(clip.fontFamily);
         label.style.fontWeight = clip.bold ? 'bold' : 'normal';
         label.style.fontStyle = clip.italic ? 'italic' : 'normal';
         label.style.fill = { color: hexToNumber(clip.color), alpha: clip.colorOpacity / 100 };
@@ -194,7 +195,7 @@ export const textPixiEffect: PixiEffect<null> = {
               clip.italic ? 'italic' : '',
               clip.bold ? 'bold' : '',
               `${fontSize}px`,
-              `"${clip.fontFamily}", sans-serif`,
+              fontStack(clip.fontFamily),
             ]
               .filter(Boolean)
               .join(' ');

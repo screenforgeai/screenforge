@@ -4,6 +4,7 @@ import { captionsEffect } from './captions/index';
 import { cursorEffect } from './cursor/index';
 import { frameEffect } from './frame/index';
 import { keyboardEffect } from './keyboard/index';
+import { logoEffect } from './logo/index';
 import { maskEffect } from './mask/index';
 import { zoomEffect } from './zoom/index';
 import { textEffect } from './text/index';
@@ -18,6 +19,7 @@ import { textEffect } from './text/index';
 export const effectRegistry: Effect<unknown>[] = [
   zoomEffect as Effect<unknown>,
   frameEffect as Effect<unknown>,
+  logoEffect as Effect<unknown>,
   cursorEffect as Effect<unknown>,
   cameraEffect as Effect<unknown>,
   keyboardEffect as Effect<unknown>,

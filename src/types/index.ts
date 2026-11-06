@@ -286,7 +286,7 @@ export interface CaptureWindowParams {
   resolution: ExportResolution;
   includeAudio: boolean;
   cursor: { clickSound: string; clickSoundVolume: number };
-  /** Data URL of the user-picked custom wallpaper, if active. Session-only. */
+  /** Data URL of the custom wallpaper (picked this session, or restored by a style preset), if active. */
   customWallpaperDataUrl?: string | null;
   musicClips?: import('../lib/timeline').MusicClip[];
 }
@@ -433,15 +433,74 @@ export interface CaptionAppearance {
   position: CaptionPosition;
 }
 
+/** A preset's logo: the image file in the preset assets folder, and where it goes. */
+export interface PresetLogo {
+  path: string;
+  corner: import('../lib/effects/logo/layout').LogoCorner;
+  /** Width as a fraction of the canvas width. */
+  size: number;
+  /** 0–100. */
+  opacity: number;
+}
+
 export interface StylePreset {
   id: string;
   name: string;
   savedAt: string;
+  /** 'director': the workspace brand kit, kept in sync and read-only. Absent: made here. */
+  source?: 'director';
   background: import('../lib/effects/frame').BackgroundSettings;
   cursor: ProjectCursorSettings;
-  camera: ProjectCameraSettings;
-  keyboard: ProjectKeyboardSettings;
+  /** Absent: applying the preset leaves camera settings as they are. */
+  camera?: ProjectCameraSettings;
+  /** Absent: applying the preset leaves keyboard settings as they are. */
+  keyboard?: ProjectKeyboardSettings;
   captionsAppearance: CaptionAppearance;
+  /** null: no logo (applying removes one). Absent (older presets): the logo is left alone. */
+  logo?: PresetLogo | null;
+  /** The saved custom wallpaper image, used when background.wallpaperSeed is the custom seed. */
+  customWallpaperPath?: string;
+  /** A font family for captions and text clips. Absent: captions use captionsAppearance. */
+  font?: string;
+}
+
+/** What the presets menu sends to save a new preset; images travel as data URLs. */
+export interface StylePresetDraft {
+  name: string;
+  background: import('../lib/effects/frame').BackgroundSettings;
+  cursor: ProjectCursorSettings;
+  camera?: ProjectCameraSettings;
+  keyboard?: ProjectKeyboardSettings;
+  captionsAppearance: CaptionAppearance;
+  logo: (Omit<PresetLogo, 'path'> & { dataUrl: string }) | null;
+  customWallpaperDataUrl: string | null;
+  font: string | null;
+}
+
+/** A preset's images, read back as data URLs when it is applied. */
+export interface StylePresetAssets {
+  logoDataUrl: string | null;
+  customWallpaperDataUrl: string | null;
+}
+
+/** GET /desktop/brand-kit (screenforgeai/director#291). */
+export interface DirectorBrandKit {
+  /** Signed and short-lived: download it, never keep the URL. */
+  logoUrl: string | null;
+  accent: string;
+  accentDark: string | null;
+  font: import('../lib/fonts').BrandFont;
+  captions: {
+    position: 'bottom' | 'top';
+    textColor: string;
+    backgroundColor: string;
+    /** 0–100; 0 means no background. */
+    backgroundOpacity: number;
+    highlightWithAccent: boolean;
+  };
+  background: import('../lib/effects/frame').BackgroundSettings | null;
+  cursor: ProjectCursorSettings | null;
+  defaultPresetId: string | null;
 }
 
 export interface CaptionSettings {
@@ -691,9 +750,16 @@ export interface ScreenforgeAPI {
   openTeleprompterBelowOverlay: () => void;
   onSceneNextRequested: (cb: () => void) => () => void;
   onScenePrevRequested: (cb: () => void) => () => void;
-  savePreset: (preset: StylePreset) => Promise<StylePreset>;
+  savePreset: (draft: StylePresetDraft) => Promise<StylePreset>;
+  /** The workspace brand kit (when signed in to Director) first, then this app's presets. */
   getPresets: () => Promise<StylePreset[]>;
   deletePreset: (id: string) => Promise<void>;
+  /** An editable copy of a preset, the brand kit included. */
+  duplicatePreset: (id: string, name: string) => Promise<StylePreset>;
+  getPresetAssets: (id: string) => Promise<StylePresetAssets>;
+  /** Asks for a brand kit sync; at most every few minutes unless signing in. */
+  refreshBrandKit: () => Promise<void>;
+  onPresetsChanged: (cb: () => void) => () => void;
   confirmAreaSelection: (area: {
     x: number;
     y: number;
