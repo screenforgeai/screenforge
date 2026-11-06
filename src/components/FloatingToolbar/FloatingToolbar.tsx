@@ -37,9 +37,11 @@ import type {
   DesktopSource,
   CursorEvent,
   CaptureBackend,
+  SystemAudioSupport,
   ToolbarShapeRect,
 } from '../../types/index';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
+import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
 
 type SourceTab = 'display' | 'window' | 'area';
@@ -294,6 +296,8 @@ export const FloatingToolbar = () => {
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [micLoading, setMicLoading] = useState(false);
+  const [systemAudioSupport, setSystemAudioSupport] = useState<SystemAudioSupport | null>(null);
+  const systemAudioNoticeKey = getSystemAudioNoticeKey(systemAudioSupport);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
@@ -441,6 +445,12 @@ export const FloatingToolbar = () => {
       })
       .catch((err) => {
         console.error('[recording] could not resolve capture backend:', err);
+      });
+    window.screenforge
+      .getSystemAudioSupport()
+      .then(setSystemAudioSupport)
+      .catch((err) => {
+        console.error('[recording] could not resolve system audio support:', err);
       });
   }, []);
 
@@ -749,6 +759,18 @@ export const FloatingToolbar = () => {
       handleStopEvent();
     });
   }, []);
+
+  // The recorded display was unplugged (or switched off) mid-recording: stop
+  // and keep what was captured, and say why instead of failing silently.
+  useEffect(() => {
+    return window.screenforge.onRecordingSourceLost(() => {
+      if (recordStateRef.current !== 'recording' && recordStateRef.current !== 'paused') {
+        return;
+      }
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      handleStopEvent();
+    });
+  }, [t]);
 
   // Wayland: the user can end the capture from the OS screen-share indicator —
   // treat that like pressing stop.
@@ -1817,6 +1839,7 @@ export const FloatingToolbar = () => {
                     micLevel={micLevel}
                     micDevices={micDevices}
                     selectedMicId={selectedMic?.deviceId ?? null}
+                    systemAudioNotice={systemAudioNoticeKey ? t(systemAudioNoticeKey) : null}
                     onMenuOpenChange={setMicMenuOpen}
                     onToggle={handleMicToggle}
                     onSelectMicDevice={(deviceId) => {

@@ -16,6 +16,7 @@ import {
   concatRecordings,
   reencodeRecording,
   getCaptureBackend,
+  getSystemAudioSupportForCapture,
 } from './service';
 
 export function registerRecordingChannels(): void {
@@ -86,4 +87,5 @@ export function registerRecordingChannels(): void {
   handleChannel<[string], string>(CH.recording.REENCODE, (filePath) => reencodeRecording(filePath));
 
   handleChannel(CH.recording.GET_BACKEND, () => getCaptureBackend());
+  handleChannel(CH.recording.GET_SYSTEM_AUDIO_SUPPORT, () => getSystemAudioSupportForCapture());
 }

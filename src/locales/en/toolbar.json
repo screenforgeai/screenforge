@@ -39,5 +39,9 @@
   "noMicsFound": "No microphones found",
   "noMicsFound_desc": "Connect or enable a microphone to choose it here.",
   "microphoneN": "Microphone {{n}}",
-  "stopRecording": "Stop recording"
+  "stopRecording": "Stop recording",
+  "systemAudioUnsupported_macosTooOld": "System audio isn't recorded on this version of macOS (macOS 13 or later is needed). Only your microphone is recorded.",
+  "systemAudioUnsupported_linux": "System audio isn't recorded on Linux yet. Only your microphone is recorded.",
+  "systemAudioUnsupported_platform": "System audio can't be recorded on this system. Only your microphone is recorded.",
+  "recordingDisplayRemoved": "The display you were recording was disconnected, so the recording stopped. Everything up to that point was kept."
 }

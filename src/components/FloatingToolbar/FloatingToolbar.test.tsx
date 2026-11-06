@@ -150,6 +150,8 @@ function createScreenforgeMock(backend: CaptureBackend) {
     onSceneOverlayReady: vi.fn(noopUnsubscribe),
     onSceneOverlayClosed: vi.fn(noopUnsubscribe),
     onStopRequested: vi.fn(noopUnsubscribe),
+    onRecordingSourceLost: vi.fn(noopUnsubscribe),
+    getSystemAudioSupport: vi.fn().mockResolvedValue({ supported: true }),
     prepareRecordingStartPermissions: vi.fn().mockResolvedValue(undefined),
     startRecording: vi.fn().mockResolvedValue(undefined),
     stopRecording: vi.fn().mockResolvedValue({
@@ -303,6 +305,35 @@ describe('FloatingToolbar recording widget', () => {
         expect.objectContaining({ filePath: '/tmp/final.mp4', duration: 3 }),
       );
       expect(screenforge.recordingFailed).not.toHaveBeenCalled();
+    });
+
+    it('stops and explains why when the recorded display is disconnected', async () => {
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+
+      const onSourceLost = screenforge.onRecordingSourceLost.mock.calls.at(-1)?.[0] as (info: {
+        reason: 'display-removed';
+      }) => void;
+      act(() => onSourceLost({ reason: 'display-removed' }));
+
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+      expect(screenforge.systemWarning).toHaveBeenCalledWith(
+        'The display you were recording was disconnected, so the recording stopped. Everything up to that point was kept.',
+      );
+    });
+
+    it('ignores a disconnected display while not recording', async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.onRecordingSourceLost).toHaveBeenCalled());
+
+      const onSourceLost = screenforge.onRecordingSourceLost.mock.calls.at(-1)?.[0] as (info: {
+        reason: 'display-removed';
+      }) => void;
+      act(() => onSourceLost({ reason: 'display-removed' }));
+
+      expect(screenforge.stopRecording).not.toHaveBeenCalled();
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
     });
   });
 

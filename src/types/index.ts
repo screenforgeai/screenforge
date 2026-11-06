@@ -69,6 +69,19 @@ export interface UpdaterState {
  */
 export type CaptureBackend = 'native' | 'ffmpeg-x11' | 'wayland-portal' | 'unsupported';
 
+/** Why system (desktop) audio can't be recorded alongside the screen here. */
+export type SystemAudioUnsupportedReason =
+  | 'macos-too-old'
+  | 'linux-not-supported'
+  | 'platform-not-supported';
+
+export type SystemAudioSupport =
+  | { supported: true }
+  | { supported: false; reason: SystemAudioUnsupportedReason };
+
+/** Why a recording had to stop on its own (sent to the toolbar). */
+export type RecordingSourceLostReason = 'display-removed';
+
 export interface DesktopSource {
   id: string;
   name: string;
@@ -554,6 +567,8 @@ export interface ScreenforgeAPI {
   onRecordingProcessing: (cb: () => void) => () => void;
   onRecordingFailed: (cb: (message: string) => void) => () => void;
   onStopRequested: (cb: () => void) => () => void;
+  onRecordingSourceLost: (cb: (info: { reason: RecordingSourceLostReason }) => void) => () => void;
+  getSystemAudioSupport: () => Promise<SystemAudioSupport>;
   activateAppendMode: () => void;
   getAppendMode: () => Promise<boolean>;
   clearAppendMode: () => Promise<void>;
