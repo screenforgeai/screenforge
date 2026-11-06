@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
+import { useStore } from 'src/store';
 
 interface TimelineHotkeys {
   onTogglePlay: () => void;
@@ -28,6 +29,10 @@ function blurFocusedButtonOrAction(): void {
   }
 }
 
+// The Screenshot editor overlays the timeline; its keys (Delete, Cmd+Z, T…)
+// must not also edit the video underneath.
+const isTimelineFocusable = () => useStore.getState().screenshotCapture === null;
+
 export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
   const callbacksRef = useRef<TimelineHotkeys>(callbacks);
 
@@ -41,7 +46,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onTogglePlay();
     },
-    { preventDefault: true, enableOnFormTags: false },
+    { preventDefault: true, enableOnFormTags: false, enabled: isTimelineFocusable },
     [],
   );
 
@@ -51,7 +56,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onSelectAll();
     },
-    { preventDefault: true },
+    { preventDefault: true, enabled: isTimelineFocusable },
     [],
   );
 
@@ -61,7 +66,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onSplitAtPlayhead();
     },
-    { preventDefault: true },
+    { preventDefault: true, enabled: isTimelineFocusable },
     [],
   );
 
@@ -71,7 +76,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onRedo();
     },
-    { preventDefault: true },
+    { preventDefault: true, enabled: isTimelineFocusable },
     [],
   );
 
@@ -81,11 +86,16 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onUndo();
     },
-    { preventDefault: true },
+    { preventDefault: true, enabled: isTimelineFocusable },
     [],
   );
 
-  useHotkeys('escape', () => callbacksRef.current.onClearSelection(), {}, []);
+  useHotkeys(
+    'escape',
+    () => callbacksRef.current.onClearSelection(),
+    { enabled: isTimelineFocusable },
+    [],
+  );
 
   useHotkeys(
     'delete, backspace',
@@ -93,20 +103,35 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onDeleteSelected();
     },
-    { preventDefault: true },
+    { preventDefault: true, enabled: isTimelineFocusable },
     [],
   );
 
-  useHotkeys('z', () => callbacksRef.current.onAddZoom(), { preventDefault: true }, []);
+  useHotkeys(
+    'z',
+    () => callbacksRef.current.onAddZoom(),
+    { preventDefault: true, enabled: isTimelineFocusable },
+    [],
+  );
 
   useHotkeys(
     'shift+z',
     () => callbacksRef.current.onAddCinematicZoom(),
-    { preventDefault: true },
+    { preventDefault: true, enabled: isTimelineFocusable },
     [],
   );
 
-  useHotkeys('t', () => callbacksRef.current.onAddText(), { preventDefault: true }, []);
+  useHotkeys(
+    't',
+    () => callbacksRef.current.onAddText(),
+    { preventDefault: true, enabled: isTimelineFocusable },
+    [],
+  );
 
-  useHotkeys('m', () => callbacksRef.current.onAddMask(), { preventDefault: true }, []);
+  useHotkeys(
+    'm',
+    () => callbacksRef.current.onAddMask(),
+    { preventDefault: true, enabled: isTimelineFocusable },
+    [],
+  );
 }

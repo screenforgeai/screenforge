@@ -134,6 +134,14 @@ export const CH = {
     CONFIRM: 'area-selector:confirm',
     CANCEL: 'area-selector:cancel',
   },
+  screenshot: {
+    // Toolbar → main: hide the toolbar, grab a still, hand it to the main window
+    CAPTURE: 'screenshot:capture',
+    // Main → main window: a still is ready for the Screenshot editor
+    CAPTURED: 'screenshot:captured',
+    // Renderer → main: put a rendered PNG on the system clipboard
+    COPY: 'screenshot:copy',
+  },
   app: {
     SAVE_SCREENSHOT: 'app:save-screenshot',
     QUIT: 'app:quit',

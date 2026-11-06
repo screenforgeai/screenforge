@@ -41,6 +41,7 @@ import type {
 } from '../../types/index';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
+import { FloatingToolbarScreenshot } from './_components/FloatingToolbarScreenshot';
 
 type SourceTab = 'display' | 'window' | 'area';
 type RecordState = 'idle' | 'countdown' | 'recording' | 'paused';
@@ -306,6 +307,7 @@ export const FloatingToolbar = () => {
   const [teleprompterLoading, setTeleprompterLoading] = useState(false);
   const teleprompterLoadingRef = useRef(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [screenshotMenuOpen, setScreenshotMenuOpen] = useState(false);
   const [isAppendMode, setIsAppendMode] = useState(false);
   const [sceneOverlayOpen, setSceneOverlayOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -1417,7 +1419,12 @@ export const FloatingToolbar = () => {
     cameraDevices[0] ??
     null;
   const overlayActive =
-    isDragging || windowMenuOpen || micMenuOpen || cameraMenuOpen || moreMenuOpen;
+    isDragging ||
+    windowMenuOpen ||
+    micMenuOpen ||
+    cameraMenuOpen ||
+    moreMenuOpen ||
+    screenshotMenuOpen;
   const isPaused = recordState === 'paused';
 
   const setToolbarMouseInteractivity = useCallback((interactive: boolean) => {
@@ -1981,6 +1988,29 @@ export const FloatingToolbar = () => {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+
+                  {/* Screenshot (no recording) */}
+                  <FloatingToolbarScreenshot
+                    disabled={recordState !== 'idle'}
+                    displaySourceId={
+                      resolveSourceIdForTab('display', selectedSource, sources) ?? 'screen:0'
+                    }
+                    windowSources={windowSources}
+                    sourcesLoading={sourcesLoading}
+                    getWindowLabel={getWindowSourcePrimaryLabel}
+                    ensurePermissions={ensureRecordingStartPermissions}
+                    onMenuOpenChange={(open) => {
+                      setScreenshotMenuOpen(open);
+                      if (open) {
+                        setSourcesLoading(true);
+                        window.screenforge
+                          .getSources()
+                          .then(setSources)
+                          .catch(() => undefined)
+                          .finally(() => setSourcesLoading(false));
+                      }
+                    }}
+                  />
 
                   <div className="mx-2"></div>
 

@@ -3,6 +3,7 @@ import type {
   ProjectKeyboardSettings,
   RecordingResult,
   SavedProject,
+  ScreenshotCapture,
   CaptionSettings,
   TextClip,
 } from '../types/index';
@@ -181,6 +182,8 @@ export interface AppStore extends EditorSessionState {
   hiddenLayers: Record<TimelineLayerId, boolean>;
   focusMode: boolean;
   isExporting: boolean;
+  /** Still being edited in the Screenshot editor (UI state, never persisted). */
+  screenshotCapture: ScreenshotCapture | null;
   past: HistoryEntry[];
   future: HistoryEntry[];
   activeGroup: HistoryGroup | null;
@@ -235,6 +238,8 @@ export interface AppStore extends EditorSessionState {
   setActiveWidget: (tab: WidgetTab) => void;
   setFocusMode: (v: boolean) => void;
   setIsExporting: (v: boolean) => void;
+  openScreenshotEditor: (capture: ScreenshotCapture) => void;
+  closeScreenshotEditor: () => void;
   setIsCropEditing: (v: boolean) => void;
   setLayerHidden: (layer: TimelineLayerId, hidden: boolean) => void;
   setIsAppendMode: (v: boolean) => void;
