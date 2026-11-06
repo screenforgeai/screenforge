@@ -75,5 +75,21 @@
   "scenes_recorded": "Aufgezeichnet",
   "scenes_markDone": "Als erledigt markieren",
   "scenes_prevScene": "Vorherige Szene",
-  "scenes_nextScene": "Nächste Szene"
+  "scenes_nextScene": "Nächste Szene",
+  "link_expires": "Läuft am {{date}} ab",
+  "link_neverExpires": "Läuft nie ab",
+  "link_expired": "Link abgelaufen",
+  "link_removed": "Link entfernt",
+  "link_copy": "Link kopieren",
+  "link_copied": "Link kopiert",
+  "link_remove": "Link entfernen",
+  "link_removeTitle": "Freigabelink entfernen?",
+  "link_removeDesc": "Wer den Link zu \"{{name}}\" hat, kann das Video danach nicht mehr ansehen.",
+  "link_removeConfirm": "Link entfernen",
+  "link_removeFailed": "Der Link konnte nicht entfernt werden. Versuche es erneut.",
+  "link_removeFailed_signedOut": "Melde dich erneut bei Director an, um diesen Link zu entfernen.",
+  "link_uploading": "Wird hochgeladen: {{percent}} %",
+  "link_paused": "Upload pausiert",
+  "link_resume": "Fortsetzen",
+  "link_discard": "Verwerfen"
 }

@@ -22,6 +22,11 @@ import ConfirmModal from 'src/components/ConfirmModal';
 import { useNewRecordingFlow } from '../_hooks/useNewRecordingFlow';
 import { trackEvent } from 'src/lib/analytics';
 import { useProjectPersistence } from 'src/components/ProjectPersistenceProvider';
+import { useShareLibrary } from 'src/hooks/useShareLibrary';
+import { useShareJob } from 'src/hooks/useShareJob';
+import { shareExpiry } from 'src/lib/share';
+import type { ProjectShareLink, ShareActionResult } from 'src/types';
+import { ProjectShareStatus } from './ProjectShareStatus';
 import {
   WIDGET_EMPTY_STATE_CLASS,
   WIDGET_EMPTY_TITLE_CLASS,
@@ -104,6 +109,45 @@ export const RecordingWidget = () => {
 
     applyProject(project);
     trackEvent('project_opened');
+  };
+
+  const shareLibrary = useShareLibrary();
+  const shareJob = useShareJob();
+  const [pendingLinkRemoval, setPendingLinkRemoval] = useState<{
+    projectId: string;
+    name: string;
+  } | null>(null);
+  const [isRemovingLink, setIsRemovingLink] = useState(false);
+
+  const removeLink = async (projectId: string) => {
+    const result: ShareActionResult = await window.screenforge
+      .removeShareLink(projectId)
+      .catch((): ShareActionResult => ({ ok: false, error: 'failed' }));
+    if ('error' in result) {
+      toast.error(
+        t(result.error === 'signed-out' ? 'link_removeFailed_signedOut' : 'link_removeFailed'),
+      );
+    }
+  };
+
+  const handleRemoveLink = (projectId: string, name: string, link: ProjectShareLink) => {
+    const { kind } = shareExpiry(link);
+    if (kind === 'expires' || kind === 'never') {
+      // Live links stop working for everyone who has them: confirm first.
+      setPendingLinkRemoval({ projectId, name });
+      return;
+    }
+    void removeLink(projectId);
+  };
+
+  const confirmRemoveLink = async () => {
+    if (!pendingLinkRemoval) {
+      return;
+    }
+    setIsRemovingLink(true);
+    await removeLink(pendingLinkRemoval.projectId);
+    setIsRemovingLink(false);
+    setPendingLinkRemoval(null);
   };
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -293,6 +337,14 @@ export const RecordingWidget = () => {
                         {formatTime(projectDurations.get(project.id) ?? project.result.duration)}
                       </div>
                     </motion.div>
+
+                    <ProjectShareStatus
+                      projectId={project.id}
+                      link={shareLibrary.links[project.id]}
+                      pending={shareLibrary.pending[project.id]}
+                      job={shareJob}
+                      onRemove={(link) => handleRemoveLink(project.id, project.name, link)}
+                    />
                   </motion.div>
                 </ButtonWrapper>
               </ContextMenuTrigger>
@@ -327,6 +379,17 @@ export const RecordingWidget = () => {
         onCancel={() => setPendingDeleteId(null)}
         confirmText={t('delete')}
         variant="destructive"
+      />
+
+      <ConfirmModal
+        open={pendingLinkRemoval !== null}
+        title={t('link_removeTitle')}
+        description={t('link_removeDesc', { name: pendingLinkRemoval?.name ?? '' })}
+        onConfirm={confirmRemoveLink}
+        onCancel={() => setPendingLinkRemoval(null)}
+        confirmText={t('link_removeConfirm')}
+        variant="destructive"
+        loading={isRemovingLink}
       />
 
       <ConfirmModal

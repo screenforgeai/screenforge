@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { identifyUser, trackEvent } from 'src/lib/analytics';
 import { SUPPORTED_LANGUAGES, type UserProfile } from 'src/lib/userProfile';
 import { IconGlobe, IconLink, IconUserAccount, IconX } from 'src/lib/icons';
+import type { SettingsSection } from 'src/lib/settingsNavigation';
 import { DirectorAccountPanel } from './DirectorAccountPanel';
 import i18n from '../../../i18n';
 import {
@@ -29,12 +30,12 @@ import {
 
 type Props = {
   open: boolean;
+  /** The section to open on; the last one used when not given. */
+  section?: SettingsSection;
   onClose: () => void;
 };
 
-type SettingsSection = 'profile' | 'language' | 'director';
-
-export const SettingsModal = ({ open, onClose }: Props) => {
+export const SettingsModal = ({ open, section, onClose }: Props) => {
   const { t } = useTranslation('settings');
   const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
 
@@ -58,6 +59,12 @@ export const SettingsModal = ({ open, onClose }: Props) => {
   const [savedLang, setSavedLang] = useState<string>(initialLang);
 
   const hasOpenedRef = useRef(false);
+
+  useEffect(() => {
+    if (open && section) {
+      setActiveSection(section);
+    }
+  }, [open, section]);
 
   // Load persisted settings from main process when modal opens
   useEffect(() => {

@@ -85,6 +85,8 @@ beforeEach(() => {
       restartToApplyUpdate: vi.fn().mockResolvedValue(undefined),
       revealExportInFolder: vi.fn().mockResolvedValue(undefined),
       getPresets: vi.fn().mockResolvedValue([]),
+      getShareState: vi.fn().mockResolvedValue({ status: 'idle' }),
+      onShareStateChanged: vi.fn(() => vi.fn()),
     },
     writable: true,
     configurable: true,

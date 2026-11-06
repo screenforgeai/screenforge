@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { trackEvent } from 'src/lib/analytics';
@@ -19,6 +19,8 @@ import { useVideoExport } from '../../hooks/useVideoExport';
 import { useStore } from '../../store';
 import type { ExportSettings } from '../../types';
 import ExportModal from '../ExportModal';
+import { ShareBackgroundToasts } from '../Share/ShareBackgroundToasts';
+import { useShareJob } from '../../hooks/useShareJob';
 import { EDITOR_SIDEBAR_WIDTH_CLASS } from '../layout';
 import { useProjectPersistence } from '../ProjectPersistenceProvider';
 import { ActivityIndicator } from './_components/ActivityIndicator';
@@ -123,6 +125,10 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
   const [exportOpen, setExportOpen] = useState(false);
   const [milestoneKofiOpen, setMilestoneKofiOpen] = useState(false);
   const [milestoneNumber, setMilestoneNumber] = useState(1);
+  // Shown once the export window closes, so it never covers the share link.
+  const pendingMilestoneRef = useRef<number | null>(null);
+  const shareJob = useShareJob();
+  const { t: tExport } = useTranslation('export');
   const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
   const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
   const updaterState = useUpdaterState();
@@ -175,19 +181,13 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
 
   const handleExport = async (outputPath: string, settings: ExportSettings) => {
     try {
-      const finalPath = await runExport(outputPath, settings);
-      await window.screenforge.revealExportInFolder(finalPath).catch(() => undefined);
+      await runExport(outputPath, settings);
       new Notification('Export complete', { body: `${recordingName} exported successfully` });
-      toast.success(t('toast_exported', { path: finalPath }));
-      setExportOpen(false);
-      resetExport();
+      // The export window stays open on its done view: where the file went, and Share link.
 
       const count = incrementExportCount();
       if (count % MILESTONE_EXPORT_COUNT === 0) {
-        const milestone = Math.floor(count / MILESTONE_EXPORT_COUNT);
-        trackEvent('milestone_kofi_shown', { export_count: count, milestone });
-        setMilestoneNumber(milestone);
-        setMilestoneKofiOpen(true);
+        pendingMilestoneRef.current = Math.floor(count / MILESTONE_EXPORT_COUNT);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Export failed';
@@ -409,11 +409,30 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
           } else {
             resetExport();
           }
+          if (
+            shareJob.status === 'preparing' ||
+            shareJob.status === 'uploading' ||
+            shareJob.status === 'finishing'
+          ) {
+            toast(tExport('share_backgroundUploading'));
+          }
+          const milestone = pendingMilestoneRef.current;
+          if (milestone !== null) {
+            pendingMilestoneRef.current = null;
+            trackEvent('milestone_kofi_shown', {
+              export_count: milestone * MILESTONE_EXPORT_COUNT,
+              milestone,
+            });
+            setMilestoneNumber(milestone);
+            setMilestoneKofiOpen(true);
+          }
         }}
         onCancelExport={cancelExport}
         onExport={handleExport}
         onOpenFFmpegSetup={onOpenFFmpegSetup}
       />
+
+      <ShareBackgroundToasts quiet={exportOpen} />
 
       <KofiModal
         open={milestoneKofiOpen}

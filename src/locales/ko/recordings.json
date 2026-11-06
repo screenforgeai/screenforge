@@ -75,5 +75,21 @@
   "scenes_recorded": "녹화됨",
   "scenes_markDone": "완료로 표시",
   "scenes_prevScene": "이전 장면",
-  "scenes_nextScene": "다음 장면"
+  "scenes_nextScene": "다음 장면",
+  "link_expires": "{{date}}에 만료",
+  "link_neverExpires": "만료되지 않음",
+  "link_expired": "링크 만료됨",
+  "link_removed": "링크 삭제됨",
+  "link_copy": "링크 복사",
+  "link_copied": "링크를 복사했습니다",
+  "link_remove": "링크 삭제",
+  "link_removeTitle": "공유 링크를 삭제할까요?",
+  "link_removeDesc": "\"{{name}}\" 링크를 가진 사람은 더 이상 볼 수 없게 됩니다.",
+  "link_removeConfirm": "링크 삭제",
+  "link_removeFailed": "링크를 삭제하지 못했습니다. 다시 시도하세요.",
+  "link_removeFailed_signedOut": "이 링크를 삭제하려면 Director에 다시 로그인하세요.",
+  "link_uploading": "업로드 중 {{percent}}%",
+  "link_paused": "업로드 일시 중지됨",
+  "link_resume": "재개",
+  "link_discard": "삭제"
 }

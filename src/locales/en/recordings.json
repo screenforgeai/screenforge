@@ -75,5 +75,21 @@
   "scenes_recorded": "Recorded",
   "scenes_markDone": "Mark done",
   "scenes_prevScene": "Previous scene",
-  "scenes_nextScene": "Next scene"
+  "scenes_nextScene": "Next scene",
+  "link_expires": "Expires {{date}}",
+  "link_neverExpires": "Never expires",
+  "link_expired": "Link expired",
+  "link_removed": "Link removed",
+  "link_copy": "Copy link",
+  "link_copied": "Link copied",
+  "link_remove": "Remove link",
+  "link_removeTitle": "Remove share link?",
+  "link_removeDesc": "People with the link to \"{{name}}\" won't be able to watch it anymore.",
+  "link_removeConfirm": "Remove link",
+  "link_removeFailed": "Couldn't remove the link. Try again.",
+  "link_removeFailed_signedOut": "Sign in to Director again to remove this link.",
+  "link_uploading": "Uploading {{percent}}%",
+  "link_paused": "Upload paused",
+  "link_resume": "Resume",
+  "link_discard": "Discard"
 }
