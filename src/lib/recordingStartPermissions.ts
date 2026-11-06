@@ -1,48 +1,34 @@
-import type { StartupPermission, StartupPermissionStatus } from '../types';
+import type { StartupPermissionStatus } from '../types';
 
+// Shown as a system notification when a recording is blocked. The main window
+// opens the permissions guide at the same time, which has the actual steps.
 export const SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE =
-  'Screen Recording permission is required before you start. System Settings has been opened. After enabling it, quit and reopen Screenforge.';
+  'Screen Recording permission is required before you start. Follow the permissions guide in the Screenforge window to turn it on.';
 
 export const ACCESSIBILITY_PERMISSION_REQUIRED_MESSAGE =
-  'Accessibility permission is required for cursor tracking. Approve the macOS prompt, then quit and reopen Screenforge.';
-
-export const SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE =
-  'Screen Recording permission is still pending. Quit and reopen Screenforge if it is already enabled in System Settings.';
-
-export const ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE =
-  'Accessibility permission is still pending. Quit and reopen Screenforge if it is already enabled in System Settings.';
+  'Accessibility permission is required for cursor tracking. Follow the permissions guide in the Screenforge window to turn it on.';
 
 export interface RecordingStartPermissionAPI {
-  requestScreenAccess: () => Promise<StartupPermissionStatus>;
+  getScreenPermissionStatus: () => Promise<StartupPermissionStatus>;
   getAccessibilityPermissionStatus: () =>
     | Promise<StartupPermissionStatus>
     | StartupPermissionStatus;
-  requestAccessibilityAccess: () => Promise<StartupPermissionStatus>;
-  openSystemSettings: (permission: StartupPermission) => Promise<boolean | void> | boolean | void;
 }
 
+/**
+ * Read-only check before a recording starts. It never prompts or opens System
+ * Settings: when something is missing, the permissions guide takes over.
+ */
 export async function ensureRecordingStartPermissions(
   api: RecordingStartPermissionAPI,
 ): Promise<void> {
-  const screenStatus = await api.requestScreenAccess();
+  const screenStatus = await api.getScreenPermissionStatus();
   if (screenStatus !== 'granted') {
-    const opened = (await api.openSystemSettings('screen')) !== false;
-    throw new Error(
-      opened
-        ? SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE
-        : SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
-    );
+    throw new Error(SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE);
   }
 
   const accessibilityStatus = await api.getAccessibilityPermissionStatus();
-  if (accessibilityStatus === 'granted') {
-    return;
+  if (accessibilityStatus !== 'granted') {
+    throw new Error(ACCESSIBILITY_PERMISSION_REQUIRED_MESSAGE);
   }
-
-  const nextAccessibilityStatus = await api.requestAccessibilityAccess();
-  if (nextAccessibilityStatus === 'granted') {
-    return;
-  }
-
-  throw new Error(ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE);
 }

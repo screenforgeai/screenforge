@@ -10,7 +10,7 @@ import log, { getLogFilePath } from './lib/logger';
 import { installNavigationGuards } from './lib/navigation-guard';
 import { pinWindowToAllWorkspaces } from './lib/workspace-pin';
 import { registerAppChannels } from './modules/app/channel';
-import { runPreloadTasks, requestAccessibilityAccess } from './modules/app/service';
+import { runPreloadTasks } from './modules/app/service';
 import { initTelemetry, shutdownTelemetry, trackEvent } from './lib/telemetry';
 import { registerWindowChannels } from './modules/app/window-controller';
 import { resetToolbarMousePassthrough, resetToolbarShapeState } from './modules/app/toolbar-mouse';
@@ -27,7 +27,6 @@ import {
 import { getOverlayWindow } from './modules/scene-overlay/service';
 import { getTeleprompterWindow } from './modules/teleprompter/service';
 import { registerSourcesChannels } from './modules/sources/channel';
-import { requestMacScreenCaptureAccess } from './modules/sources/service';
 import { registerExportChannels } from './modules/export/channel';
 import {
   isExportBusy,
@@ -487,9 +486,8 @@ app.on('ready', async () => {
 
   trackEvent('app_launched', { is_packaged: app.isPackaged });
 
-  // Prompt for screen capture and accessibility early so they don't block the user when they click record.
-  void requestMacScreenCaptureAccess();
-  void requestAccessibilityAccess();
+  // No raw macOS permission prompts here: the main window shows the
+  // permissions guide when Screen Recording or Accessibility is missing.
 
   markStartupComplete();
 

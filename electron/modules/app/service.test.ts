@@ -2,9 +2,8 @@
 
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
+  ACCESSIBILITY_PERMISSION_REQUIRED_MESSAGE,
   SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE,
-  SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
 } from '../../../src/lib/recordingStartPermissions';
 
 const electronMock = vi.hoisted(() => ({
@@ -21,6 +20,7 @@ const electronMock = vi.hoisted(() => ({
 
 const sourcesMock = vi.hoisted(() => ({
   getMacScreenPermissionStatus: vi.fn(),
+  requestMacScreenCaptureAccess: vi.fn(),
   getSources: vi.fn(),
 }));
 
@@ -47,6 +47,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../sources/service', () => ({
   getMacScreenPermissionStatus: sourcesMock.getMacScreenPermissionStatus,
+  requestMacScreenCaptureAccess: sourcesMock.requestMacScreenCaptureAccess,
   getSources: sourcesMock.getSources,
 }));
 
@@ -92,7 +93,7 @@ describe('app permission service', () => {
     electronMock.isTrustedAccessibilityClient.mockImplementation((prompt: boolean) => !prompt);
   });
 
-  it('opens Screen Recording settings once on the first blocked attempt', async () => {
+  it('refuses to start without Screen Recording and leaves the next step to the guide', async () => {
     sourcesMock.getMacScreenPermissionStatus.mockResolvedValue('denied');
     electronMock.isTrustedAccessibilityClient.mockReturnValue(false);
 
@@ -102,60 +103,21 @@ describe('app permission service', () => {
       SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE,
     );
 
-    expect(electronMock.shellOpenExternal).toHaveBeenCalledOnce();
-    expect(electronMock.shellOpenExternal).toHaveBeenCalledWith(
-      'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-    );
+    expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
     expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalledWith(true);
   });
 
-  it('does not reopen Screen Recording settings on repeated blocked attempts', async () => {
-    sourcesMock.getMacScreenPermissionStatus.mockResolvedValue('denied');
-    electronMock.isTrustedAccessibilityClient.mockReturnValue(false);
-
-    const { prepareRecordingStartPermissions } = await loadServiceModule();
-
-    await expect(prepareRecordingStartPermissions()).rejects.toThrow(
-      SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE,
-    );
-    await expect(prepareRecordingStartPermissions()).rejects.toThrow(
-      SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
-    );
-
-    expect(electronMock.shellOpenExternal).toHaveBeenCalledOnce();
-  });
-
-  it('prompts for Accessibility once without opening System Settings', async () => {
+  it('refuses to start without Accessibility and does not raise the raw macOS prompt', async () => {
     sourcesMock.getMacScreenPermissionStatus.mockResolvedValue('granted');
     electronMock.isTrustedAccessibilityClient.mockImplementation(() => false);
 
     const { prepareRecordingStartPermissions } = await loadServiceModule();
 
     await expect(prepareRecordingStartPermissions()).rejects.toThrow(
-      ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
+      ACCESSIBILITY_PERMISSION_REQUIRED_MESSAGE,
     );
 
-    expect(electronMock.isTrustedAccessibilityClient).toHaveBeenCalledWith(true);
-    expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
-  });
-
-  it('does not re-prompt Accessibility or reopen settings on repeated blocked attempts', async () => {
-    sourcesMock.getMacScreenPermissionStatus.mockResolvedValue('granted');
-    electronMock.isTrustedAccessibilityClient.mockImplementation(() => false);
-
-    const { prepareRecordingStartPermissions } = await loadServiceModule();
-
-    await expect(prepareRecordingStartPermissions()).rejects.toThrow(
-      ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
-    );
-    await expect(prepareRecordingStartPermissions()).rejects.toThrow(
-      ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
-    );
-
-    const promptCalls = electronMock.isTrustedAccessibilityClient.mock.calls.filter(
-      ([prompt]) => prompt === true,
-    );
-    expect(promptCalls).toHaveLength(1);
+    expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalledWith(true);
     expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
   });
 
@@ -180,11 +142,95 @@ describe('app permission service', () => {
     const { prepareRecordingStartPermissionsIfNeeded } = await loadServiceModule();
 
     await expect(prepareRecordingStartPermissionsIfNeeded()).rejects.toThrow(
-      SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
+      SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE,
     );
 
     expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
     expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalledWith(true);
+  });
+
+  describe('permissions guide', () => {
+    it('reports both permissions as required on macOS', async () => {
+      sourcesMock.getMacScreenPermissionStatus.mockResolvedValue('denied');
+      electronMock.isTrustedAccessibilityClient.mockReturnValue(false);
+
+      const { getRecordingPermissions } = await loadServiceModule();
+
+      await expect(getRecordingPermissions()).resolves.toEqual({
+        required: true,
+        screen: 'denied',
+        accessibility: 'not-determined',
+      });
+    });
+
+    it('picks up a grant on the next read without a relaunch', async () => {
+      sourcesMock.getMacScreenPermissionStatus
+        .mockResolvedValueOnce('denied')
+        .mockResolvedValueOnce('granted');
+      electronMock.isTrustedAccessibilityClient
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(true);
+
+      const { getRecordingPermissions } = await loadServiceModule();
+
+      await expect(getRecordingPermissions()).resolves.toMatchObject({
+        screen: 'denied',
+        accessibility: 'not-determined',
+      });
+      await expect(getRecordingPermissions()).resolves.toMatchObject({
+        screen: 'granted',
+        accessibility: 'granted',
+      });
+      // Polling reads must stay passive: never a system prompt.
+      expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalledWith(true);
+    });
+
+    it('registers Screenforge for Screen Recording, then opens that pane', async () => {
+      sourcesMock.getMacScreenPermissionStatus.mockResolvedValue('not-determined');
+
+      const { openPermissionSettings } = await loadServiceModule();
+      await openPermissionSettings('screen');
+
+      expect(sourcesMock.requestMacScreenCaptureAccess).toHaveBeenCalledOnce();
+      expect(electronMock.shellOpenExternal).toHaveBeenCalledWith(
+        'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+      );
+    });
+
+    it('opens the Screen Recording pane without re-requesting once access is granted', async () => {
+      sourcesMock.getMacScreenPermissionStatus.mockResolvedValue('granted');
+
+      const { openPermissionSettings } = await loadServiceModule();
+      await openPermissionSettings('screen');
+
+      expect(sourcesMock.requestMacScreenCaptureAccess).not.toHaveBeenCalled();
+      expect(electronMock.shellOpenExternal).toHaveBeenCalledOnce();
+    });
+
+    it('registers Screenforge for Accessibility once, and opens that pane every time', async () => {
+      electronMock.isTrustedAccessibilityClient.mockReturnValue(false);
+
+      const { openPermissionSettings } = await loadServiceModule();
+      await openPermissionSettings('accessibility');
+      await openPermissionSettings('accessibility');
+
+      const promptCalls = electronMock.isTrustedAccessibilityClient.mock.calls.filter(
+        ([prompt]) => prompt === true,
+      );
+      expect(promptCalls).toHaveLength(1);
+      expect(electronMock.shellOpenExternal).toHaveBeenCalledTimes(2);
+      expect(electronMock.shellOpenExternal).toHaveBeenCalledWith(
+        'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+      );
+    });
+
+    it('relaunches the app so macOS applies a pending Screen Recording grant', async () => {
+      const { relaunchApp } = await loadServiceModule();
+      relaunchApp();
+
+      expect(electronMock.app.relaunch).toHaveBeenCalledOnce();
+      expect(electronMock.app.exit).toHaveBeenCalledWith(0);
+    });
   });
 
   describe('on Linux', () => {
@@ -232,11 +278,53 @@ describe('app permission service', () => {
       expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalled();
     });
 
+    it('does not require the macOS-only permissions', async () => {
+      const { getRecordingPermissions } = await loadServiceModule();
+
+      await expect(getRecordingPermissions()).resolves.toEqual({
+        required: false,
+        screen: 'granted',
+        accessibility: 'granted',
+      });
+      expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalled();
+      expect(sourcesMock.getMacScreenPermissionStatus).not.toHaveBeenCalled();
+    });
+
+    it('never opens a settings pane from the guide', async () => {
+      const { openPermissionSettings } = await loadServiceModule();
+
+      await openPermissionSettings('screen');
+      await openPermissionSettings('accessibility');
+
+      expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
+      expect(sourcesMock.requestMacScreenCaptureAccess).not.toHaveBeenCalled();
+    });
+
     it('lets recording-start permission preparation pass through as a no-op', async () => {
       const { prepareRecordingStartPermissions } = await loadServiceModule();
 
       await expect(prepareRecordingStartPermissions()).resolves.toBeUndefined();
       expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('on Windows', () => {
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', {
+        configurable: true,
+        value: 'win32',
+      });
+    });
+
+    it('does not require the macOS-only permissions', async () => {
+      const { getRecordingPermissions } = await loadServiceModule();
+
+      await expect(getRecordingPermissions()).resolves.toEqual({
+        required: false,
+        screen: 'granted',
+        accessibility: 'granted',
+      });
+      expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalled();
     });
   });
 

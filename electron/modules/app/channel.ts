@@ -1,7 +1,12 @@
 import { app } from 'electron';
 import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
-import type { FeedbackSubmission, SerializedError } from '../../../src/types/index';
+import type {
+  FeedbackSubmission,
+  GuidedPermission,
+  RecordingPermissionsState,
+  SerializedError,
+} from '../../../src/types/index';
 import {
   captureException,
   getAppVersion,
@@ -14,6 +19,8 @@ import {
   requestScreenAccess,
   focusWindow,
   getStartupPermissionStatuses,
+  getRecordingPermissions,
+  openPermissionSettings,
   openSystemSettings,
   openExternalUrl,
   relaunchApp,
@@ -35,6 +42,12 @@ export function registerAppChannels(): void {
   );
   handleChannel(CH.app.GET_STARTUP_PERMISSION_STATUSES, () => getStartupPermissionStatuses());
   handleChannel(CH.app.REQUEST_SCREEN_ACCESS, () => requestScreenAccess());
+  handleChannel<[], RecordingPermissionsState>(CH.app.GET_RECORDING_PERMISSIONS, () =>
+    getRecordingPermissions(),
+  );
+  handleChannel<[GuidedPermission], void>(CH.app.OPEN_PERMISSION_SETTINGS, (permission) =>
+    openPermissionSettings(permission),
+  );
   handleChannel(CH.app.REQUEST_MEDIA_ACCESS, (permission) => requestMediaAccess(permission));
   handleChannel<[], string>(CH.app.GET_LOG_FILE_PATH, () => getDiagnosticLogFilePath());
   handleChannel<[], string>(CH.app.READ_LOG_FILE, () => readDiagnosticLog());

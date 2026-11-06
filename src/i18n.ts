@@ -28,6 +28,7 @@ import widgets from './locales/en/widgets.json';
 import settings from './locales/en/settings.json';
 import mask from './locales/en/mask.json';
 import motion from './locales/en/motion.json';
+import onboarding from './locales/en/onboarding.json';
 
 // Spanish
 import commonEs from './locales/es/common.json';
@@ -53,6 +54,7 @@ import timelineEs from './locales/es/timeline.json';
 import widgetsEs from './locales/es/widgets.json';
 import settingsEs from './locales/es/settings.json';
 import maskEs from './locales/es/mask.json';
+import onboardingEs from './locales/es/onboarding.json';
 
 // French
 import commonFr from './locales/fr/common.json';
@@ -78,6 +80,7 @@ import timelineFr from './locales/fr/timeline.json';
 import widgetsFr from './locales/fr/widgets.json';
 import settingsFr from './locales/fr/settings.json';
 import maskFr from './locales/fr/mask.json';
+import onboardingFr from './locales/fr/onboarding.json';
 
 // German
 import commonDe from './locales/de/common.json';
@@ -103,6 +106,7 @@ import timelineDe from './locales/de/timeline.json';
 import widgetsDe from './locales/de/widgets.json';
 import settingsDe from './locales/de/settings.json';
 import maskDe from './locales/de/mask.json';
+import onboardingDe from './locales/de/onboarding.json';
 
 // Japanese
 import commonJa from './locales/ja/common.json';
@@ -128,6 +132,7 @@ import timelineJa from './locales/ja/timeline.json';
 import widgetsJa from './locales/ja/widgets.json';
 import settingsJa from './locales/ja/settings.json';
 import maskJa from './locales/ja/mask.json';
+import onboardingJa from './locales/ja/onboarding.json';
 
 // Portuguese
 import commonPt from './locales/pt/common.json';
@@ -153,6 +158,7 @@ import timelinePt from './locales/pt/timeline.json';
 import widgetsPt from './locales/pt/widgets.json';
 import settingsPt from './locales/pt/settings.json';
 import maskPt from './locales/pt/mask.json';
+import onboardingPt from './locales/pt/onboarding.json';
 
 // Korean
 import commonKo from './locales/ko/common.json';
@@ -178,6 +184,7 @@ import timelineKo from './locales/ko/timeline.json';
 import widgetsKo from './locales/ko/widgets.json';
 import settingsKo from './locales/ko/settings.json';
 import maskKo from './locales/ko/mask.json';
+import onboardingKo from './locales/ko/onboarding.json';
 
 // eslint-disable-next-line import/no-named-as-default-member
 i18n.use(initReactI18next).init({
@@ -208,6 +215,7 @@ i18n.use(initReactI18next).init({
     'settings',
     'mask',
     'motion',
+    'onboarding',
   ],
   defaultNS: 'common',
   resources: {
@@ -236,6 +244,7 @@ i18n.use(initReactI18next).init({
       settings,
       mask,
       motion,
+      onboarding,
     },
     es: {
       common: commonEs,
@@ -261,6 +270,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsEs,
       settings: settingsEs,
       mask: maskEs,
+      onboarding: onboardingEs,
     },
     fr: {
       common: commonFr,
@@ -286,6 +296,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsFr,
       settings: settingsFr,
       mask: maskFr,
+      onboarding: onboardingFr,
     },
     de: {
       common: commonDe,
@@ -311,6 +322,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsDe,
       settings: settingsDe,
       mask: maskDe,
+      onboarding: onboardingDe,
     },
     ja: {
       common: commonJa,
@@ -336,6 +348,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsJa,
       settings: settingsJa,
       mask: maskJa,
+      onboarding: onboardingJa,
     },
     pt: {
       common: commonPt,
@@ -361,6 +374,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsPt,
       settings: settingsPt,
       mask: maskPt,
+      onboarding: onboardingPt,
     },
     ko: {
       common: commonKo,
@@ -386,6 +400,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsKo,
       settings: settingsKo,
       mask: maskKo,
+      onboarding: onboardingKo,
     },
   },
   interpolation: {

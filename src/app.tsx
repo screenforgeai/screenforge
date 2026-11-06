@@ -12,6 +12,12 @@ import { Toaster } from 'sonner';
 import { useStore } from './store';
 import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/toast';
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
+import {
+  PermissionsGuide,
+  type PermissionsGuideCloseReason,
+} from './components/PermissionsGuide/PermissionsGuide';
+import { shouldShowPermissionsGuideOnLaunch } from './lib/permissionsGuide';
+import { useSampleProject } from './hooks/useSampleProject';
 import { trackEvent } from './lib/analytics';
 import i18n from './i18n';
 
@@ -67,6 +73,38 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   );
 
   const [ffmpegMissing, setFfmpegMissing] = useState(false);
+  const [permissionsGuideOpen, setPermissionsGuideOpen] = useState(false);
+  const { openSampleProject } = useSampleProject();
+
+  // First run on macOS: explain the permissions instead of firing raw OS
+  // prompts. Windows and Linux report nothing missing, so it never shows there.
+  useEffect(() => {
+    void Promise.all([
+      window.screenforge.getRecordingPermissions(),
+      window.screenforge.getSettings(),
+    ])
+      .then(([permissions, settings]) => {
+        if (shouldShowPermissionsGuideOnLaunch(permissions, settings.permissionsGuideDismissed)) {
+          setPermissionsGuideOpen(true);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    return window.screenforge.onPermissionsGuideRequested(() => {
+      setPermissionsGuideOpen(true);
+    });
+  }, []);
+
+  const closePermissionsGuide = (reason: PermissionsGuideCloseReason) => {
+    setPermissionsGuideOpen(false);
+    if (reason === 'skipped') {
+      void window.screenforge
+        .saveSettings({ permissionsGuideDismissed: true })
+        .catch(() => undefined);
+    }
+  };
 
   useEffect(() => {
     trackEvent('app_opened');
@@ -339,6 +377,14 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
         }}
       />
       <FFmpegSetupModal open={ffmpegMissing} onReady={() => setFfmpegMissing(false)} />
+      <PermissionsGuide
+        open={permissionsGuideOpen && !ffmpegMissing}
+        onClose={closePermissionsGuide}
+        onOpenSample={() => {
+          setPermissionsGuideOpen(false);
+          void openSampleProject('permissions_guide');
+        }}
+      />
     </>
   );
 };

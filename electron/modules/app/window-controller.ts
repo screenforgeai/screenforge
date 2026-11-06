@@ -53,6 +53,20 @@ export function registerWindowChannels({
     getMainWindow()?.focus();
   });
 
+  // Recording was blocked by a missing macOS permission: swap the toolbar for
+  // the main window and let it walk the user through the permissions guide.
+  listenChannel(CH.app.SHOW_PERMISSIONS_GUIDE, () => {
+    log.info('[permissions-guide] requested by toolbar');
+    closeCameraPreview();
+    getToolbarWindow()?.close();
+    setToolbarWindow(null);
+    const mainWindow = getMainWindow();
+    mainWindow?.webContents.send(CH.app.PERMISSIONS_GUIDE_REQUESTED);
+    mainWindow?.show();
+    mainWindow?.focus();
+    app.dock?.show();
+  });
+
   listenChannel(CH.app.SHOW_TOOLBAR, () => {
     getMainWindow()?.hide();
 

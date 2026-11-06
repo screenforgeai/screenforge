@@ -1,0 +1,21 @@
+{
+  "guideTitle": "Screenforge가 화면을 녹화하도록 허용하기",
+  "guideDescription": "첫 녹화 전에 macOS에서 두 가지 권한이 필요합니다. 시스템 설정에서 켜면 이 창이 바로 업데이트됩니다.",
+  "screenTitle": "화면 기록",
+  "screenDescription": "Screenforge가 화면을 캡처할 수 있게 합니다. 녹화본은 Mac에만 저장됩니다.",
+  "accessibilityTitle": "손쉬운 사용",
+  "accessibilityDescription": "Screenforge가 커서, 클릭, 키보드 단축키를 따라갈 수 있게 해서 자동 줌이 어디를 보여줄지 알 수 있습니다.",
+  "statusGranted": "허용됨",
+  "statusMissing": "아직 허용되지 않음",
+  "statusWaiting": "시스템 설정을 기다리는 중…",
+  "openSettings": "시스템 설정 열기",
+  "relaunchHint": "켰는데도 Screenforge가 인식하지 못하나요? macOS는 재시작한 뒤에야 변경 사항을 적용하기도 합니다.",
+  "relaunch": "종료 후 다시 열기",
+  "allSet": "준비가 끝났습니다. 원할 때 녹화를 시작하세요.",
+  "skip": "나중에 하기",
+  "done": "완료",
+  "trySample": "샘플 프로젝트 사용해 보기",
+  "emptyStateHint": "또는 짧은 샘플로 편집기, 자동 줌, 내보내기를 먼저 사용해 보세요.",
+  "sampleProjectName": "샘플 프로젝트",
+  "sampleProjectFailed": "샘플 프로젝트를 열 수 없습니다."
+}

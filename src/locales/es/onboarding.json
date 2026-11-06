@@ -1,0 +1,21 @@
+{
+  "guideTitle": "Permite que Screenforge grabe tu pantalla",
+  "guideDescription": "macOS pide dos permisos antes de tu primera grabación. Actívalos en Configuración del Sistema y esta ventana se actualizará en cuanto lo hagas.",
+  "screenTitle": "Grabación de pantalla",
+  "screenDescription": "Permite que Screenforge capture tu pantalla. Las grabaciones se quedan en tu Mac.",
+  "accessibilityTitle": "Accesibilidad",
+  "accessibilityDescription": "Permite que Screenforge siga tu cursor, tus clics y tus atajos de teclado, para que el zoom automático sepa adónde mirar.",
+  "statusGranted": "Permitido",
+  "statusMissing": "Aún no permitido",
+  "statusWaiting": "Esperando a Configuración del Sistema…",
+  "openSettings": "Abrir Configuración del Sistema",
+  "relaunchHint": "¿Ya lo activaste y Screenforge no lo detecta? A veces macOS solo aplica el cambio después de reiniciar la app.",
+  "relaunch": "Salir y volver a abrir",
+  "allSet": "Todo listo. Empieza a grabar cuando quieras.",
+  "skip": "Omitir por ahora",
+  "done": "Listo",
+  "trySample": "Probar el proyecto de ejemplo",
+  "emptyStateHint": "O prueba primero el editor, el zoom automático y la exportación con un ejemplo corto.",
+  "sampleProjectName": "Proyecto de ejemplo",
+  "sampleProjectFailed": "No se pudo abrir el proyecto de ejemplo."
+}

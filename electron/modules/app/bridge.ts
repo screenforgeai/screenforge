@@ -1,7 +1,14 @@
 import { CH } from '../../channels';
-import { createInvokeBridge, createSendBridge, createSubscription } from '../../lib/ipc-renderer';
+import {
+  createInvokeBridge,
+  createSendBridge,
+  createSubscription,
+  createVoidSubscription,
+} from '../../lib/ipc-renderer';
 import type {
   FeedbackSubmission,
+  GuidedPermission,
+  RecordingPermissionsState,
   PreloadProgress,
   SerializedError,
   RequestableMediaPermission,
@@ -34,6 +41,14 @@ export const appBridge = {
   relaunchApp: createSendBridge<[]>(CH.app.RELAUNCH),
   openExternalUrl: createSendBridge<[string]>(CH.app.OPEN_EXTERNAL_URL),
   openSystemSettings: createSendBridge<[StartupPermission]>(CH.app.OPEN_SYSTEM_SETTINGS),
+  getRecordingPermissions: createInvokeBridge<[], RecordingPermissionsState>(
+    CH.app.GET_RECORDING_PERMISSIONS,
+  ),
+  openPermissionSettings: createInvokeBridge<[GuidedPermission], void>(
+    CH.app.OPEN_PERMISSION_SETTINGS,
+  ),
+  showPermissionsGuide: createSendBridge<[]>(CH.app.SHOW_PERMISSIONS_GUIDE),
+  onPermissionsGuideRequested: createVoidSubscription(CH.app.PERMISSIONS_GUIDE_REQUESTED),
   quitApp: createSendBridge<[]>(CH.app.QUIT),
   minimizeToDock: createSendBridge<[]>(CH.app.MINIMIZE_TO_DOCK),
   focusWindow: createSendBridge<[WindowFocusTarget]>(CH.app.FOCUS_WINDOW),

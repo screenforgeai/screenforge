@@ -10,6 +10,7 @@ import { trackEvent } from 'src/lib/analytics';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../../../store';
 import { usePixiRenderer } from '../../../hooks/usePixiRenderer';
+import { useSampleProject } from '../../../hooks/useSampleProject';
 import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { getFrameGeometry, resolveAspectRatioValue } from 'src/lib/effects/frame';
 import { FrameCropOverlay } from './FrameCropOverlay';
@@ -90,6 +91,8 @@ const ProcessingOverlay = () => {
 
 export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
   const { t } = useTranslation('common');
+  const { t: tOnboarding } = useTranslation('onboarding');
+  const { isOpeningSample, openSampleProject } = useSampleProject();
   const {
     recordingResult,
     isProcessing,
@@ -412,6 +415,17 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
           >
             <IconPlus className="fill-white" /> {t('newRecording')}
           </Button>
+          <div className="mt-6 flex flex-col items-center gap-1.5">
+            <p className="max-w-[320px] text-sm text-sf-muted">{tOnboarding('emptyStateHint')}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isOpeningSample}
+              onClick={() => void openSampleProject('empty_state')}
+            >
+              {tOnboarding('trySample')}
+            </Button>
+          </div>
         </div>
       )}
     </div>
