@@ -41,10 +41,11 @@ const CLICK_SOUND_GLYPHS: Record<Exclude<CursorClickSound, 'none'>, number[]> = 
   tick: [1, 0.35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 };
 
+// `size-auto` opts out of the toggle's default 16px icon size, which would squash the glyph.
 const ClickSoundGlyph = ({ bars }: { bars: number[] }) => (
   <svg
-    width={bars.length * 4 - 2}
-    height={18}
+    className="size-auto"
+    style={{ width: bars.length * 4 - 2, height: 18 }}
     viewBox={`0 0 ${bars.length * 4 - 2} 18`}
     aria-hidden
   >
@@ -373,14 +374,14 @@ export const CursorWidget = () => {
                   key={sound}
                   value={sound}
                   aria-label={t(sound)}
-                  className={`flex h-14 flex-col items-center justify-center gap-1 rounded-lg border p-0 text-xs font-medium transition-all ${
+                  className={`flex h-14 w-full flex-col items-center justify-center gap-1 rounded-lg border p-0 text-xs font-medium transition-all ${
                     cursorClickSound === sound
-                      ? 'border-sf-border-lt bg-[#151519] text-sf-primary ring-1 ring-sf-border-lt'
-                      : 'border-[#262629] bg-[#0d0d10] text-sf-secondary opacity-65 hover:opacity-85'
+                      ? 'border-sf-border-lt bg-[#151519] ring-1 ring-sf-border-lt text-sf-primary not-focus:text-sf-primary'
+                      : 'border-[#262629] bg-[#0d0d10] text-sf-secondary not-focus:text-sf-secondary opacity-70 hover:opacity-100'
                   }`}
                 >
                   {sound === 'none' ? (
-                    <IconVolumeOff size={18} className="text-sf-muted" />
+                    <IconVolumeOff size={18} />
                   ) : (
                     <ClickSoundGlyph bars={CLICK_SOUND_GLYPHS[sound]} />
                   )}
