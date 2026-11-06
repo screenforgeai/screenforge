@@ -377,7 +377,9 @@ export const CursorWidget = () => {
                 onKeyDown={() => {
                   isKeyboardBrowsingSoundsRef.current = true;
                 }}
-                onPointerMove={() => {
+                // Capture phase: Radix focuses an option in its own pointermove handler,
+                // so the flag must clear before that focus fires.
+                onPointerMoveCapture={() => {
                   isKeyboardBrowsingSoundsRef.current = false;
                 }}
               >

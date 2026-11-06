@@ -107,6 +107,22 @@ describe('CursorWidget click sound', () => {
     expect(audition).not.toHaveBeenCalled();
   });
 
+  it('stops previewing when the mouse moves after keyboard browsing', async () => {
+    const user = userEvent.setup();
+    render(<CursorWidget />);
+
+    await openDropdown(user);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'None' })).toHaveFocus());
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(audition).toHaveBeenLastCalledWith('mouse', 0.5));
+    audition.mockClear();
+
+    await user.hover(screen.getByRole('option', { name: 'Pop' }));
+
+    expect(screen.getByRole('option', { name: 'Pop' })).toHaveFocus();
+    expect(audition).not.toHaveBeenCalled();
+  });
+
   it('selects a sound, plays it, and shows the volume slider', async () => {
     const user = userEvent.setup();
     render(<CursorWidget />);
