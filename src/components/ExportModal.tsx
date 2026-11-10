@@ -399,7 +399,8 @@ const ExportModal = ({
         {/* Done: where the file went, and the share link (#26) */}
         {exportedPath && (
           <>
-            <div className="flex flex-col gap-4 px-6 py-5">
+            {/* min-w-0: the dialog is a grid, so a long path would widen it past the window. */}
+            <div className="flex min-w-0 flex-col gap-4 px-6 py-5">
               <div className="flex items-start gap-2">
                 <IconCheck size={16} className="mt-0.5 shrink-0 text-sf-green" />
                 <div className="min-w-0">
