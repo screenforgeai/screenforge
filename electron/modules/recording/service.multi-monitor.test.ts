@@ -256,6 +256,31 @@ describe('recording service: multiple monitors', () => {
       await discardRecording();
     });
 
+    it('records the display the area was selected on, even if the primary changed since', async () => {
+      const { startRecording, discardRecording } = await import('./service');
+
+      // Selected on the right monitor; the left one became primary before Record.
+      electronMock.state.primary = leftMonitor;
+      await startRecording('screen:0', { ...area, displayId: primaryMonitor.id });
+
+      const args = captureProcs[0].args;
+      expect(argAfter(args, '-video_size')).toBe('2560x1440');
+      expect(argAfter(args, '-i')).toBe(':0+1920,0');
+
+      await discardRecording();
+    });
+
+    it('refuses to record when the display the area was selected on is gone', async () => {
+      const { startRecording } = await import('./service');
+
+      electronMock.state.displays = [leftMonitor];
+      electronMock.state.primary = leftMonitor;
+      await expect(
+        startRecording('screen:0', { ...area, displayId: primaryMonitor.id }),
+      ).rejects.toThrow(/no longer connected/i);
+      expect(captureProcs).toHaveLength(0);
+    });
+
     it('reports the area in global coordinates, matching the cursor events', async () => {
       const { startRecording, stopRecording } = await import('./service');
 

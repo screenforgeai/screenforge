@@ -15,7 +15,7 @@ How long an export takes, measured the same way on every platform and every rele
 
 The export settings are the export dialog's defaults (format MP4, 60 fps, High), with only the resolution changed. The project has a solid background with padding, rounded corners and a shadow, like a typical edit.
 
-The sample is FFmpeg's `testsrc2` pattern (moving detail, text and colour bars) at the preset size. It is generated on first run into `<tmp>/screenforge-bench-export/` and reused after that, so the repo doesn't carry a 4K video. It is encoded with `libx264` where the FFmpeg build has it, otherwise the platform's own H.264 encoder (`libopenh264`, `h264_videotoolbox`, `h264_mf`). The content is identical everywhere; only the sample's encoding can differ.
+The sample is FFmpeg's `testsrc2` pattern (moving detail, text and colour bars) at the preset size. It is generated on first run into `node_modules/.cache/screenforge-bench-export/` (not the shared temp directory) and reused after that, so the repo doesn't carry a 4K video. It is encoded with `libx264` where the FFmpeg build has it, otherwise the platform's own H.264 encoder (`libopenh264`, `h264_videotoolbox`, `h264_mf`). The content is identical everywhere; only the sample's encoding can differ.
 
 For each preset the benchmark records:
 

@@ -11,6 +11,7 @@ import {
   buildHarnessLaunch,
   buildSampleMediaArgs,
   buildTreeKillCommand,
+  releaseCacheDir,
   formatMarkdownRow,
   pickSampleEncoder,
   resolveBenchmarkManifest,
@@ -327,8 +328,8 @@ async function collectEnvironment(ffmpegPath) {
  * manifests that point at it. Returns the directory holding those manifests.
  */
 async function prepareReleaseBenchmarks(ffmpegPath) {
-  const cacheDir = path.join(os.tmpdir(), 'screenforge-bench-export');
-  await fs.mkdir(cacheDir, { recursive: true });
+  const cacheDir = releaseCacheDir(ROOT);
+  await fs.mkdir(cacheDir, { recursive: true, mode: 0o700 });
   const { stdout: encoders } = await runProcess(ffmpegPath, ['-hide_banner', '-encoders'], {
     cwd: ROOT,
     timeoutMs: 15_000,

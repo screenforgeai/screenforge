@@ -8,6 +8,8 @@
  * than committed, so the repo doesn't carry a 4K video.
  */
 
+import path from 'node:path';
+
 const SAMPLE_DURATION_SECONDS = 20;
 const SAMPLE_FPS = 60;
 
@@ -156,6 +158,15 @@ export function buildHarnessLaunch(platform) {
     args: ['-lc', 'tail -f /dev/null | script -qefc "pnpm start" /dev/null'],
     shell: false,
   };
+}
+
+/**
+ * Where the release samples and their manifests are cached between runs.
+ * Not the shared temp directory: there another local user could plant a
+ * sample, or a symlink that a manifest write would follow.
+ */
+export function releaseCacheDir(root) {
+  return path.join(root, 'node_modules', '.cache', 'screenforge-bench-export');
 }
 
 /**

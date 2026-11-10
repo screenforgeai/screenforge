@@ -535,7 +535,7 @@ export interface ScreenforgeAPI {
   getSources: () => Promise<DesktopSource[]>;
   startRecording: (
     sourceId: string,
-    cropArea?: { x: number; y: number; width: number; height: number } | null,
+    cropArea?: { x: number; y: number; width: number; height: number; displayId?: number } | null,
     options?: { rendererCapture?: boolean },
   ) => Promise<void>;
   getCaptureBackend: () => Promise<CaptureBackend>;
@@ -703,6 +703,8 @@ export interface ScreenforgeAPI {
     y: number;
     width: number;
     height: number;
+    /** The display the area was drawn on (its coordinates are in that display). */
+    displayId?: number;
   } | null>;
 }
 

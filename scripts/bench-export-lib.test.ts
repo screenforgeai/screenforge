@@ -7,6 +7,7 @@ import {
   buildHarnessLaunch,
   buildSampleMediaArgs,
   buildTreeKillCommand,
+  releaseCacheDir,
   formatMarkdownRow,
   pickSampleEncoder,
   resolveBenchmarkManifest,
@@ -95,6 +96,14 @@ describe('buildTreeKillCommand', () => {
   it('leaves macOS and Linux to the ps-based process-tree helper', () => {
     expect(buildTreeKillCommand('darwin', 4242)).toBeNull();
     expect(buildTreeKillCommand('linux', 4242)).toBeNull();
+  });
+});
+
+describe('releaseCacheDir', () => {
+  it("keeps the release samples in the repo's own cache, not the shared temp directory", () => {
+    expect(releaseCacheDir('/work/screenforge')).toBe(
+      '/work/screenforge/node_modules/.cache/screenforge-bench-export',
+    );
   });
 });
 

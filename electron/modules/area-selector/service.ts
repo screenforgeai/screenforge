@@ -4,8 +4,11 @@ import { pinWindowToAllWorkspaces } from '../../lib/workspace-pin';
 
 let selectorWindow: BrowserWindow | null = null;
 let pendingResolve:
-  | ((area: { x: number; y: number; width: number; height: number } | null) => void)
+  | ((
+      area: { x: number; y: number; width: number; height: number; displayId?: number } | null,
+    ) => void)
   | null = null;
+let selectionDisplayId: number | null = null;
 
 function isAlive(): boolean {
   return selectorWindow !== null && !selectorWindow.isDestroyed();
@@ -14,7 +17,7 @@ function isAlive(): boolean {
 export function openAreaSelector(
   preloadPath: string,
   loadURL: (win: BrowserWindow, hash: string) => void,
-): Promise<{ x: number; y: number; width: number; height: number } | null> {
+): Promise<{ x: number; y: number; width: number; height: number; displayId?: number } | null> {
   if (isAlive()) {
     return Promise.resolve(null);
   }
@@ -23,6 +26,8 @@ export function openAreaSelector(
     pendingResolve = resolve;
 
     const primaryDisplay = screen.getPrimaryDisplay();
+    // The area is in this display's coordinates: keep its id with the area.
+    selectionDisplayId = primaryDisplay.id;
     const allDisplays = screen.getAllDisplays();
 
     log.info('[area-selector] primaryDisplay.bounds', primaryDisplay.bounds);
@@ -99,7 +104,7 @@ export function confirmAreaSelection(area: {
 }): void {
   log.info('[area-selector] confirmed', area);
   if (pendingResolve) {
-    pendingResolve(area);
+    pendingResolve(selectionDisplayId === null ? area : { ...area, displayId: selectionDisplayId });
     pendingResolve = null;
   }
   if (isAlive()) {

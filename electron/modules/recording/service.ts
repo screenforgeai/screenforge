@@ -1474,9 +1474,27 @@ async function resolveWindowRecordingStartArea(sourceId: string): Promise<Record
   };
 }
 
+/**
+ * The display an area was selected on. The selector records it, because the
+ * primary display can change between selecting and pressing Record; if that
+ * display is gone, refuse rather than record a different screen.
+ */
+function resolveAreaDisplay(displayId: number | undefined): Electron.Display {
+  if (displayId === undefined) {
+    return screen.getPrimaryDisplay();
+  }
+  const display = screen.getAllDisplays().find((d) => d.id === displayId);
+  if (!display) {
+    throw new Error(
+      'The display the area was selected on is no longer connected. Select the area again.',
+    );
+  }
+  return display;
+}
+
 export async function startRecording(
   sourceId: string,
-  cropArea?: { x: number; y: number; width: number; height: number } | null,
+  cropArea?: { x: number; y: number; width: number; height: number; displayId?: number } | null,
   options?: { rendererCapture?: boolean },
 ): Promise<void> {
   const startedAt = Date.now();
@@ -1526,7 +1544,9 @@ export async function startRecording(
   // in the primary display's coordinates — record that display, whichever
   // screen source the toolbar happened to pass.
   const isAreaCapture = Boolean(cropArea) && !isWindowCapture;
-  let display = isAreaCapture ? screen.getPrimaryDisplay() : resolveDisplayForSource(sourceId);
+  let display = isAreaCapture
+    ? resolveAreaDisplay(cropArea?.displayId)
+    : resolveDisplayForSource(sourceId);
   const sourceDisplayId = isAreaCapture
     ? resolveDisplayId(display)
     : parseDisplayIdFromSource(sourceId);

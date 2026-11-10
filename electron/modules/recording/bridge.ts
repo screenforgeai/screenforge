@@ -19,7 +19,11 @@ export const recordingBridge = {
   startRecording: createInvokeBridge<
     [
       string,
-      { x: number; y: number; width: number; height: number } | null | undefined,
+      (
+        | { x: number; y: number; width: number; height: number; displayId?: number }
+        | null
+        | undefined
+      ),
       { rendererCapture?: boolean }?,
     ],
     void
