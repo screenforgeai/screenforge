@@ -133,6 +133,24 @@ describe('buildClickSoundHits', () => {
     expect(hits.find((hit) => hit.t === 3)?.index).toBe(1);
   });
 
+  it('skips a release that lands right on its press, as with tap-to-click', () => {
+    const hits = buildClickSoundHits(
+      [{ t: 1 }, { t: 2 }],
+      [
+        { t: 1, isDown: true },
+        { t: 1.004, isDown: false },
+        { t: 2, isDown: true },
+        { t: 2.09, isDown: false },
+      ],
+    );
+
+    expect(hits).toEqual([
+      { t: 1, release: false, index: 0 },
+      { t: 2, release: false, index: 1 },
+      { t: 2.09, release: true, index: 1 },
+    ]);
+  });
+
   it('skips the release when no mouse-up was recorded', () => {
     const hits = buildClickSoundHits([{ t: 1 }], [{ t: 1, isDown: true }]);
     expect(hits).toEqual([{ t: 1, release: false, index: 0 }]);

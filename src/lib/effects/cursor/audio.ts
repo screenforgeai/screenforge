@@ -122,6 +122,13 @@ const CLICK_SOUND_PROFILES: Record<Exclude<CursorClickSound, 'none'>, ClickSound
 
 /** Gap between press and release when auditioning a sound from the widget. */
 const PREVIEW_RELEASE_DELAY = 0.095;
+/**
+ * Shortest press-to-release gap that gets a release sound. Tap-to-click on a
+ * trackpad reports mouse-up a few ms after mouse-down; playing the same click
+ * twice that close together comb-filters it into a hollow, pitched zap instead
+ * of a click. Real button presses take longer than this.
+ */
+const MIN_RELEASE_GAP_SECONDS = 0.04;
 const NOISE_BUFFER_SECONDS = 0.08;
 const NOISE_BUFFER_CACHE = new Map<number, AudioBuffer>();
 let previewAudioContext: AudioContext | null = null;
@@ -139,7 +146,8 @@ export function normalizeCursorClickSound(value: unknown): CursorClickSound {
 
 /**
  * Turns click (mouse-down) events into sound hits: one press per click, plus a
- * release at the first mouse-up after it, when one was recorded. Hits are sorted
+ * release at the first mouse-up after it, when one was recorded and comes at
+ * least MIN_RELEASE_GAP_SECONDS later. Hits are sorted
  * by time, so a drag's release can land after a later click.
  */
 export function buildClickSoundHits(
@@ -159,7 +167,10 @@ export function buildClickSoundHits(
       releaseCursor += 1;
     }
     if (releaseCursor < releaseTimes.length) {
-      hits.push({ t: releaseTimes[releaseCursor], release: true, index });
+      const releaseTime = releaseTimes[releaseCursor];
+      if (releaseTime - click.t >= MIN_RELEASE_GAP_SECONDS) {
+        hits.push({ t: releaseTime, release: true, index });
+      }
       releaseCursor += 1;
     }
   });
