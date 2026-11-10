@@ -88,6 +88,7 @@ export function openAreaSelector(
       if (pendingResolve) {
         pendingResolve(null);
         pendingResolve = null;
+        selectionDisplayId = null;
       }
     });
 
@@ -106,6 +107,7 @@ export function confirmAreaSelection(area: {
   if (pendingResolve) {
     pendingResolve(selectionDisplayId === null ? area : { ...area, displayId: selectionDisplayId });
     pendingResolve = null;
+    selectionDisplayId = null;
   }
   if (isAlive()) {
     selectorWindow?.close();
@@ -117,6 +119,7 @@ export function cancelAreaSelection(): void {
   if (pendingResolve) {
     pendingResolve(null);
     pendingResolve = null;
+    selectionDisplayId = null;
   }
   if (isAlive()) {
     selectorWindow?.close();

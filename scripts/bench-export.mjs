@@ -11,6 +11,7 @@ import {
   buildHarnessLaunch,
   buildSampleMediaArgs,
   buildTreeKillCommand,
+  generateFileAtomically,
   releaseCacheDir,
   formatMarkdownRow,
   pickSampleEncoder,
@@ -344,15 +345,16 @@ async function prepareReleaseBenchmarks(ffmpegPath) {
     const mediaPath = path.join(cacheDir, `sample-${preset.id}.mp4`);
     if (!(await canAccess(mediaPath))) {
       console.log(`[bench:export] generating ${preset.label} sample with ${encoder}...`);
-      const generated = await runProcess(
-        ffmpegPath,
-        buildSampleMediaArgs(preset, encoder, mediaPath),
-        { cwd: ROOT, timeoutMs: 600_000 },
-      );
-      if (generated.exitCode !== 0) {
-        await fs.rm(mediaPath, { force: true });
-        throw new Error(`Could not generate the ${preset.label} sample:\n${generated.stderr}`);
-      }
+      await generateFileAtomically(mediaPath, async (partialPath) => {
+        const generated = await runProcess(
+          ffmpegPath,
+          buildSampleMediaArgs(preset, encoder, partialPath),
+          { cwd: ROOT, timeoutMs: 600_000 },
+        );
+        if (generated.exitCode !== 0) {
+          throw new Error(`Could not generate the ${preset.label} sample:\n${generated.stderr}`);
+        }
+      });
     }
     const manifest = resolveBenchmarkManifest(preset, mediaPath);
     const manifestName = `${manifest.id}.json`;

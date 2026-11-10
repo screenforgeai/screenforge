@@ -1606,54 +1606,65 @@ export async function startRecording(
 
   const outPath = createTempPath('screenforge', 'mp4');
 
-  if (shouldUseNativeCapture()) {
-    log.info('[recording] using native capture helper');
-    await startNativeCapture(display, outPath, sourceDisplayId, sourceWindowId);
-    recordingStartTime = Date.now();
-    log.info('[recording:native] recordingStartTime set after "Recording started"', {
-      recordingStartTime,
-      nativeMediaStartTimeAtSet: nativeMediaStartTime,
-      alreadyHaveMediaStart: nativeMediaStartTime !== null,
-    });
-    if (activeWindowRecording && recordingBoundsTimeline.length === 0) {
-      ensureRecordingBoundsSample({ ...recordingArea, timestamp: recordingStartTime });
-    }
-    // CGEventTap in the helper replaces uiohook-napi on macOS 13+
-  } else {
-    const bin = await getFFmpegPath();
-    const captureArea = isWindowCapture && recordingArea ? recordingArea : undefined;
-    ffmpegCaptureSpawn = {
-      bin,
-      buildArgs: (segmentPath) => buildCaptureArgs(display, segmentPath, captureArea),
-    };
-    ffmpegSegments = [];
-    ffmpegSegmentTransition = Promise.resolve();
-
-    // Wait until FFmpeg opens the output file before starting mouse tracking.
-    try {
-      await startFFmpegSegment(outPath);
-    } catch (error) {
-      ffmpegCaptureSpawn = null;
-      emitRecordingActivityChanged();
-      throw error;
-    }
-
-    recordingStartTime = Date.now();
-    try {
-      await startCursorTracking();
-    } catch (error) {
-      await stopFFmpegCapture().catch(() => undefined);
-      throw error;
-    }
-  }
-
+  // Watch from before the capture starts: a display unplugged while FFmpeg or
+  // the native helper is still starting must not leave a dead recording.
   watchDisplaysDuringRecording(isWindowCapture ? null : resolveDisplayId(display));
+  try {
+    await startCapture();
+  } catch (error) {
+    unwatchDisplaysDuringRecording();
+    activeCropDisplay = null;
+    throw error;
+  }
 
   log.info('[recording] start completed', {
     sourceId,
     outputPath: outPath,
     startupLatencyMs: Date.now() - startedAt,
   });
+
+  async function startCapture(): Promise<void> {
+    if (shouldUseNativeCapture()) {
+      log.info('[recording] using native capture helper');
+      await startNativeCapture(display, outPath, sourceDisplayId, sourceWindowId);
+      recordingStartTime = Date.now();
+      log.info('[recording:native] recordingStartTime set after "Recording started"', {
+        recordingStartTime,
+        nativeMediaStartTimeAtSet: nativeMediaStartTime,
+        alreadyHaveMediaStart: nativeMediaStartTime !== null,
+      });
+      if (activeWindowRecording && recordingBoundsTimeline.length === 0) {
+        ensureRecordingBoundsSample({ ...recordingArea, timestamp: recordingStartTime });
+      }
+      // CGEventTap in the helper replaces uiohook-napi on macOS 13+
+    } else {
+      const bin = await getFFmpegPath();
+      const captureArea = isWindowCapture && recordingArea ? recordingArea : undefined;
+      ffmpegCaptureSpawn = {
+        bin,
+        buildArgs: (segmentPath) => buildCaptureArgs(display, segmentPath, captureArea),
+      };
+      ffmpegSegments = [];
+      ffmpegSegmentTransition = Promise.resolve();
+
+      // Wait until FFmpeg opens the output file before starting mouse tracking.
+      try {
+        await startFFmpegSegment(outPath);
+      } catch (error) {
+        ffmpegCaptureSpawn = null;
+        emitRecordingActivityChanged();
+        throw error;
+      }
+
+      recordingStartTime = Date.now();
+      try {
+        await startCursorTracking();
+      } catch (error) {
+        await stopFFmpegCapture().catch(() => undefined);
+        throw error;
+      }
+    }
+  }
 }
 
 export async function stopRecording(rendererCapture?: {

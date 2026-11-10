@@ -8,6 +8,7 @@
  * than committed, so the repo doesn't carry a 4K video.
  */
 
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const SAMPLE_DURATION_SECONDS = 20;
@@ -158,6 +159,22 @@ export function buildHarnessLaunch(platform) {
     args: ['-lc', 'tail -f /dev/null | script -qefc "pnpm start" /dev/null'],
     shell: false,
   };
+}
+
+/**
+ * Runs `generate` against a partial path and moves the result into place only
+ * once it succeeds. A failed, timed-out or interrupted run never leaves a
+ * truncated file at `targetPath` for the next run to reuse as a valid sample.
+ */
+export async function generateFileAtomically(targetPath, generate) {
+  const partialPath = `${targetPath}.partial${path.extname(targetPath)}`;
+  try {
+    await generate(partialPath);
+    await fs.rename(partialPath, targetPath);
+  } catch (error) {
+    await fs.rm(partialPath, { force: true });
+    throw error;
+  }
 }
 
 /**

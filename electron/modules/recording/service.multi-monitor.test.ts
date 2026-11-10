@@ -322,6 +322,38 @@ describe('recording service: multiple monitors', () => {
       await discardRecording();
     });
 
+    it('notices the recorded display going away while the capture is still starting', async () => {
+      const { startRecording, onRecordingSourceLost, discardRecording } = await import('./service');
+      const lost = vi.fn();
+      onRecordingSourceLost(lost);
+      childProcessMock.spawn.mockImplementation((_bin: string, args: string[]) => {
+        if (!args.includes('x11grab')) {
+          return fakeProbeProcess();
+        }
+        // Unplugged before FFmpeg has opened its output.
+        electronMock.screen.emit('display-removed', leftMonitor);
+        return fakeCaptureProcess(args);
+      });
+
+      await startRecording('screen:0', null);
+      expect(lost).toHaveBeenCalledWith({ reason: 'display-removed' });
+
+      await discardRecording();
+    });
+
+    it('leaves no display listener behind when the capture fails to start', async () => {
+      const { startRecording } = await import('./service');
+      childProcessMock.spawn.mockImplementation((_bin: string, args: string[]) => {
+        if (args.includes('x11grab')) {
+          throw new Error('spawn ffmpeg ENOENT');
+        }
+        return fakeProbeProcess();
+      });
+
+      await expect(startRecording('screen:0', null)).rejects.toThrow();
+      expect(electronMock.screen.listenerCount('display-removed')).toBe(0);
+    });
+
     it('stops listening for display changes once the recording ends', async () => {
       const { startRecording, stopRecording, onRecordingSourceLost } = await import('./service');
       const lost = vi.fn();

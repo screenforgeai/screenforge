@@ -232,6 +232,14 @@ function installMocks(backend: CaptureBackend): void {
 // Generous enough for a loaded 2-core CI runner; local runs finish in ms.
 const ASYNC_UI_TIMEOUT_MS = 5000;
 
+/** The toolbar's most recent onRecordingSourceLost callback. */
+function latestSourceLostHandler(): (info: { reason: 'display-removed' }) => void {
+  const calls = screenforge.onRecordingSourceLost.mock.calls as unknown as Array<
+    [(info: { reason: 'display-removed' }) => void]
+  >;
+  return calls[calls.length - 1][0];
+}
+
 async function clickRecordAndFinishCountdown(): Promise<void> {
   render(<FloatingToolbar />);
   await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
@@ -315,6 +323,42 @@ describe('FloatingToolbar recording widget', () => {
         reason: 'display-removed';
       }) => void;
       act(() => onSourceLost({ reason: 'display-removed' }));
+
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+      expect(screenforge.systemWarning).toHaveBeenCalledWith(
+        'The display you were recording was disconnected, so the recording stopped. Everything up to that point was kept.',
+      );
+    });
+
+    it('stops only once when the display-removed event arrives twice', async () => {
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+
+      const onSourceLost = latestSourceLostHandler();
+      act(() => {
+        onSourceLost({ reason: 'display-removed' });
+        onSourceLost({ reason: 'display-removed' });
+      });
+
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops as soon as it starts when the display went away while starting', async () => {
+      let finishStart: () => void = () => undefined;
+      screenforge.startRecording.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishStart = resolve;
+          }),
+      );
+      await clickRecordAndFinishCountdown();
+      await waitFor(() => expect(screenforge.startRecording).toHaveBeenCalled());
+
+      const onSourceLost = latestSourceLostHandler();
+      act(() => onSourceLost({ reason: 'display-removed' }));
+      await act(async () => finishStart());
 
       await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
       expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);

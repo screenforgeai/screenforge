@@ -359,6 +359,8 @@ export const FloatingToolbar = () => {
   const analyserRafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const recordStateRef = useRef<RecordState>('idle');
+  // The recorded display went away while startRecording was still in flight.
+  const sourceLostDuringStartRef = useRef(false);
   const micLevelRef = useRef(0);
   const micUiUpdateTsRef = useRef(0);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -764,9 +766,16 @@ export const FloatingToolbar = () => {
   // and keep what was captured, and say why instead of failing silently.
   useEffect(() => {
     return window.screenforge.onRecordingSourceLost(() => {
+      if (recordStateRef.current === 'countdown') {
+        // The capture is still starting: stop once it has (see handleStart).
+        sourceLostDuringStartRef.current = true;
+        return;
+      }
       if (recordStateRef.current !== 'recording' && recordStateRef.current !== 'paused') {
         return;
       }
+      // Several displays can go at once: stop only for the first event.
+      recordStateRef.current = 'idle';
       window.screenforge.systemWarning(t('recordingDisplayRemoved'));
       handleStopEvent();
     });
@@ -844,6 +853,7 @@ export const FloatingToolbar = () => {
       cameraEnabled,
     });
 
+    sourceLostDuringStartRef.current = false;
     try {
       if (tab === 'window') {
         focusDesktopSourceWindow(selectedSource);
@@ -919,6 +929,13 @@ export const FloatingToolbar = () => {
       };
       cameraRecorderRef.current = recorder;
       recorder.start(1000);
+    }
+
+    if (sourceLostDuringStartRef.current) {
+      sourceLostDuringStartRef.current = false;
+      recordStateRef.current = 'idle';
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      void handleStop();
     }
   }
 

@@ -1,5 +1,8 @@
 // @vitest-environment node
 
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   RELEASE_BENCHMARKS,
@@ -7,6 +10,7 @@ import {
   buildHarnessLaunch,
   buildSampleMediaArgs,
   buildTreeKillCommand,
+  generateFileAtomically,
   releaseCacheDir,
   formatMarkdownRow,
   pickSampleEncoder,
@@ -102,8 +106,35 @@ describe('buildTreeKillCommand', () => {
 describe('releaseCacheDir', () => {
   it("keeps the release samples in the repo's own cache, not the shared temp directory", () => {
     expect(releaseCacheDir('/work/screenforge')).toBe(
-      '/work/screenforge/node_modules/.cache/screenforge-bench-export',
+      path.join('/work/screenforge', 'node_modules', '.cache', 'screenforge-bench-export'),
     );
+  });
+});
+
+describe('generateFileAtomically', () => {
+  const tempDir = () => fs.mkdtemp(path.join(os.tmpdir(), 'sf-bench-atomic-'));
+
+  it('only creates the file once the generator succeeds', async () => {
+    const dir = await tempDir();
+    const target = path.join(dir, 'sample.mp4');
+    await generateFileAtomically(target, async (partialPath: string) => {
+      await fs.writeFile(partialPath, 'complete');
+      await expect(fs.access(target)).rejects.toThrow();
+    });
+    expect(await fs.readFile(target, 'utf8')).toBe('complete');
+    expect(await fs.readdir(dir)).toEqual(['sample.mp4']);
+  });
+
+  it('leaves nothing behind when the generator fails or times out', async () => {
+    const dir = await tempDir();
+    const target = path.join(dir, 'sample.mp4');
+    await expect(
+      generateFileAtomically(target, async (partialPath: string) => {
+        await fs.writeFile(partialPath, 'trunc');
+        throw new Error('timed out');
+      }),
+    ).rejects.toThrow('timed out');
+    expect(await fs.readdir(dir)).toEqual([]);
   });
 });
 
