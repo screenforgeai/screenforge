@@ -62,4 +62,30 @@ describe('useTimelineGlobalHotkeys', () => {
     expect(cbs.onTogglePlay).not.toHaveBeenCalled();
     expect(cbs.onUndo).not.toHaveBeenCalled();
   });
+
+  it('lets the Screenshot editor see the keys it stays quiet for', async () => {
+    const user = userEvent.setup();
+    const cbs = callbacks();
+    render(<Harness cbs={cbs} />);
+    act(() =>
+      useStore.getState().openScreenshotEditor({
+        kind: 'display',
+        dataUrl: 'data:image/png;base64,x',
+        width: 1,
+        height: 1,
+      }),
+    );
+    // Registered after the timeline's listeners, like the editor's own hotkeys.
+    const seen: string[] = [];
+    const listener = (event: KeyboardEvent) => seen.push(event.key);
+    document.addEventListener('keydown', listener);
+    try {
+      await user.keyboard('{Control>}z{/Control}');
+      await user.keyboard('{Delete}');
+      await user.keyboard('t');
+    } finally {
+      document.removeEventListener('keydown', listener);
+    }
+    expect(seen).toEqual(expect.arrayContaining(['z', 'Delete', 't']));
+  });
 });

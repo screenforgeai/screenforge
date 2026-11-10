@@ -177,10 +177,13 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
 
   useHotkeys('backquote', () => setFocusMode(!useStore.getState().focusMode), {
     enableOnFormTags: true,
-    enabled: () => useStore.getState().screenshotCapture === null,
+    // Not `enabled`: a false `enabled` callback swallows the key (see
+    // useTimelineGlobalHotkeys), and the Screenshot editor needs its keys.
+    ignoreEventWhen: () => useStore.getState().screenshotCapture !== null,
   });
   useHotkeys('meta+shift+c, ctrl+shift+c', () => void handleCapture('shortcut'), {
-    enabled: () => !!recordingResult && useStore.getState().screenshotCapture === null,
+    enabled: !!recordingResult,
+    ignoreEventWhen: () => useStore.getState().screenshotCapture !== null,
     preventDefault: true,
   });
   const fallbackSourceWidth = recordingResult?.recordingArea.width ?? 16;

@@ -23,12 +23,15 @@ import {
   createInitialAnnotationsState,
   createShapeFromDrag,
   createStepShape,
+  findGrabbableShapeAt,
   findShapeAt,
   getAnnotationScale,
   getDefaultFontSize,
   resolveTextEdit,
   translateShape,
   type AnnotationShape,
+  type AnnotationsAction,
+  type AnnotationsState,
   type AnnotationTool,
   type DragShapeType,
   type Point,
@@ -108,6 +111,12 @@ const HIT_TOLERANCE_CSS_PX = 6;
 
 const newId = () => crypto.randomUUID();
 
+/** Shapes and style share one undo history, so Cmd+Z undoes whatever was done last. */
+const editorReducer = (
+  state: AnnotationsState<ScreenshotStyle>,
+  action: AnnotationsAction<ScreenshotStyle>,
+) => annotationsReducer(state, action);
+
 const initialStyle = (capture: ScreenshotCapture): ScreenshotStyle => {
   const { recordingResult, frame } = useStore.getState();
   return {
@@ -125,16 +134,19 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const stageRef = useRef<HTMLDivElement>(null);
 
   const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [style, setStyle] = useState<ScreenshotStyle>(() => initialStyle(capture));
   const [presets, setPresets] = useState<StylePreset[]>([]);
-  const [annotations, dispatch] = useReducer(
-    annotationsReducer,
-    undefined,
-    createInitialAnnotationsState,
+  const [annotations, dispatch] = useReducer(editorReducer, capture, (initial) =>
+    createInitialAnnotationsState(initialStyle(initial)),
   );
+  const { style } = annotations;
+  const setStyle = (next: ScreenshotStyle, group?: string) =>
+    dispatch({ type: 'setStyle', style: next, group });
   const [tool, setTool] = useState<AnnotationTool>('arrow');
   const [color, setColor] = useState<string>(ANNOTATION_COLORS[0]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [rawSelectedId, setSelectedId] = useState<string | null>(null);
+  // An undo can take the selected shape away; treat it as deselected then.
+  const selectedId = annotations.shapes.some((s) => s.id === rawSelectedId) ? rawSelectedId : null;
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [textEdit, setTextEdit] = useState<TextEdit | null>(null);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -305,19 +317,26 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
     e.currentTarget.setPointerCapture?.(e.pointerId);
 
+    // Whatever the tool, pressing on an existing annotation picks it up to move.
+    const grabbed = findGrabbableShapeAt(annotations.shapes, point, hitTolerance, tool);
+    if (grabbed) {
+      // Keeps the Text tool's mousedown from stealing focus (see below).
+      e.preventDefault();
+      setSelectedId(grabbed);
+      setDrag({ mode: 'move', id: grabbed, start: point, current: point });
+      return;
+    }
+
     switch (tool) {
-      case 'select': {
-        const id = findShapeAt(annotations.shapes, point, hitTolerance);
-        setSelectedId(id);
-        if (id) {
-          setDrag({ mode: 'move', id, start: point, current: point });
-        }
-        break;
-      }
-      case 'step':
-        dispatch({ type: 'add', shape: createStepShape(point, newId(), shapeStyle) });
+      case 'select':
         setSelectedId(null);
         break;
+      case 'step': {
+        const shape = createStepShape(point, newId(), shapeStyle);
+        dispatch({ type: 'add', shape });
+        setSelectedId(shape.id);
+        break;
+      }
       case 'text':
         // Without this the browser's mousedown that follows moves focus off the
         // new (auto-focused) text box, which then commits empty and vanishes.
@@ -332,12 +351,19 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   };
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!drag) {
+    const point = toImagePoint(e);
+    if (!point) {
       return;
     }
-    const point = toImagePoint(e);
-    if (point) {
+    if (drag) {
       setDrag({ ...drag, current: point });
+      return;
+    }
+    const hovered = textEdit
+      ? null
+      : findGrabbableShapeAt(annotations.shapes, point, hitTolerance, tool);
+    if (hovered !== hoveredId) {
+      setHoveredId(hovered);
     }
   };
 
@@ -349,6 +375,8 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       const shape = createShapeFromDrag(drag.tool, drag.start, drag.current, newId(), shapeStyle);
       if (shape) {
         dispatch({ type: 'add', shape });
+        // Selected straight away, so a colour pick or Delete applies to it.
+        setSelectedId(shape.id);
       }
     } else {
       const dx = drag.current.x - drag.start.x;
@@ -518,13 +546,15 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   })();
 
   const cursor =
-    tool === 'select'
-      ? drag?.mode === 'move'
-        ? 'grabbing'
-        : 'default'
-      : tool === 'text'
-        ? 'text'
-        : 'crosshair';
+    drag?.mode === 'move'
+      ? 'grabbing'
+      : hoveredId
+        ? 'move'
+        : tool === 'select'
+          ? 'default'
+          : tool === 'text'
+            ? 'text'
+            : 'crosshair';
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-sf-bg font-sans text-sf-primary">
@@ -639,6 +669,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={() => setDrag(null)}
+              onPointerLeave={() => setHoveredId(null)}
               onDoubleClick={handleDoubleClick}
             />
             {textEdit && textOverlay && (

@@ -181,6 +181,19 @@ describe('ScreenshotEditor', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('undoes and redoes a style change from the keyboard', async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    const frame = screen.getByRole('switch', { name: /frame/i });
+    expect(frame).toHaveAttribute('aria-checked', 'true');
+    await user.click(frame);
+    expect(frame).toHaveAttribute('aria-checked', 'false');
+    await user.keyboard('{Control>}z{/Control}');
+    expect(frame).toHaveAttribute('aria-checked', 'true');
+    await user.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+    expect(frame).toHaveAttribute('aria-checked', 'false');
+  });
+
   it('loads saved style presets', async () => {
     await renderEditor();
     expect(window.screenforge.getPresets).toHaveBeenCalled();
