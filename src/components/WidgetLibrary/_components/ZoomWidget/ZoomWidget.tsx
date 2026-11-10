@@ -89,6 +89,10 @@ export const ZoomWidget = () => {
   const playheadClipId =
     zoomClips.find((clip) => currentTime >= clip.start && currentTime <= clip.end)?.id ?? null;
 
+  // A drag cut short by closing the panel never reaches onValueCommit: close
+  // its undo group so the change counts as an edit.
+  useEffect(() => () => endHistoryGroup('zoom-intensity'), [endHistoryGroup]);
+
   useEffect(() => {
     if (!playheadClipId) {
       return;
@@ -206,6 +210,9 @@ export const ZoomWidget = () => {
             valueLabel={formatPercent(zoomStyle.intensity)}
             value={[zoomStyle.intensity]}
             onPointerDown={() => beginHistoryGroup('zoom-intensity', 'Adjust zoom intensity')}
+            // Radix only commits a changed value, but every press (or a cancelled
+            // drag) releases the pointer, so close the undo group there too.
+            onLostPointerCapture={() => endHistoryGroup('zoom-intensity')}
             onValueChange={([v]) =>
               commitEdit('Adjust zoom intensity', (state) =>
                 applyZoomStyle(state, { intensity: v }),
