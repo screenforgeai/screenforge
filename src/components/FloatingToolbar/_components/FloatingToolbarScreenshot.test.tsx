@@ -68,10 +68,49 @@ describe('FloatingToolbarScreenshot', () => {
     );
   });
 
+  it('keeps windows out of the menu until "Window" is opened', async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+    expect(screen.queryByRole('menuitem', { name: /docs/i })).not.toBeInTheDocument();
+    const windowItem = screen.getByRole('menuitem', { name: /^window$/i });
+    expect(windowItem).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(windowItem);
+
+    // The menu stays open, with the windows listed under "Window".
+    expect(screen.getByRole('menuitem', { name: /^window$/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('menuitem', { name: /docs/i })).toBeInTheDocument();
+    expect(screenforge.captureScreenshot).not.toHaveBeenCalled();
+  });
+
+  it('folds the window list away again when the menu is reopened', async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await openMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: /^window$/i }));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await openMenu(user);
+    expect(screen.queryByRole('menuitem', { name: /docs/i })).not.toBeInTheDocument();
+  });
+
+  it('says so when there are no windows to capture', async () => {
+    const user = userEvent.setup();
+    renderMenu({ windowSources: [] });
+    await openMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: /^window$/i }));
+    expect(screen.getByText(/no windows open/i)).toBeInTheDocument();
+  });
+
   it('captures a window from the list', async () => {
     const user = userEvent.setup();
     renderMenu();
     await openMenu(user);
+    await user.click(screen.getByRole('menuitem', { name: /^window$/i }));
     await user.click(screen.getByRole('menuitem', { name: /docs/i }));
     await waitFor(() =>
       expect(screenforge.captureScreenshot).toHaveBeenCalledWith({

@@ -30,7 +30,8 @@
   "screenshot": "Capture d'écran",
   "captureScreen": "Écran entier",
   "captureArea": "Sélectionner une zone",
-  "windows": "Fenêtres",
+  "captureWindow": "Fenêtre",
+  "noWindows": "Aucune fenêtre ouverte",
   "captureFailed": "Impossible de faire la capture. Vérifiez l'autorisation d'enregistrement de l'écran et réessayez.",
   "annotate": "Annoter"
 }

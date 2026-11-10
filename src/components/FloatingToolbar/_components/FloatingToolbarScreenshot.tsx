@@ -1,13 +1,19 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trackEvent } from 'src/lib/analytics';
-import { IconAppWindow, IconCamera, IconCrop, IconDeviceDesktop } from 'src/lib/icons';
+import {
+  IconAppWindow,
+  IconCamera,
+  IconChevronDown,
+  IconChevronRight,
+  IconCrop,
+  IconDeviceDesktop,
+} from 'src/lib/icons';
 import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Spinner,
   Tooltip,
@@ -46,6 +52,8 @@ export const FloatingToolbarScreenshot = ({
   onMenuOpenChange,
 }: FloatingToolbarScreenshotProps) => {
   const { t } = useTranslation('screenshot');
+  // The window list stays folded under "Window" until asked for.
+  const [windowsOpen, setWindowsOpen] = useState(false);
 
   const capture = async (target: Target) => {
     if (!(await ensurePermissions())) {
@@ -79,7 +87,14 @@ export const FloatingToolbarScreenshot = ({
   };
 
   return (
-    <DropdownMenu onOpenChange={onMenuOpenChange}>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) {
+          setWindowsOpen(false);
+        }
+        onMenuOpenChange(open);
+      }}
+    >
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
@@ -112,32 +127,47 @@ export const FloatingToolbarScreenshot = ({
           <span className="flex-1">{t('captureArea')}</span>
         </DropdownMenuItem>
 
-        {(sourcesLoading || windowSources.length > 0) && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-sf-muted">{t('windows')}</DropdownMenuLabel>
-          </>
-        )}
-        {sourcesLoading ? (
-          <div className="flex items-center justify-center py-3">
-            <Spinner className="size-4 text-sf-border fill-sf-primary" />
-          </div>
-        ) : (
-          windowSources.map((source) => (
-            <DropdownMenuItem
-              key={source.id}
-              className="gap-2.5"
-              onSelect={() => void capture({ kind: 'window', source })}
-            >
-              {source.appIcon ? (
-                <img src={source.appIcon} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
-              ) : (
-                <IconAppWindow size={15} className="shrink-0 text-sf-secondary" />
-              )}
-              <span className="flex-1 truncate">{getWindowLabel(source)}</span>
-            </DropdownMenuItem>
-          ))
-        )}
+        <DropdownMenuItem
+          className="gap-2.5"
+          aria-expanded={windowsOpen}
+          onSelect={(event) => {
+            // Opens the list in place instead of closing the menu.
+            event.preventDefault();
+            setWindowsOpen((open) => !open);
+          }}
+        >
+          <IconAppWindow size={15} className="shrink-0 text-sf-secondary" />
+          <span className="flex-1">{t('captureWindow')}</span>
+          {windowsOpen ? (
+            <IconChevronDown size={14} className="shrink-0 text-sf-muted" />
+          ) : (
+            <IconChevronRight size={14} className="shrink-0 text-sf-muted" />
+          )}
+        </DropdownMenuItem>
+
+        {windowsOpen &&
+          (sourcesLoading ? (
+            <div className="flex items-center justify-center py-3">
+              <Spinner className="size-4 text-sf-border fill-sf-primary" />
+            </div>
+          ) : windowSources.length === 0 ? (
+            <p className="py-2 pl-8 pr-2 text-xs text-sf-muted">{t('noWindows')}</p>
+          ) : (
+            windowSources.map((source) => (
+              <DropdownMenuItem
+                key={source.id}
+                className="gap-2.5 pl-8"
+                onSelect={() => void capture({ kind: 'window', source })}
+              >
+                {source.appIcon ? (
+                  <img src={source.appIcon} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
+                ) : (
+                  <IconAppWindow size={15} className="shrink-0 text-sf-secondary" />
+                )}
+                <span className="flex-1 truncate">{getWindowLabel(source)}</span>
+              </DropdownMenuItem>
+            ))
+          ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -30,7 +30,8 @@
   "screenshot": "Screenshot",
   "captureScreen": "Entire screen",
   "captureArea": "Select area",
-  "windows": "Windows",
+  "captureWindow": "Window",
+  "noWindows": "No windows open",
   "captureFailed": "Couldn't take the screenshot. Check the screen recording permission and try again.",
   "annotate": "Annotate"
 }

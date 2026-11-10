@@ -30,7 +30,8 @@
   "screenshot": "スクリーンショット",
   "captureScreen": "画面全体",
   "captureArea": "範囲を選択",
-  "windows": "ウィンドウ",
+  "captureWindow": "ウィンドウ",
+  "noWindows": "開いているウィンドウはありません",
   "captureFailed": "スクリーンショットを撮れませんでした。画面収録の権限を確認して、もう一度お試しください。",
   "annotate": "注釈を付ける"
 }
