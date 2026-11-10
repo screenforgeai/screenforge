@@ -19,6 +19,7 @@ export const appBridge = {
   prepareRecordingStartPermissions: createInvokeBridge<[], void>(
     CH.app.PREPARE_RECORDING_START_PERMISSIONS,
   ),
+  prepareScreenshotPermissions: createInvokeBridge<[], void>(CH.app.PREPARE_SCREENSHOT_PERMISSIONS),
   getStartupPermissionStatuses: createInvokeBridge<[], StartupPermissionMap>(
     CH.app.GET_STARTUP_PERMISSION_STATUSES,
   ),

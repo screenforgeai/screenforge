@@ -134,6 +134,14 @@ export const CH = {
     CONFIRM: 'area-selector:confirm',
     CANCEL: 'area-selector:cancel',
   },
+  screenshot: {
+    // Toolbar → main: hide the toolbar, grab a still, hand it to the main window
+    CAPTURE: 'screenshot:capture',
+    // Main → main window: a still is ready for the Screenshot editor
+    CAPTURED: 'screenshot:captured',
+    // Renderer → main: put a rendered PNG on the system clipboard
+    COPY: 'screenshot:copy',
+  },
   app: {
     SAVE_SCREENSHOT: 'app:save-screenshot',
     QUIT: 'app:quit',
@@ -147,6 +155,7 @@ export const CH = {
     SYSTEM_WARNING: 'app:system-warning',
     GET_APP_VERSION: 'app:get-app-version',
     PREPARE_RECORDING_START_PERMISSIONS: 'app:prepare-recording-start-permissions',
+    PREPARE_SCREENSHOT_PERMISSIONS: 'app:prepare-screenshot-permissions',
     GET_STARTUP_PERMISSION_STATUSES: 'app:get-startup-permission-statuses',
     REQUEST_SCREEN_ACCESS: 'app:request-screen-access',
     REQUEST_MEDIA_ACCESS: 'app:request-media-access',
