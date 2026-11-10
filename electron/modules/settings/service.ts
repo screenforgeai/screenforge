@@ -19,11 +19,18 @@ const DEFAULTS: AppSettings = {
 
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 
+// Settings arrive over IPC and from a hand-editable file, so a "false" string must not read as on.
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
 function withDefaults(parsed: Partial<AppSettings>): AppSettings {
   return {
     profile: { ...DEFAULTS.profile, ...parsed.profile },
     language: parsed.language ?? DEFAULTS.language,
-    telemetryEnabled: parsed.telemetryEnabled ?? DEFAULTS.telemetryEnabled,
+    telemetryEnabled: isBoolean(parsed.telemetryEnabled)
+      ? parsed.telemetryEnabled
+      : DEFAULTS.telemetryEnabled,
   };
 }
 
@@ -50,10 +57,12 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
   const next: AppSettings = {
     profile: { ...current.profile, ...patch.profile },
     language: patch.language ?? current.language,
-    telemetryEnabled: patch.telemetryEnabled ?? current.telemetryEnabled,
+    telemetryEnabled: isBoolean(patch.telemetryEnabled)
+      ? patch.telemetryEnabled
+      : current.telemetryEnabled,
   };
   await fs.writeFile(settingsPath(), JSON.stringify(next), 'utf8');
-  if (patch.telemetryEnabled !== undefined) {
+  if (isBoolean(patch.telemetryEnabled)) {
     setTelemetryEnabled(next.telemetryEnabled);
   }
   return next;

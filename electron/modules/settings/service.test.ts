@@ -52,6 +52,26 @@ describe('settings service', () => {
     expect(getSettingsSync()).toEqual(settings);
   });
 
+  it('ignores a telemetryEnabled that is not a boolean', async () => {
+    await saveSettings({ telemetryEnabled: false });
+    vi.clearAllMocks();
+
+    await saveSettings({ telemetryEnabled: 'true' as unknown as boolean });
+
+    expect((await getSettings()).telemetryEnabled).toBe(false);
+    expect(telemetryMock.setTelemetryEnabled).not.toHaveBeenCalled();
+  });
+
+  it('treats a non-boolean telemetryEnabled in the file as on', async () => {
+    fs.writeFileSync(
+      path.join(userData, 'settings.json'),
+      JSON.stringify({ telemetryEnabled: 'no' }),
+    );
+
+    expect((await getSettings()).telemetryEnabled).toBe(true);
+    expect(getSettingsSync().telemetryEnabled).toBe(true);
+  });
+
   it('remembers sharing turned off and applies it right away', async () => {
     await saveSettings({ language: 'de' });
     await saveSettings({ telemetryEnabled: false });
