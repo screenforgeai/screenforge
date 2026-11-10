@@ -83,12 +83,22 @@ export interface DesktopSource {
 
 export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
 
+/** A rectangle picked in the area selector, in DIPs of the display it was drawn on. */
+export interface SelectedArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** The display the selector covered, as it was then (DIP size). */
+  display?: { id: number; width: number; height: number };
+}
+
 export interface ScreenshotCaptureRequest {
   kind: ScreenshotCaptureKind;
-  /** Desktop source id ("screen:…" / "window:…"). Ignored for areas (primary display). */
+  /** Desktop source id ("screen:…" / "window:…"). Ignored for areas (their display decides). */
   sourceId: string;
-  /** Area selection in primary-display DIPs (from the area selector). */
-  area?: { x: number; y: number; width: number; height: number } | null;
+  /** Area selection (from the area selector). */
+  area?: SelectedArea | null;
 }
 
 /** A still image handed to the Screenshot editor. */
@@ -723,12 +733,7 @@ export interface ScreenforgeAPI {
   }) => Promise<void>;
   cancelAreaSelection: () => void;
   /** `purpose` picks the confirm button: record (default) or take a screenshot. */
-  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>;
+  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
 }
 
 declare global {
