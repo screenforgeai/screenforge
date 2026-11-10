@@ -10,6 +10,7 @@ import {
   Cancel01Icon,
   ComputerVideoIcon,
   CropIcon,
+  Shield01Icon,
   SearchAddIcon,
   Cursor01Icon,
   Delete02Icon,
@@ -186,6 +187,7 @@ export const IconSettings = createIcon(Settings01Icon, 'IconSettings');
 export const IconLogoutSquare = createIcon(LogoutSquare01Icon, 'IconLogoutSquare');
 export const IconUserAccount = createIcon(UserAccountIcon, 'IconUserAccount');
 export const IconGlobe = createIcon(GlobeIcon, 'IconGlobe');
+export const IconShield = createIcon(Shield01Icon, 'IconShield');
 export const IconBlur = createIcon(BlurIcon, 'IconBlur');
 export const IconCamera = createIcon(Camera01Icon, 'IconCamera');
 export const IconMusicNote = createIcon(MusicNote01Icon, 'IconMusicNote');

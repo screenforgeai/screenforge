@@ -16,6 +16,7 @@ import { registerWindowChannels } from './modules/app/window-controller';
 import { resetToolbarMousePassthrough, resetToolbarShapeState } from './modules/app/toolbar-mouse';
 import { registerLibraryChannels } from './modules/library/channel';
 import { registerSettingsChannels } from './modules/settings/channel';
+import { getSettingsSync } from './modules/settings/service';
 import { registerPresetsChannels } from './modules/presets/channel';
 import { registerRecordingChannels } from './modules/recording/channel';
 import {
@@ -56,7 +57,7 @@ import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules
 
 log.initialize();
 log.info('[app] logger initialized', { logFilePath: getLogFilePath() });
-initTelemetry();
+initTelemetry({ enabled: getSettingsSync().telemetryEnabled });
 
 process.on('uncaughtException', (error) => {
   log.error('[app] uncaught exception', error);

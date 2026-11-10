@@ -184,17 +184,51 @@ describe('clip intros and outros', () => {
 
   it('leaves a project saved with Motion as it is', () => {
     act(() => {
-      useStore
-        .getState()
-        .loadProjectSession(
-          project({
-            mediaSegments: [clip('a', 0, 4)],
-            motionClips: [],
-            motionVersion: MOTION_VERSION,
-          }),
-        );
+      useStore.getState().loadProjectSession(
+        project({
+          mediaSegments: [clip('a', 0, 4)],
+          motionClips: [],
+          motionVersion: MOTION_VERSION,
+        }),
+      );
     });
 
     expect(useStore.getState().motionClips).toEqual([]);
+  });
+});
+
+describe('click sound in saved projects', () => {
+  const projectWithClickSound = (clickSound: string) =>
+    ({
+      id: 'project-3',
+      name: 'Clicks',
+      result: RECORDING_RESULT,
+      zoomClips: [],
+      frame: DEFAULT_FRAME,
+      cursor: { ...DEFAULT_CURSOR_SETTINGS, clickSound, clickSoundVolume: 0.3 },
+      camera: DEFAULT_CAMERA_SETTINGS,
+      keyboard: DEFAULT_KEYBOARD_SETTINGS,
+      savedAt: new Date(0).toISOString(),
+      thumbnail: '',
+    }) as unknown as SavedProject;
+
+  it.each([
+    ['magic-mouse', 'trackpad'],
+    ['mx-master', 'mouse'],
+    ['pop', 'pop'],
+    ['none', 'none'],
+  ])('loads %s as %s', (saved, expected) => {
+    act(() => {
+      useStore.getState().loadProjectSession(projectWithClickSound(saved));
+    });
+
+    expect(useStore.getState().cursorClickSound).toBe(expected);
+    expect(useStore.getState().cursorClickSoundVolume).toBe(0.3);
+  });
+});
+
+describe('cursor size', () => {
+  it("starts new projects at the cursor's natural size (100%)", () => {
+    expect(useStore.getState().cursorSize).toBe(100);
   });
 });

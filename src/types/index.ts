@@ -36,10 +36,13 @@ export type StartupPermissionStatus =
 
 export type StartupPermissionMap = Record<StartupPermission, StartupPermissionStatus>;
 
+// 'available' means a newer version exists that the user installs themselves
+// (Linux, where the app can't update itself).
 export type UpdaterStatus =
   | 'disabled'
   | 'idle'
   | 'checking'
+  | 'available'
   | 'downloading'
   | 'downloaded'
   | 'ready'
@@ -175,7 +178,7 @@ export interface ProjectCursorSettings {
   maxTilt: number;
   hideWhenIdle: boolean;
   idleHideSeconds: number;
-  clickSound: 'none' | 'magic-mouse' | 'mx-master';
+  clickSound: 'none' | 'soft' | 'mouse' | 'trackpad' | 'pop' | 'tick';
   clickSoundVolume: number;
   continuousTracking: boolean;
 }
@@ -589,11 +592,20 @@ export interface ScreenforgeAPI {
   importVideoForInsert: () => Promise<RecordingResult | null>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
-  getSettings: () => Promise<{ profile: { name: string; email: string }; language: string }>;
+  getSettings: () => Promise<{
+    profile: { name: string; email: string };
+    language: string;
+    telemetryEnabled: boolean;
+  }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };
     language?: string;
-  }) => Promise<{ profile: { name: string; email: string }; language: string }>;
+    telemetryEnabled?: boolean;
+  }) => Promise<{
+    profile: { name: string; email: string };
+    language: string;
+    telemetryEnabled: boolean;
+  }>;
   startExport: (request: ExportRequest) => Promise<ExportResult>;
   cancelExport: (jobId: string) => Promise<void>;
   pickExportPath: (

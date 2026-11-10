@@ -9,14 +9,14 @@ export const DEFAULT_CURSOR_SETTINGS: ProjectCursorSettings = {
   enabled: true,
   style: 'cursor01',
   clickEffect: 'none',
-  size: 125,
+  size: 100,
   halflife: 0.06,
   motionBlur: true,
   maxTilt: 4,
   hideWhenIdle: false,
   idleHideSeconds: 5,
   clickSound: 'none',
-  clickSoundVolume: 0.3,
+  clickSoundVolume: 0.5,
   continuousTracking: true,
 };
 
