@@ -30,6 +30,7 @@
   "director_signedInBody": "Los enlaces para compartir, el kit de marca y las grabaciones de Director están activados. Puedes cerrar sesión cuando quieras; tus proyectos se quedan en este ordenador.",
   "director_notRemembered": "Este ordenador no tiene un llavero que Screenforge pueda usar, así que tendrás que volver a iniciar sesión después de salir.",
   "director_signOut": "Cerrar sesión",
+  "director_signOutFailed": "No se pudo cerrar sesión: no se pudo contactar con Director ni eliminar el inicio de sesión guardado. Revisa tu conexión e inténtalo de nuevo.",
   "director_error_expired": "El enlace de inicio de sesión caducó. Inténtalo de nuevo.",
   "director_error_failed": "No se pudo iniciar sesión en Director. Comprueba tu conexión e inténtalo de nuevo.",
   "director_error_disconnected": "Esta app se desconectó de Director. Inicia sesión de nuevo para volver a conectarla."

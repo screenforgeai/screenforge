@@ -30,6 +30,7 @@
   "director_signedInBody": "Links de compartilhamento, kit de marca e gravações do Director estão ativados. Saia quando quiser; seus projetos continuam neste computador.",
   "director_notRemembered": "Este computador não tem um chaveiro que o Screenforge possa usar, então você precisará entrar de novo depois de fechar o app.",
   "director_signOut": "Sair",
+  "director_signOutFailed": "Não foi possível sair: o Director não respondeu e o login salvo não pôde ser removido. Verifique sua conexão e tente novamente.",
   "director_error_expired": "O link de login expirou. Tente novamente.",
   "director_error_failed": "Não foi possível entrar no Director. Verifique sua conexão e tente novamente.",
   "director_error_disconnected": "Este app foi desconectado do Director. Entre novamente para reconectar."

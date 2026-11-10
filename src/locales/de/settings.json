@@ -30,6 +30,7 @@
   "director_signedInBody": "Freigabelinks, Brand-Kit und Director-Aufnahmen sind aktiv. Du kannst dich jederzeit abmelden; deine Projekte bleiben auf diesem Computer.",
   "director_notRemembered": "Dieser Computer hat keinen Schlüsselbund, den Screenforge nutzen kann. Nach dem Beenden musst du dich daher erneut anmelden.",
   "director_signOut": "Abmelden",
+  "director_signOutFailed": "Abmelden fehlgeschlagen: Director war nicht erreichbar und die gespeicherte Anmeldung konnte nicht entfernt werden. Prüfe deine Verbindung und versuche es erneut.",
   "director_error_expired": "Der Anmeldelink ist abgelaufen. Versuche es erneut.",
   "director_error_failed": "Anmeldung bei Director fehlgeschlagen. Prüfe deine Verbindung und versuche es erneut.",
   "director_error_disconnected": "Diese App wurde von Director getrennt. Melde dich erneut an, um sie wieder zu verbinden."
