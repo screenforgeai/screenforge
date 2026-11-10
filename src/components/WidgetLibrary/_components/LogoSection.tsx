@@ -109,8 +109,10 @@ export const LogoSection = () => {
         </Button>
       ) : (
         <>
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-sf-border bg-sf-panel p-1">
+          {/* Thumbnail beside the two actions, stacked: the panel is too narrow
+              for all three in a row (labels run long in some languages). */}
+          <div className="flex items-stretch gap-2">
+            <div className="flex w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-sf-border bg-sf-panel p-1">
               <img
                 src={logo.src}
                 alt=""
@@ -118,22 +120,14 @@ export const LogoSection = () => {
                 draggable={false}
               />
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              onClick={() => inputRef.current?.click()}
-            >
-              {t('logoReplace')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              onClick={() => setLogo('Remove logo', null)}
-            >
-              {t('logoRemove')}
-            </Button>
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <Button size="sm" variant="outline" onClick={() => inputRef.current?.click()}>
+                {t('logoReplace')}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setLogo('Remove logo', null)}>
+                {t('logoRemove')}
+              </Button>
+            </div>
           </div>
 
           <ToggleGroup
