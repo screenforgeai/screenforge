@@ -81,6 +81,16 @@ describe('Director account', () => {
     expect(client.createLoginCode).toHaveBeenCalledTimes(1);
   });
 
+  it('does not start a new sign-in over an account that is already signed in', async () => {
+    const { account, client, store } = setup({ stored: ACCOUNT });
+    await account.init();
+    await account.signIn();
+    expect(client.createLoginCode).not.toHaveBeenCalled();
+    expect(store.save).not.toHaveBeenCalled();
+    expect(account.getState()).toMatchObject({ status: 'signed-in' });
+    expect(account.getToken()).toBe('sfd_token');
+  });
+
   it('goes back to signed out, saying why, when the link expires', async () => {
     const { account, client } = setup();
     client.pollLoginCode.mockRejectedValue(new DirectorApiError(400, 'LOGIN_CODE_INVALID', 'x'));
