@@ -568,6 +568,12 @@ export interface ScreenforgeAPI {
   importVideoForInsert: () => Promise<RecordingResult | null>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
+  /** Main window startup only: whether to open "What's new". Marks the running version as seen. */
+  consumeWhatsNewOnLaunch: () => Promise<{
+    show: boolean;
+    sinceVersion: string | null;
+    currentVersion: string;
+  }>;
   getSettings: () => Promise<{
     profile: { name: string; email: string };
     language: string;

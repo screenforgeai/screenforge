@@ -9,6 +9,8 @@ export interface AppSettings {
   language: string;
   /** "Share usage data": usage events, error reports and the profile go to PostHog. */
   telemetryEnabled: boolean;
+  /** Version whose release notes were last offered in "What's new"; absent before the first check. */
+  lastSeenVersion?: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -24,14 +26,25 @@ function isBoolean(value: unknown): value is boolean {
   return typeof value === 'boolean';
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function withLastSeenVersion(settings: AppSettings, value: unknown): AppSettings {
+  return isNonEmptyString(value) ? { ...settings, lastSeenVersion: value } : settings;
+}
+
 function withDefaults(parsed: Partial<AppSettings>): AppSettings {
-  return {
-    profile: { ...DEFAULTS.profile, ...parsed.profile },
-    language: parsed.language ?? DEFAULTS.language,
-    telemetryEnabled: isBoolean(parsed.telemetryEnabled)
-      ? parsed.telemetryEnabled
-      : DEFAULTS.telemetryEnabled,
-  };
+  return withLastSeenVersion(
+    {
+      profile: { ...DEFAULTS.profile, ...parsed.profile },
+      language: parsed.language ?? DEFAULTS.language,
+      telemetryEnabled: isBoolean(parsed.telemetryEnabled)
+        ? parsed.telemetryEnabled
+        : DEFAULTS.telemetryEnabled,
+    },
+    parsed.lastSeenVersion,
+  );
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -54,13 +67,16 @@ export function getSettingsSync(): AppSettings {
 
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings();
-  const next: AppSettings = {
-    profile: { ...current.profile, ...patch.profile },
-    language: patch.language ?? current.language,
-    telemetryEnabled: isBoolean(patch.telemetryEnabled)
-      ? patch.telemetryEnabled
-      : current.telemetryEnabled,
-  };
+  const next: AppSettings = withLastSeenVersion(
+    {
+      profile: { ...current.profile, ...patch.profile },
+      language: patch.language ?? current.language,
+      telemetryEnabled: isBoolean(patch.telemetryEnabled)
+        ? patch.telemetryEnabled
+        : current.telemetryEnabled,
+    },
+    isNonEmptyString(patch.lastSeenVersion) ? patch.lastSeenVersion : current.lastSeenVersion,
+  );
   await fs.writeFile(settingsPath(), JSON.stringify(next), 'utf8');
   if (isBoolean(patch.telemetryEnabled)) {
     setTelemetryEnabled(next.telemetryEnabled);

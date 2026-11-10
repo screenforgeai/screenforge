@@ -69,6 +69,7 @@ import {
   QuotesIcon,
   Note01Icon,
   FavouriteIcon,
+  SparklesIcon,
   ChatFeedbackIcon,
   Settings01Icon,
   LogoutSquare01Icon,
@@ -176,6 +177,7 @@ export const IconFilm = createIcon(Film02Icon, 'IconFilm');
 export const IconQuote = createIcon(QuotesIcon, 'IconQuote');
 export const IconNote = createIcon(Note01Icon, 'IconNote');
 export const IconHeart = createIcon(FavouriteIcon, 'IconHeart');
+export const IconSparkles = createIcon(SparklesIcon, 'IconSparkles');
 export const IconChatFeedback = createIcon(ChatFeedbackIcon, 'IconChatFeedback');
 export const IconSettings = createIcon(Settings01Icon, 'IconSettings');
 export const IconLogoutSquare = createIcon(LogoutSquare01Icon, 'IconLogoutSquare');

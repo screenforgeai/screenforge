@@ -28,6 +28,7 @@ import widgets from './locales/en/widgets.json';
 import settings from './locales/en/settings.json';
 import mask from './locales/en/mask.json';
 import motion from './locales/en/motion.json';
+import whatsNew from './locales/en/whatsNew.json';
 
 // Spanish
 import commonEs from './locales/es/common.json';
@@ -53,6 +54,7 @@ import timelineEs from './locales/es/timeline.json';
 import widgetsEs from './locales/es/widgets.json';
 import settingsEs from './locales/es/settings.json';
 import maskEs from './locales/es/mask.json';
+import whatsNewEs from './locales/es/whatsNew.json';
 
 // French
 import commonFr from './locales/fr/common.json';
@@ -78,6 +80,7 @@ import timelineFr from './locales/fr/timeline.json';
 import widgetsFr from './locales/fr/widgets.json';
 import settingsFr from './locales/fr/settings.json';
 import maskFr from './locales/fr/mask.json';
+import whatsNewFr from './locales/fr/whatsNew.json';
 
 // German
 import commonDe from './locales/de/common.json';
@@ -103,6 +106,7 @@ import timelineDe from './locales/de/timeline.json';
 import widgetsDe from './locales/de/widgets.json';
 import settingsDe from './locales/de/settings.json';
 import maskDe from './locales/de/mask.json';
+import whatsNewDe from './locales/de/whatsNew.json';
 
 // Japanese
 import commonJa from './locales/ja/common.json';
@@ -128,6 +132,7 @@ import timelineJa from './locales/ja/timeline.json';
 import widgetsJa from './locales/ja/widgets.json';
 import settingsJa from './locales/ja/settings.json';
 import maskJa from './locales/ja/mask.json';
+import whatsNewJa from './locales/ja/whatsNew.json';
 
 // Portuguese
 import commonPt from './locales/pt/common.json';
@@ -153,6 +158,7 @@ import timelinePt from './locales/pt/timeline.json';
 import widgetsPt from './locales/pt/widgets.json';
 import settingsPt from './locales/pt/settings.json';
 import maskPt from './locales/pt/mask.json';
+import whatsNewPt from './locales/pt/whatsNew.json';
 
 // Korean
 import commonKo from './locales/ko/common.json';
@@ -178,6 +184,7 @@ import timelineKo from './locales/ko/timeline.json';
 import widgetsKo from './locales/ko/widgets.json';
 import settingsKo from './locales/ko/settings.json';
 import maskKo from './locales/ko/mask.json';
+import whatsNewKo from './locales/ko/whatsNew.json';
 
 // eslint-disable-next-line import/no-named-as-default-member
 i18n.use(initReactI18next).init({
@@ -208,6 +215,7 @@ i18n.use(initReactI18next).init({
     'settings',
     'mask',
     'motion',
+    'whatsNew',
   ],
   defaultNS: 'common',
   resources: {
@@ -236,6 +244,7 @@ i18n.use(initReactI18next).init({
       settings,
       mask,
       motion,
+      whatsNew,
     },
     es: {
       common: commonEs,
@@ -261,6 +270,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsEs,
       settings: settingsEs,
       mask: maskEs,
+      whatsNew: whatsNewEs,
     },
     fr: {
       common: commonFr,
@@ -286,6 +296,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsFr,
       settings: settingsFr,
       mask: maskFr,
+      whatsNew: whatsNewFr,
     },
     de: {
       common: commonDe,
@@ -311,6 +322,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsDe,
       settings: settingsDe,
       mask: maskDe,
+      whatsNew: whatsNewDe,
     },
     ja: {
       common: commonJa,
@@ -336,6 +348,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsJa,
       settings: settingsJa,
       mask: maskJa,
+      whatsNew: whatsNewJa,
     },
     pt: {
       common: commonPt,
@@ -361,6 +374,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsPt,
       settings: settingsPt,
       mask: maskPt,
+      whatsNew: whatsNewPt,
     },
     ko: {
       common: commonKo,
@@ -386,6 +400,7 @@ i18n.use(initReactI18next).init({
       widgets: widgetsKo,
       settings: settingsKo,
       mask: maskKo,
+      whatsNew: whatsNewKo,
     },
   },
   interpolation: {

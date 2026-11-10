@@ -58,6 +58,7 @@ import { ShortcutsModal } from './_components/ShortcutsModal';
 import { CreateScenesModal } from './_components/CreateScenesModal';
 import { OVERLAY_SCENES_KEY } from './_components/SceneOverlay';
 import { SettingsModal } from './_components/SettingsModal';
+import { WhatsNewButton } from '../WhatsNew/WhatsNewButton';
 
 const KOFI_URL = 'https://ko-fi.com/mohibarshi';
 
@@ -302,6 +303,8 @@ export const WidgetLibrary = () => {
             </Tooltip>
 
             <div aria-hidden="true" className="my-1 h-px w-5 rounded-full bg-sf-border" />
+
+            <WhatsNewButton />
 
             <Tooltip>
               <TooltipTrigger asChild>

@@ -21,6 +21,7 @@ import type widgets from './locales/en/widgets.json';
 import type settings from './locales/en/settings.json';
 import type mask from './locales/en/mask.json';
 import type motion from './locales/en/motion.json';
+import type whatsNew from './locales/en/whatsNew.json';
 
 declare module 'i18next' {
   interface CustomTypeOptions {
@@ -49,6 +50,7 @@ declare module 'i18next' {
       settings: typeof settings;
       mask: typeof mask;
       motion: typeof motion;
+      whatsNew: typeof whatsNew;
     };
   }
 }

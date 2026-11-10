@@ -1,0 +1,11 @@
+{
+  "title": "Novidades",
+  "subtitleSingle": "Veja o que mudou no Screenforge {{version}}.",
+  "subtitleRange": "Tudo o que mudou desde a sua versão anterior.",
+  "versionHeading": "Versão {{version}}",
+  "sectionNew": "Novo",
+  "sectionFixes": "Correções e melhorias",
+  "gotIt": "Entendi",
+  "versionBadge": "v{{version}}",
+  "open": "Novidades"
+}

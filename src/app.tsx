@@ -12,6 +12,7 @@ import { Toaster } from 'sonner';
 import { useStore } from './store';
 import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/toast';
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
+import { WhatsNewOnLaunch } from './components/WhatsNew/WhatsNewOnLaunch';
 import { trackEvent } from './lib/analytics';
 import i18n from './i18n';
 
@@ -339,6 +340,7 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
         }}
       />
       <FFmpegSetupModal open={ffmpegMissing} onReady={() => setFfmpegMissing(false)} />
+      <WhatsNewOnLaunch deferred={ffmpegMissing} />
     </>
   );
 };

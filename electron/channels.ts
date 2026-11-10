@@ -110,6 +110,9 @@ export const CH = {
     GET: 'settings:get',
     SAVE: 'settings:save',
   },
+  whatsNew: {
+    CONSUME_ON_LAUNCH: 'whats-new:consume-on-launch',
+  },
   presets: {
     SAVE: 'presets:save',
     GET_ALL: 'presets:get-all',
