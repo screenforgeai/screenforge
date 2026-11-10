@@ -2,9 +2,27 @@
 
 export const DEFAULT_DIRECTOR_API_URL = 'https://api.director.screenforge.co/api';
 
+/** Every Director call gives up after this, so a stalled request reads as offline. */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 export function directorApiBase(env: Record<string, string | undefined>): string {
   const override = env.SCREENFORGE_DIRECTOR_API_URL?.trim();
-  return (override || DEFAULT_DIRECTOR_API_URL).replace(/\/+$/, '');
+  const base = (override || DEFAULT_DIRECTOR_API_URL).replace(/\/+$/, '');
+  // The desktop token travels to this URL: only https, or http on this computer.
+  try {
+    const url = new URL(base);
+    if (
+      url.protocol === 'https:' ||
+      (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname))
+    ) {
+      return base;
+    }
+  } catch {
+    // Not a URL: use production Director.
+  }
+  return DEFAULT_DIRECTOR_API_URL;
 }
 
 export class DirectorApiError extends Error {
@@ -80,6 +98,7 @@ export function createDirectorClient({ baseUrl, fetch, getToken }: DirectorClien
         method: init.method ?? 'GET',
         headers,
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (err) {
       throw new DirectorApiError(

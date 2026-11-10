@@ -121,6 +121,24 @@ describe('runSignIn', () => {
     ).rejects.toMatchObject({ reason: 'cancelled' });
   });
 
+  it('stays cancelled when the approval lands while the cancel is in flight', async () => {
+    const s = setup([]);
+    const controller = new AbortController();
+    s.client.pollLoginCode.mockImplementation(async () => {
+      controller.abort();
+      return APPROVED;
+    });
+    await expect(
+      runSignIn({
+        client: s.client,
+        openExternal: s.openExternal,
+        sleep: s.sleep,
+        now: s.now,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ reason: 'cancelled' });
+  });
+
   it('fails when an approval comes back without a token', async () => {
     const s = setup([{ status: 'approved' }]);
     await expect(

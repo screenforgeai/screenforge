@@ -88,6 +88,10 @@ export async function runSignIn({
       }
     }
     if (poll?.status === 'approved') {
+      // Cancelled while this poll was in flight: honour the cancel.
+      if (signal?.aborted) {
+        throw cancelled();
+      }
       if (!poll.accessToken || !poll.user || !poll.workspace) {
         throw new SignInError('failed', 'Director approved the sign-in but sent no account.');
       }
