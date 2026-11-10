@@ -65,6 +65,7 @@ import { cn } from 'src/lib/utils';
 import { useStore } from 'src/store';
 import type { ScreenshotCapture, StylePreset } from 'src/types';
 import { ScreenshotStylePanel } from './_components/ScreenshotStylePanel';
+import { TopBarButton, TopBarGroup } from './_components/TopBarButtons';
 
 type Props = {
   capture: ScreenshotCapture;
@@ -572,24 +573,26 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
         </span>
 
         <div className="mx-auto flex items-center gap-3">
-          <div className="flex items-center gap-0.5 rounded-lg border border-sf-border bg-sf-panel p-0.5">
+          <TopBarGroup
+            id="screenshot-tools"
+            aria-label={t('tools')}
+            className="flex items-center gap-0.5 rounded-lg border border-sf-border bg-sf-panel p-0.5"
+          >
             {TOOLS.map(({ id, hotkey }) => {
               const Icon = TOOL_ICONS[id];
               const label = t(TOOL_LABEL_KEYS[id]);
               return (
                 <Tooltip key={id}>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-md"
+                    <TopBarButton
+                      itemId={id}
+                      selected={tool === id}
                       aria-label={label}
                       aria-pressed={tool === id}
-                      active={tool === id}
                       onClick={() => setTool(id)}
                     >
                       <Icon size={20} />
-                    </Button>
+                    </TopBarButton>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
                     {label} <span className="ml-1 uppercase text-sf-muted">{hotkey}</span>
@@ -597,7 +600,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
                 </Tooltip>
               );
             })}
-          </div>
+          </TopBarGroup>
 
           <div className="flex items-center gap-1" role="radiogroup" aria-label={t('color')}>
             {ANNOTATION_COLORS.map((swatch) => (
@@ -617,38 +620,36 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
             ))}
           </div>
 
-          <div className="flex items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-md"
+          <TopBarGroup
+            id="screenshot-actions"
+            aria-label={t('actions')}
+            className="flex items-center gap-0.5"
+          >
+            <TopBarButton
+              itemId="undo"
               aria-label={t('undo')}
               disabled={annotations.past.length === 0}
               onClick={() => dispatch({ type: 'undo' })}
             >
               <IconArrowBackUp size={20} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-md"
+            </TopBarButton>
+            <TopBarButton
+              itemId="redo"
               aria-label={t('redo')}
               disabled={annotations.future.length === 0}
               onClick={() => dispatch({ type: 'redo' })}
             >
               <IconArrowForwardUp size={20} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-md"
+            </TopBarButton>
+            <TopBarButton
+              itemId="delete"
               aria-label={t('deleteShape')}
               disabled={!selectedId}
               onClick={deleteSelected}
             >
               <IconTrash size={20} />
-            </Button>
-          </div>
+            </TopBarButton>
+          </TopBarGroup>
         </div>
 
         <Button variant="secondary" size="sm" disabled={!canExport} onClick={handleCopy}>

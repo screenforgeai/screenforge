@@ -33,5 +33,7 @@
   "captureWindow": "Window",
   "noWindows": "No windows open",
   "captureFailed": "Couldn't take the screenshot. Check the screen recording permission and try again.",
-  "annotate": "Annotate"
+  "annotate": "Annotate",
+  "tools": "Tools",
+  "actions": "Edit actions"
 }

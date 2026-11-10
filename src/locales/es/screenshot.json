@@ -33,5 +33,7 @@
   "captureWindow": "Ventana",
   "noWindows": "No hay ventanas abiertas",
   "captureFailed": "No se pudo hacer la captura. Revisa el permiso de grabación de pantalla e inténtalo de nuevo.",
-  "annotate": "Anotar"
+  "annotate": "Anotar",
+  "tools": "Herramientas",
+  "actions": "Acciones de edición"
 }

@@ -33,5 +33,7 @@
   "captureWindow": "Fenêtre",
   "noWindows": "Aucune fenêtre ouverte",
   "captureFailed": "Impossible de faire la capture. Vérifiez l'autorisation d'enregistrement de l'écran et réessayez.",
-  "annotate": "Annoter"
+  "annotate": "Annoter",
+  "tools": "Outils",
+  "actions": "Actions d'édition"
 }
