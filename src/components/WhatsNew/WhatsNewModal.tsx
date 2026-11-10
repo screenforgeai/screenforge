@@ -108,7 +108,8 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
         onOpenAutoFocus={(event) => {
           // Focus the notes (no ring on a button) so arrow keys scroll and Enter dismisses.
           event.preventDefault();
-          scrollRef.current?.focus();
+          // focusVisible: false keeps the keyboard ring off until the user tabs.
+          scrollRef.current?.focus({ focusVisible: false } as FocusOptions);
         }}
         onKeyDown={(event) => {
           // Buttons keep their own Enter behaviour.
@@ -146,8 +147,10 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
 
         <div
           ref={scrollRef}
-          tabIndex={-1}
-          className="min-h-0 flex-1 overflow-y-auto px-6 py-5 outline-none"
+          // Tabbable so keyboard users can come back and scroll long notes.
+          tabIndex={0}
+          aria-label={t('title')}
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-5 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sf-border-lt"
         >
           {isRange ? (
             <div className="flex flex-col gap-7">

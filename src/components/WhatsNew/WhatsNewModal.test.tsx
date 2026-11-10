@@ -76,7 +76,7 @@ describe('WhatsNewModal', () => {
     const { onClose } = renderModal([v080]);
 
     await waitFor(() =>
-      expect(screen.getByText('Add a What’s new dialog.').closest('[tabindex="-1"]')).toHaveFocus(),
+      expect(screen.getByText('Add a What’s new dialog.').closest('[tabindex="0"]')).toHaveFocus(),
     );
     await userEvent.keyboard('{Enter}');
 
@@ -89,6 +89,19 @@ describe('WhatsNewModal', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets keyboard users tab back to the notes to scroll them', async () => {
+    renderModal([v080]);
+    const notes = screen.getByText('Add a What’s new dialog.').closest('[tabindex="0"]');
+
+    await waitFor(() => expect(notes).toHaveFocus());
+    await userEvent.tab();
+    expect(notes).not.toHaveFocus();
+    await userEvent.tab();
+    await userEvent.tab();
+
+    expect(notes).toHaveFocus();
   });
 
   it('closes on Escape', async () => {
