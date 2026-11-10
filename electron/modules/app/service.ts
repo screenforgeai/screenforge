@@ -383,12 +383,23 @@ export async function saveScreenshot(dataUrl: string): Promise<string> {
   await fs.mkdir(dir, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const filePath = path.join(dir, `screenshot-${timestamp}.png`);
-
   const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-  await fs.writeFile(filePath, Buffer.from(base64, 'base64'));
+  const data = Buffer.from(base64, 'base64');
 
-  return filePath;
+  // Two saves in the same second (a preview frame, then its annotated copy)
+  // must not overwrite each other: 'wx' fails on an existing name, so count up.
+  for (let attempt = 0; ; attempt++) {
+    const suffix = attempt === 0 ? '' : `-${attempt}`;
+    const filePath = path.join(dir, `screenshot-${timestamp}${suffix}.png`);
+    try {
+      await fs.writeFile(filePath, data, { flag: 'wx' });
+      return filePath;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error;
+      }
+    }
+  }
 }
 
 export async function saveMusic(

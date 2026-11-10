@@ -10,6 +10,21 @@ import { captureStill, copyImageToClipboard } from './service';
 // screen before the still is grabbed.
 const HIDE_SETTLE_MS = 250;
 
+const CAPTURE_KINDS = new Set(['display', 'window', 'area']);
+
+// Renderer input: the request type is not enforced at runtime.
+function isValidCaptureRequest(request: unknown): request is ScreenshotCaptureRequest {
+  const r = request as Partial<ScreenshotCaptureRequest> | null;
+  if (!r || typeof r.sourceId !== 'string' || !CAPTURE_KINDS.has(r.kind as string)) {
+    return false;
+  }
+  if (r.kind !== 'area') {
+    return true;
+  }
+  const a = r.area;
+  return !!a && [a.x, a.y, a.width, a.height].every(Number.isFinite) && a.width > 0 && a.height > 0;
+}
+
 type Options = {
   getMainWindow: () => BrowserWindow | null;
   getToolbarWindow: () => BrowserWindow | null;
@@ -22,6 +37,9 @@ export function registerScreenshotChannels({
   setToolbarWindow,
 }: Options): void {
   handleChannel<[ScreenshotCaptureRequest], void>(CH.screenshot.CAPTURE, async (request) => {
+    if (!isValidCaptureRequest(request)) {
+      throw new Error('Invalid screenshot capture request');
+    }
     const toolbar = getToolbarWindow();
     toolbar?.hide();
     closeCameraPreview();
@@ -41,12 +59,17 @@ export function registerScreenshotChannels({
       width: capture.width,
       height: capture.height,
     });
+    const mainWindow = getMainWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      // Keep the toolbar, so the renderer can show its capture-failed warning.
+      toolbar?.show();
+      throw new Error('Main window is not available to open the Screenshot editor');
+    }
     toolbar?.close();
     setToolbarWindow(null);
-    const mainWindow = getMainWindow();
-    mainWindow?.webContents.send(CH.screenshot.CAPTURED, capture);
-    mainWindow?.show();
-    mainWindow?.focus();
+    mainWindow.webContents.send(CH.screenshot.CAPTURED, capture);
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   handleChannel<[string], void>(CH.screenshot.COPY, (dataUrl) => copyImageToClipboard(dataUrl));
