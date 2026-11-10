@@ -30,6 +30,7 @@
   "director_signedInBody": "Share links, the brand kit and Director recordings are on. Sign out at any time; your projects stay on this computer.",
   "director_notRemembered": "This computer has no keychain Screenforge can use, so you'll need to sign in again after quitting.",
   "director_signOut": "Sign out",
+  "director_signOutFailed": "Couldn't sign out: Director couldn't be reached and the saved sign-in couldn't be removed. Check your connection and try again.",
   "director_error_expired": "The sign-in link expired. Try again.",
   "director_error_failed": "Couldn't sign in to Director. Check your connection and try again.",
   "director_error_disconnected": "This app was disconnected from Director. Sign in again to reconnect."
