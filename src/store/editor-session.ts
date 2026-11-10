@@ -8,6 +8,7 @@ import {
 } from './defaults';
 import type { EditorSessionState } from './types';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
+import { normalizeCursorClickSound } from '../lib/effects/cursor/audio';
 import type { CameraClip, MediaSegment } from '../types/timeline';
 import {
   cloneMotionClips,
@@ -176,7 +177,7 @@ export function createProjectSession(project: SavedProject): EditorSessionState 
     cursorMaxTilt: project.cursor.maxTilt,
     cursorHideWhenIdle: project.cursor.hideWhenIdle,
     cursorIdleHideSeconds: project.cursor.idleHideSeconds,
-    cursorClickSound: project.cursor.clickSound,
+    cursorClickSound: normalizeCursorClickSound(project.cursor.clickSound),
     cursorClickSoundVolume: project.cursor.clickSoundVolume,
     cursorContinuousTracking: project.cursor.continuousTracking ?? true,
     camera: {
