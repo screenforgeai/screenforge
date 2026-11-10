@@ -12,6 +12,7 @@ import { Toaster } from 'sonner';
 import { useStore } from './store';
 import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/toast';
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
+import { playShutterSound } from './lib/screenshot/shutter-sound';
 import { ScreenshotEditor } from './components/ScreenshotEditor';
 import { trackEvent } from './lib/analytics';
 import i18n from './i18n';
@@ -307,6 +308,9 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
 
   useEffect(() => {
     return window.screenforge.onScreenshotCaptured((capture) => {
+      // Same shutter as the preview's camera button. Played here, not in the
+      // toolbar, because the toolbar window is gone by the time a capture lands.
+      playShutterSound();
       openScreenshotEditor(capture);
       trackEvent('screenshot_editor_opened', { kind: capture.kind });
     });

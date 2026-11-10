@@ -17,16 +17,11 @@ import { CameraOverlayEditor } from './CameraOverlayEditor';
 import { MaskOverlayEditor } from './MaskOverlayEditor';
 import { TextOverlayEditor } from './TextOverlayEditor';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import cameraCaptureSound from 'src/assets/sounds/camera-capture.mp3';
+import { playShutterSound } from 'src/lib/screenshot/shutter-sound';
 
 interface Props {
   videoRef: RefObject<HTMLVideoElement | null>;
   canvasRef: RefObject<HTMLCanvasElement | null>;
-}
-
-function playShutterSound(): void {
-  const audio = new Audio(cameraCaptureSound);
-  void audio.play();
 }
 
 type ScreenshotToastProps = {

@@ -132,7 +132,8 @@ describe('FloatingToolbarScreenshot', () => {
         area: { x: 1, y: 2, width: 300, height: 200 },
       }),
     );
-    expect(screenforge.openAreaSelector).toHaveBeenCalled();
+    // The selector then shows a camera shutter instead of the record button.
+    expect(screenforge.openAreaSelector).toHaveBeenCalledWith('screenshot');
   });
 
   it('does nothing when the area selection is cancelled', async () => {
