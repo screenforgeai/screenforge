@@ -53,7 +53,7 @@ import { pickAndImportVideo } from './modules/import/service';
 import { getAreaSelectorWindow } from './modules/area-selector/service';
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
 import { registerDirectorChannels } from './modules/director/channel';
-import { initDirectorAccount } from './modules/director/service';
+import { getProjectOpener, initDirectorAccount } from './modules/director/service';
 import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
 
 log.initialize();
@@ -247,11 +247,14 @@ function handleAppLink(url: string): void {
   if (!link) {
     return;
   }
-  // Every link we handle today brings Screenforge forward: after a Director
-  // sign-in the app finishes it on its own, by polling.
+  // Every link brings Screenforge forward: after a Director sign-in the app
+  // finishes on its own, by polling.
   mainWindow.show();
   mainWindow.focus();
   app.dock?.show();
+  if (link?.type === 'open-director-demo') {
+    void getProjectOpener().openDirectorDemo(link.demoId);
+  }
 }
 
 // macOS delivers links as open-url, possibly before 'ready'.

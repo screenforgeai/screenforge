@@ -165,7 +165,13 @@ function normalizeRecording(recording: RecordingResult): NormalizedRecording | n
 
   const keyEvents = getKeyEvents(mouseData, startTime);
   return {
-    moveEvents: getMoveEvents(mouseData, startTime, recordingArea, recording.captureBoundsTimeline),
+    moveEvents: getMoveEvents(
+      mouseData,
+      startTime,
+      recordingArea,
+      recording.captureBoundsTimeline,
+      recording.syntheticCursor,
+    ),
     clickEvents: getClickEvents(
       mouseData,
       startTime,

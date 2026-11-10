@@ -116,6 +116,8 @@ export const CH = {
     CANCEL_SIGN_IN: 'director:cancel-sign-in',
     SIGN_OUT: 'director:sign-out',
     ACCOUNT_CHANGED: 'director:account-changed',
+    OPEN_BUNDLE_FROM_DISK: 'director:open-bundle-from-disk',
+    PROJECT_EVENT: 'director:project-event',
   },
   presets: {
     SAVE: 'presets:save',

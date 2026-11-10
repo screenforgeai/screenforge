@@ -75,5 +75,18 @@
   "scenes_recorded": "Enregistré",
   "scenes_markDone": "Marquer comme fait",
   "scenes_prevScene": "Scène précédente",
-  "scenes_nextScene": "Scène suivante"
+  "scenes_nextScene": "Scène suivante",
+  "moreActions": "Plus d'actions",
+  "openProject": "Ouvrir un projet…",
+  "directorProject_downloading": "Ouverture de l'enregistrement Director…",
+  "directorProject_downloadingFiles": "Téléchargement de l'enregistrement Director ({{done}} fichiers sur {{total}})…",
+  "directorProject_needsSignIn": "Connectez-vous à Director pour ouvrir cet enregistrement.",
+  "directorProject_signIn": "Se connecter",
+  "directorProject_opened": "« {{name}} » est ouvert. Les modifications restent sur cet ordinateur.",
+  "directorProject_inLibrary": "« {{name}} » est dans Enregistrements. Nommez votre enregistrement en cours, puis ouvrez-le depuis là.",
+  "directorProject_failed_not-available": "Cet enregistrement ne peut pas être ouvert dans Screenforge. Seuls les enregistrements terminés et récents le peuvent ; réenregistrez-le dans Director pour le modifier.",
+  "directorProject_failed_not-found": "Cet enregistrement n'est pas dans l'espace de travail Director auquel vous êtes connecté.",
+  "directorProject_failed_invalid": "Ce fichier n'est pas un projet Screenforge.",
+  "directorProject_failed_missing-recording": "Le fichier vidéo du projet est introuvable. Laissez recording.mp4 à côté de project.json.",
+  "directorProject_failed_failed": "Impossible d'ouvrir l'enregistrement. Vérifiez votre connexion et réessayez."
 }

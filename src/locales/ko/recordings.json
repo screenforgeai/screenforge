@@ -75,5 +75,18 @@
   "scenes_recorded": "녹화됨",
   "scenes_markDone": "완료로 표시",
   "scenes_prevScene": "이전 장면",
-  "scenes_nextScene": "다음 장면"
+  "scenes_nextScene": "다음 장면",
+  "moreActions": "추가 작업",
+  "openProject": "프로젝트 열기…",
+  "directorProject_downloading": "Director 녹화본을 여는 중…",
+  "directorProject_downloadingFiles": "Director 녹화본 다운로드 중({{total}}개 파일 중 {{done}}개)…",
+  "directorProject_needsSignIn": "이 녹화본을 열려면 Director에 로그인하세요.",
+  "directorProject_signIn": "로그인",
+  "directorProject_opened": "“{{name}}”을(를) 열었습니다. 편집 내용은 이 컴퓨터에 남습니다.",
+  "directorProject_inLibrary": "“{{name}}”이(가) 녹화 목록에 있습니다. 현재 녹화의 이름을 정한 다음 그곳에서 여세요.",
+  "directorProject_failed_not-available": "이 녹화본은 Screenforge에서 열 수 없습니다. 완료된 최근 녹화본만 열 수 있으니, 편집하려면 Director에서 다시 녹화하세요.",
+  "directorProject_failed_not-found": "이 녹화본은 로그인한 Director 워크스페이스에 없습니다.",
+  "directorProject_failed_invalid": "이 파일은 Screenforge 프로젝트가 아닙니다.",
+  "directorProject_failed_missing-recording": "프로젝트의 동영상 파일이 없습니다. recording.mp4를 project.json 옆에 두세요.",
+  "directorProject_failed_failed": "녹화본을 열지 못했습니다. 연결을 확인하고 다시 시도하세요."
 }

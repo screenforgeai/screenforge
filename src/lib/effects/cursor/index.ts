@@ -22,6 +22,7 @@ export const cursorEffect: Effect<import('./analyze').CursorData> = {
         recording.startTime,
         recording.recordingArea,
         recording.captureBoundsTimeline,
+        recording.syntheticCursor,
       ),
       clickEvents: getClickEvents(
         recording.mouseData,

@@ -70,6 +70,7 @@ export const getMoveEvents = (
   startTime: number,
   area: RecordingArea,
   boundsTimeline?: RecordingBoundsSample[],
+  synthetic?: boolean,
 ): MoveEvent[] => {
   const raw = events
     .filter((e) => e.type === 'move' && e.x !== undefined && e.y !== undefined)
@@ -90,7 +91,7 @@ export const getMoveEvents = (
       };
     });
 
-  return smoothPath(raw);
+  return synthetic ? raw : smoothPath(raw);
 };
 
 export const getClickEvents = (
