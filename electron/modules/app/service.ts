@@ -13,6 +13,7 @@ import type {
 import {
   ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
   ensureRecordingStartPermissions,
+  ensureScreenCapturePermission,
   SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
 } from '../../../src/lib/recordingStartPermissions';
 import log, { getLogFilePath, writeRendererDiagnostic } from '../../lib/logger';
@@ -239,6 +240,18 @@ export async function prepareRecordingStartPermissions(): Promise<void> {
   });
 
   lastRecordingPermissionPreparationAt = Date.now();
+}
+
+/** Screen access only: a screenshot doesn't track the cursor, so no Accessibility prompt. */
+export async function prepareScreenshotPermissions(): Promise<void> {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+
+  await ensureScreenCapturePermission({
+    requestScreenAccess,
+    openSystemSettings: openSystemSettingsForRecordingStart,
+  });
 }
 
 async function verifyRecordingStartPermissionsReadOnly(): Promise<void> {

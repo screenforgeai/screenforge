@@ -532,6 +532,8 @@ export interface ScreenforgeAPI {
   checkForUpdatesNow: () => Promise<UpdaterState>;
   getAppVersion: () => Promise<string>;
   prepareRecordingStartPermissions: () => Promise<void>;
+  /** Screen access only (no Accessibility), for screenshots. */
+  prepareScreenshotPermissions: () => Promise<void>;
   getStartupPermissionStatuses: () => Promise<StartupPermissionMap>;
   requestScreenAccess: () => Promise<StartupPermissionStatus>;
   requestMediaAccess: (permission: RequestableMediaPermission) => Promise<StartupPermissionStatus>;

@@ -155,6 +155,7 @@ export const CH = {
     SYSTEM_WARNING: 'app:system-warning',
     GET_APP_VERSION: 'app:get-app-version',
     PREPARE_RECORDING_START_PERMISSIONS: 'app:prepare-recording-start-permissions',
+    PREPARE_SCREENSHOT_PERMISSIONS: 'app:prepare-screenshot-permissions',
     GET_STARTUP_PERMISSION_STATUSES: 'app:get-startup-permission-statuses',
     REQUEST_SCREEN_ACCESS: 'app:request-screen-access',
     REQUEST_MEDIA_ACCESS: 'app:request-media-access',
