@@ -84,6 +84,31 @@ describe('useSampleProject', () => {
     expect(useStore.getState().recordingResult?.filePath).toBe('/mine.mp4');
   });
 
+  it('imports the sample once when it is asked for twice in the same render', async () => {
+    const pendingImports: Array<(value: RecordingResult) => void> = [];
+    const api = installScreenforge(
+      vi.fn(
+        () =>
+          new Promise<RecordingResult>((resolve) => {
+            pendingImports.push(resolve);
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useSampleProject());
+    const { openSampleProject } = result.current;
+
+    await act(async () => {
+      const first = openSampleProject('empty_state');
+      const second = openSampleProject('empty_state');
+      await Promise.resolve();
+      pendingImports.forEach((resolve) => resolve(sampleResult));
+      await Promise.all([first, second]);
+    });
+
+    expect(api.importSampleProject).toHaveBeenCalledOnce();
+    expect(persistence.beginNewRecording).toHaveBeenCalledOnce();
+  });
+
   it('tells the user when the sample cannot be opened', async () => {
     installScreenforge(vi.fn().mockRejectedValue(new Error('missing resource')));
     const { result } = renderHook(() => useSampleProject());

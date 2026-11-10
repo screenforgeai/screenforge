@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -15,6 +15,8 @@ export type SampleProjectSource = 'empty_state' | 'permissions_guide';
 export const useSampleProject = () => {
   const { t } = useTranslation('onboarding');
   const [isOpeningSample, setIsOpeningSample] = useState(false);
+  // State lags a render behind, so a double click would import twice without this.
+  const inFlightRef = useRef(false);
   const { beginNewRecording, flushPendingSave } = useProjectPersistence();
   const { loadRecordingSession, setRecordingName, setActiveWidget } = useStore(
     useShallow((s) => ({
@@ -26,9 +28,10 @@ export const useSampleProject = () => {
 
   const openSampleProject = useCallback(
     async (source: SampleProjectSource) => {
-      if (isOpeningSample) {
+      if (inFlightRef.current) {
         return;
       }
+      inFlightRef.current = true;
       setIsOpeningSample(true);
       try {
         if (useStore.getState().recordingResult && !(await flushPendingSave())) {
@@ -45,13 +48,13 @@ export const useSampleProject = () => {
       } catch {
         toast.error(t('sampleProjectFailed'));
       } finally {
+        inFlightRef.current = false;
         setIsOpeningSample(false);
       }
     },
     [
       beginNewRecording,
       flushPendingSave,
-      isOpeningSample,
       loadRecordingSession,
       setActiveWidget,
       setRecordingName,

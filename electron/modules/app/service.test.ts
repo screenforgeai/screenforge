@@ -224,6 +224,17 @@ describe('app permission service', () => {
       );
     });
 
+    it('ignores a permission the guide does not offer', async () => {
+      const { openPermissionSettings } = await loadServiceModule();
+      // Renderer input: the type is not enforced at runtime.
+      await openPermissionSettings('microphone' as never);
+      await openPermissionSettings('__proto__' as never);
+
+      expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalledWith(true);
+      expect(sourcesMock.requestMacScreenCaptureAccess).not.toHaveBeenCalled();
+      expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
+    });
+
     it('relaunches the app so macOS applies a pending Screen Recording grant', async () => {
       const { relaunchApp } = await loadServiceModule();
       relaunchApp();

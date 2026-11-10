@@ -278,6 +278,12 @@ export async function getRecordingPermissions(): Promise<RecordingPermissionsSta
  * (macOS only lists apps that asked), then opens that pane.
  */
 export async function openPermissionSettings(permission: GuidedPermission): Promise<void> {
+  // Renderer input: the type is not enforced at runtime.
+  if (permission !== 'screen' && permission !== 'accessibility') {
+    log.warn('[permissions-guide] ignoring unknown permission', { permission });
+    return;
+  }
+
   if (process.platform !== 'darwin') {
     return;
   }

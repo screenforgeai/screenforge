@@ -100,9 +100,11 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   const closePermissionsGuide = (reason: PermissionsGuideCloseReason) => {
     setPermissionsGuideOpen(false);
     if (reason === 'skipped') {
-      void window.screenforge
-        .saveSettings({ permissionsGuideDismissed: true })
-        .catch(() => undefined);
+      void window.screenforge.saveSettings({ permissionsGuideDismissed: true }).catch((error) => {
+        window.screenforge.writeDiagnosticLog('app.permissions-guide.dismiss-save-failed', {
+          message: getErrorMessage(error),
+        });
+      });
     }
   };
 
