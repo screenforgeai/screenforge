@@ -326,49 +326,6 @@ export function findShapeAt(
   return null;
 }
 
-/** Box, highlight and blur cover an area; the rest are marks you point at. */
-const isAreaShape = (shape: AnnotationShape): shape is BoxShape | HighlightShape | BlurShape =>
-  shape.type === 'box' || shape.type === 'highlight' || shape.type === 'blur';
-
-function onRectEdge(p: Point, rect: Rect, reach: number): boolean {
-  const inner = {
-    x: rect.x + reach,
-    y: rect.y + reach,
-    width: rect.width - reach * 2,
-    height: rect.height - reach * 2,
-  };
-  return (
-    insideRect(p, rect, reach) && !(inner.width > 0 && inner.height > 0 && insideRect(p, inner, 0))
-  );
-}
-
-/**
- * The shape a press with `tool` picks up to move, or null to let the tool draw.
- *
- * Any tool can move what's already there, so the Select tool is never a detour.
- * The exception keeps drawing possible: with a drawing tool, area shapes are
- * only picked up by their edge, so a new box or badge can still go inside one.
- */
-export function findGrabbableShapeAt(
-  shapes: readonly AnnotationShape[],
-  p: Point,
-  tolerance: number,
-  tool: AnnotationTool,
-): string | null {
-  const ordered = getRenderOrder(shapes);
-  for (let i = ordered.length - 1; i >= 0; i--) {
-    const shape = ordered[i];
-    const hit =
-      tool !== 'select' && isAreaShape(shape)
-        ? onRectEdge(p, shape, tolerance + (shape.type === 'box' ? shape.strokeWidth / 2 : 0))
-        : hitTestShape(shape, p, tolerance);
-    if (hit) {
-      return shape.id;
-    }
-  }
-  return null;
-}
-
 export function translateShape<T extends AnnotationShape>(shape: T, dx: number, dy: number): T {
   if (shape.type === 'arrow') {
     return {

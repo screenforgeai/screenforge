@@ -523,6 +523,8 @@ export interface TextClip {
   animationOutDuration: number;
 }
 
+export type AreaSelectorPurpose = 'record' | 'screenshot';
+
 export interface ScreenforgeAPI {
   onPreloadProgress: (cb: (p: PreloadProgress) => void) => () => void;
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void;
@@ -706,7 +708,8 @@ export interface ScreenforgeAPI {
     height: number;
   }) => Promise<void>;
   cancelAreaSelection: () => void;
-  openAreaSelector: () => Promise<{
+  /** `purpose` picks the confirm button: record (default) or take a screenshot. */
+  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<{
     x: number;
     y: number;
     width: number;

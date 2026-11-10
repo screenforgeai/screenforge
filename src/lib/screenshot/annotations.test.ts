@@ -7,7 +7,6 @@ import {
   createStepShape,
   createTextShape,
   distanceToSegment,
-  findGrabbableShapeAt,
   findShapeAt,
   getAnnotationScale,
   getArrowHead,
@@ -259,36 +258,32 @@ describe('findShapeAt', () => {
   });
 });
 
-describe('findGrabbableShapeAt', () => {
-  it('grabs any shape anywhere with the Select tool', () => {
-    expect(findGrabbableShapeAt([box('b')], { x: 50, y: 30 }, 4, 'select')).toBe('b');
+describe('findShapeAt picks up annotations to move', () => {
+  const blur: AnnotationShape = {
+    id: 'z',
+    type: 'blur',
+    color: '#000',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+  };
+
+  it('grabs a box or a blur from anywhere inside it, not just its edge', () => {
+    expect(findShapeAt([box('b')], { x: 50, y: 30 }, 4)).toBe('b');
+    expect(findShapeAt([blur], { x: 50, y: 50 }, 4)).toBe('z');
   });
 
-  it('grabs a box by its edge with a drawing tool, so a new box can start inside it', () => {
-    expect(findGrabbableShapeAt([box('b')], { x: 11, y: 30 }, 4, 'box')).toBe('b');
-    expect(findGrabbableShapeAt([box('b')], { x: 50, y: 30 }, 4, 'box')).toBeNull();
-  });
-
-  it('grabs highlight and blur regions by their edge with a drawing tool', () => {
-    const blur: AnnotationShape = {
-      id: 'z',
-      type: 'blur',
-      color: '#000',
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-    };
-    expect(findGrabbableShapeAt([blur], { x: 50, y: 50 }, 4, 'step')).toBeNull();
-    expect(findGrabbableShapeAt([blur], { x: 99, y: 50 }, 4, 'step')).toBe('z');
-  });
-
-  it('grabs arrows, steps and text anywhere on them with any tool', () => {
-    expect(findGrabbableShapeAt([arrow('a')], { x: 50, y: 3 }, 4, 'box')).toBe('a');
+  it('grabs arrows, steps and text anywhere on them', () => {
+    expect(findShapeAt([arrow('a')], { x: 50, y: 3 }, 4)).toBe('a');
     const step = createStepShape({ x: 100, y: 100 }, 's', style);
-    expect(findGrabbableShapeAt([step], { x: 100, y: 100 }, 0, 'arrow')).toBe('s');
+    expect(findShapeAt([step], { x: 100, y: 100 }, 0)).toBe('s');
     const text = must(createTextShape({ x: 0, y: 0 }, 'Hello', 't', style));
-    expect(findGrabbableShapeAt([text], { x: 10, y: 10 }, 0, 'text')).toBe('t');
+    expect(findShapeAt([text], { x: 10, y: 10 }, 0)).toBe('t');
+  });
+
+  it('leaves empty space to the tool', () => {
+    expect(findShapeAt([box('b')], { x: 500, y: 500 }, 4)).toBeNull();
   });
 });
 

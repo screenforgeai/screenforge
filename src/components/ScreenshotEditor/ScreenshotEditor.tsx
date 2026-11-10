@@ -23,7 +23,6 @@ import {
   createInitialAnnotationsState,
   createShapeFromDrag,
   createStepShape,
-  findGrabbableShapeAt,
   findShapeAt,
   getAnnotationScale,
   getDefaultFontSize,
@@ -317,8 +316,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
     e.currentTarget.setPointerCapture?.(e.pointerId);
 
-    // Whatever the tool, pressing on an existing annotation picks it up to move.
-    const grabbed = findGrabbableShapeAt(annotations.shapes, point, hitTolerance, tool);
+    // Whatever the tool, pressing anywhere on an existing annotation (its fill
+    // too, not just its edge) picks it up to move.
+    const grabbed = findShapeAt(annotations.shapes, point, hitTolerance);
     if (grabbed) {
       // Keeps the Text tool's mousedown from stealing focus (see below).
       e.preventDefault();
@@ -359,9 +359,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       setDrag({ ...drag, current: point });
       return;
     }
-    const hovered = textEdit
-      ? null
-      : findGrabbableShapeAt(annotations.shapes, point, hitTolerance, tool);
+    const hovered = textEdit ? null : findShapeAt(annotations.shapes, point, hitTolerance);
     if (hovered !== hoveredId) {
       setHoveredId(hovered);
     }
