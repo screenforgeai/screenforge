@@ -116,6 +116,63 @@ describe('telemetry', () => {
     );
   });
 
+  it("reports a failed IPC call under its real cause, not Electron's wrapper", async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+    const wrapped = (cause: string) => ({
+      name: 'Error',
+      message: `Error invoking remote method 'export:run-capture': ${cause}`,
+      // The renderer-side stack is Electron's IPC plumbing, the same for every cause.
+      stack: `Error: Error invoking remote method 'export:run-capture': ${cause}\n    at node:electron/js2c/renderer_init:2:9921`,
+    });
+
+    captureException(wrapped('Error: Input has an unsupported or unrecognizable format.'), {
+      error_type: 'export_failed',
+    });
+    captureException(wrapped('TypeError: WebGL is required'));
+
+    expect(posthogMock.captureException).toHaveBeenCalledTimes(2);
+    const [first, , firstProperties] = posthogMock.captureException.mock.calls[0];
+    expect(first).toMatchObject({
+      name: 'Error',
+      message: 'Input has an unsupported or unrecognizable format.',
+    });
+    // No frames, so PostHog groups each cause by its type and message.
+    expect((first as Error).stack).toBe(
+      'Error: Input has an unsupported or unrecognizable format.',
+    );
+    expect(firstProperties).toEqual(
+      expect.objectContaining({ error_type: 'export_failed', ipc_channel: 'export:run-capture' }),
+    );
+    const [second] = posthogMock.captureException.mock.calls[1];
+    expect(second).toMatchObject({ name: 'TypeError', message: 'WebGL is required' });
+  });
+
+  it("never gives a stackless renderer error the main process's own stack", async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    captureException({ name: 'Error', message: 'rejected with a string' });
+
+    const [error] = posthogMock.captureException.mock.calls[0];
+    expect((error as Error).stack).toBe('Error: rejected with a string');
+  });
+
+  it.each([
+    'ResizeObserver loop completed with undelivered notifications.',
+    'ResizeObserver loop limit exceeded',
+  ])('ignores the harmless browser warning "%s"', async (message) => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    captureException({ name: 'Error', message }, { kind: 'error' });
+
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
+  });
+
   it('sends a repeating error once a minute, counting the repeats it held back', async () => {
     vi.useFakeTimers();
     try {
