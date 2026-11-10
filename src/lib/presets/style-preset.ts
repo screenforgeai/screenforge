@@ -7,6 +7,7 @@ import type { PresetLogo, StylePreset, StylePresetAssets, StylePresetDraft } fro
 import type { AppStore, EditableStorePatch } from '../../store/types';
 import { CUSTOM_WALLPAPER_SEED } from '../effects/frame/constants';
 import { normalizeLogoPlacement } from '../effects/logo/layout';
+import { normalizeCursorClickSound } from '../effects/cursor/audio';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -120,7 +121,8 @@ export function stylePresetPatch(
     cursorMaxTilt: preset.cursor.maxTilt,
     cursorHideWhenIdle: preset.cursor.hideWhenIdle,
     cursorIdleHideSeconds: preset.cursor.idleHideSeconds,
-    cursorClickSound: preset.cursor.clickSound,
+    // Presets saved before the click-sound picker name sounds it no longer has.
+    cursorClickSound: normalizeCursorClickSound(preset.cursor.clickSound),
     cursorClickSoundVolume: preset.cursor.clickSoundVolume,
     cursorContinuousTracking: preset.cursor.continuousTracking,
     captions: {

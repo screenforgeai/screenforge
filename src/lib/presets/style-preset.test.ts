@@ -50,7 +50,7 @@ const state = (overrides: Record<string, unknown> = {}) => ({
   cursorHideWhenIdle: false,
   cursorIdleHideSeconds: 5,
   cursorClickSound: 'none' as const,
-  cursorClickSoundVolume: 0.3,
+  cursorClickSoundVolume: DEFAULT_CURSOR_SETTINGS.clickSoundVolume,
   cursorContinuousTracking: true,
   ...overrides,
 });
@@ -106,6 +106,14 @@ describe('normalizeStylePreset', () => {
 });
 
 describe('stylePresetPatch', () => {
+  it('maps a click sound saved before the click-sound picker to its new name', () => {
+    const legacy = {
+      ...OLD_PRESET,
+      cursor: { ...OLD_PRESET.cursor, clickSound: 'magic-mouse' },
+    } as unknown as StylePreset;
+    expect(stylePresetPatch(state(), legacy, NO_ASSETS).cursorClickSound).toBe('trackpad');
+  });
+
   it('applies an old preset as before and leaves the logo and text clips alone', () => {
     const current = state({
       frame: {
