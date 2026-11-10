@@ -74,6 +74,10 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
       if (pending) {
         return pending.promise;
       }
+      // Already signed in: sign out first, so the old token is revoked and forgotten.
+      if (account) {
+        return Promise.resolve();
+      }
       const controller = new AbortController();
       const promise = runSignIn({
         client: deps.client,
