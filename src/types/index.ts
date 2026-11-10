@@ -155,7 +155,7 @@ export interface ProjectCursorSettings {
   maxTilt: number;
   hideWhenIdle: boolean;
   idleHideSeconds: number;
-  clickSound: 'none' | 'magic-mouse' | 'mx-master';
+  clickSound: 'none' | 'soft' | 'mouse' | 'trackpad' | 'pop' | 'tick';
   clickSoundVolume: number;
   continuousTracking: boolean;
 }
