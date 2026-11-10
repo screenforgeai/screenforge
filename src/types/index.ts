@@ -36,6 +36,23 @@ export type StartupPermissionStatus =
 
 export type StartupPermissionMap = Record<StartupPermission, StartupPermissionStatus>;
 
+/** The two macOS permissions the first-run permissions guide walks through. */
+export type GuidedPermission = 'screen' | 'accessibility';
+
+export interface RecordingPermissionsState {
+  /** False where the OS has no such permissions (Windows, Linux): the guide never blocks there. */
+  required: boolean;
+  screen: StartupPermissionStatus;
+  accessibility: StartupPermissionStatus;
+}
+
+export interface AppSettings {
+  profile: { name: string; email: string };
+  language: string;
+  /** Set when the user skips the permissions guide, so it stops opening at launch. */
+  permissionsGuideDismissed: boolean;
+}
+
 export type UpdaterStatus =
   | 'disabled'
   | 'idle'
@@ -519,6 +536,14 @@ export interface ScreenforgeAPI {
   restartToApplyUpdate: () => Promise<void>;
   relaunchApp: () => void;
   openSystemSettings: (permission: StartupPermission) => void;
+  /** Live (non-prompting) read of the permissions the guide covers. */
+  getRecordingPermissions: () => Promise<RecordingPermissionsState>;
+  /** Registers Screenforge for the permission if needed, then opens its System Settings pane. */
+  openPermissionSettings: (permission: GuidedPermission) => Promise<void>;
+  /** Toolbar: bring up the main window with the permissions guide open. */
+  showPermissionsGuide: () => void;
+  /** Main window: the toolbar asked for the permissions guide. */
+  onPermissionsGuideRequested: (cb: () => void) => () => void;
   getSources: () => Promise<DesktopSource[]>;
   startRecording: (
     sourceId: string,
@@ -563,13 +588,12 @@ export interface ScreenforgeAPI {
   getProjects: () => Promise<SavedProject[]>;
   importVideo: () => Promise<RecordingResult | null>;
   importVideoForInsert: () => Promise<RecordingResult | null>;
+  /** Copies the bundled sample recording into imports and returns it with its cursor data. */
+  importSampleProject: () => Promise<RecordingResult>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
-  getSettings: () => Promise<{ profile: { name: string; email: string }; language: string }>;
-  saveSettings: (patch: {
-    profile?: { name: string; email: string };
-    language?: string;
-  }) => Promise<{ profile: { name: string; email: string }; language: string }>;
+  getSettings: () => Promise<AppSettings>;
+  saveSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
   startExport: (request: ExportRequest) => Promise<ExportResult>;
   cancelExport: (jobId: string) => Promise<void>;
   pickExportPath: (

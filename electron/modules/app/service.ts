@@ -3,18 +3,16 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type {
+  GuidedPermission,
   PreloadProgress,
+  RecordingPermissionsState,
   RequestableMediaPermission,
   StartupPermission,
   StartupPermissionMap,
   StartupPermissionStatus,
   WindowFocusTarget,
 } from '../../../src/types/index';
-import {
-  ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
-  ensureRecordingStartPermissions,
-  SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
-} from '../../../src/lib/recordingStartPermissions';
+import { ensureRecordingStartPermissions } from '../../../src/lib/recordingStartPermissions';
 import log, { getLogFilePath, writeRendererDiagnostic } from '../../lib/logger';
 import { trackEvent } from '../../lib/telemetry';
 import { activateX11Window } from '../../lib/x11-activate-window';
@@ -22,11 +20,11 @@ import {
   getMacScreenPermissionStatus,
   getSources,
   parseWindowIdFromSourceId,
+  requestMacScreenCaptureAccess,
 } from '../sources/service';
 import { initializeLibrary } from '../library/service';
 import { checkFFmpeg, getFFmpegPath } from '../ffmpeg/index';
 
-let screenSettingsOpened = false;
 let accessibilityPromptAttempted = false;
 let lastRecordingPermissionPreparationAt = 0;
 
@@ -204,53 +202,30 @@ export async function requestAccessibilityAccess(): Promise<StartupPermissionSta
   }
 }
 
-async function openSystemSettingsForRecordingStart(
-  permission: StartupPermission,
-): Promise<boolean> {
-  if (permission !== 'screen') {
-    return false;
-  }
-
-  if (screenSettingsOpened) {
-    return false;
-  }
-
-  screenSettingsOpened = true;
-  await openSystemSettings(permission);
-  return true;
-}
-
 export async function requestScreenAccess(): Promise<StartupPermissionStatus> {
   const currentStatus = await getScreenPermissionStatus();
   log.info('[startup] screen permission request', { currentStatus });
   return currentStatus;
 }
 
+function checkRecordingStartPermissions(): Promise<void> {
+  return ensureRecordingStartPermissions({
+    getScreenPermissionStatus,
+    getAccessibilityPermissionStatus,
+  });
+}
+
+/**
+ * Read-only: never prompts or opens System Settings. When it throws, the
+ * toolbar opens the permissions guide, which owns those steps.
+ */
 export async function prepareRecordingStartPermissions(): Promise<void> {
   if (process.platform !== 'darwin') {
     return;
   }
 
-  await ensureRecordingStartPermissions({
-    requestScreenAccess,
-    getAccessibilityPermissionStatus,
-    requestAccessibilityAccess,
-    openSystemSettings: openSystemSettingsForRecordingStart,
-  });
-
+  await checkRecordingStartPermissions();
   lastRecordingPermissionPreparationAt = Date.now();
-}
-
-async function verifyRecordingStartPermissionsReadOnly(): Promise<void> {
-  const screenStatus = await getScreenPermissionStatus();
-  if (screenStatus !== 'granted') {
-    throw new Error(SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE);
-  }
-
-  const accessibilityStatus = getAccessibilityPermissionStatus();
-  if (accessibilityStatus !== 'granted') {
-    throw new Error(ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE);
-  }
 }
 
 export async function prepareRecordingStartPermissionsIfNeeded(): Promise<void> {
@@ -266,8 +241,61 @@ export async function prepareRecordingStartPermissionsIfNeeded(): Promise<void> 
     return;
   }
 
-  await verifyRecordingStartPermissionsReadOnly();
+  await checkRecordingStartPermissions();
   lastRecordingPermissionPreparationAt = Date.now();
+}
+
+let lastLoggedRecordingPermissions = '';
+
+/**
+ * Live, passive read for the permissions guide, which polls it while open.
+ * Accessibility reflects a grant immediately. Screen Recording is read by the
+ * native helper in a fresh process, which usually sees a new grant too; when
+ * macOS only applies it after a relaunch, the guide offers Quit & Reopen.
+ */
+export async function getRecordingPermissions(): Promise<RecordingPermissionsState> {
+  if (process.platform !== 'darwin') {
+    return { required: false, screen: 'granted', accessibility: 'granted' };
+  }
+
+  const state: RecordingPermissionsState = {
+    required: true,
+    screen: await getMacScreenPermissionStatus(),
+    accessibility: getAccessibilityPermissionStatus(),
+  };
+
+  // Polled every couple of seconds: only log changes.
+  const snapshot = `${state.screen}/${state.accessibility}`;
+  if (snapshot !== lastLoggedRecordingPermissions) {
+    lastLoggedRecordingPermissions = snapshot;
+    log.info('[permissions-guide] status', state);
+  }
+  return state;
+}
+
+/**
+ * Makes sure Screenforge is listed in the permission's System Settings pane
+ * (macOS only lists apps that asked), then opens that pane.
+ */
+export async function openPermissionSettings(permission: GuidedPermission): Promise<void> {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+
+  if (permission === 'screen') {
+    const status = await getMacScreenPermissionStatus();
+    if (status !== 'granted') {
+      try {
+        await requestMacScreenCaptureAccess();
+      } catch (error) {
+        log.warn('[permissions-guide] screen access request failed:', error);
+      }
+    }
+  } else {
+    await requestAccessibilityAccess();
+  }
+
+  await openSystemSettings(permission);
 }
 
 function getSystemSettingsUrl(permission: StartupPermission): string | null {

@@ -567,7 +567,9 @@ export const FloatingToolbar = () => {
       logToolbarDiagnostic('toolbar.recording.permissions-failed', {
         message: getErrorMessage(err),
       });
-      window.screenforge.systemWarning(getErrorMessage(err));
+      // The main window's permissions guide explains the missing permission,
+      // opens the right System Settings pane and notices when it is granted.
+      window.screenforge.showPermissionsGuide();
       return false;
     }
   }, []);

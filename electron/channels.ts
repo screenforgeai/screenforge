@@ -123,6 +123,7 @@ export const CH = {
     PICK: 'import:pick',
     PICK_FOR_INSERT: 'import:pick-for-insert',
     TRIGGER: 'import:trigger',
+    SAMPLE: 'import:sample',
   },
   cameraPreview: {
     OPEN: 'camera-preview:open',
@@ -157,6 +158,13 @@ export const CH = {
     WRITE_DIAGNOSTIC_LOG: 'app:write-diagnostic-log',
     OPEN_EXTERNAL_URL: 'app:open-external-url',
     OPEN_SYSTEM_SETTINGS: 'app:open-system-settings',
+    // ── Permissions guide ─────────────────────────────────────────────────
+    GET_RECORDING_PERMISSIONS: 'app:get-recording-permissions',
+    OPEN_PERMISSION_SETTINGS: 'app:open-permission-settings',
+    // Toolbar → main process: recording was blocked, show the guide
+    SHOW_PERMISSIONS_GUIDE: 'app:show-permissions-guide',
+    // Main process → main window: open the guide
+    PERMISSIONS_GUIDE_REQUESTED: 'app:permissions-guide-requested',
     TRACK_EVENT: 'app:track-event',
     GET_ANONYMOUS_ID: 'app:get-anonymous-id',
     IDENTIFY_USER: 'app:identify-user',

@@ -1,0 +1,21 @@
+{
+  "guideTitle": "Autoriser Screenforge à enregistrer votre écran",
+  "guideDescription": "macOS demande deux autorisations avant votre premier enregistrement. Activez-les dans Réglages Système : cette fenêtre se met à jour dès que c'est fait.",
+  "screenTitle": "Enregistrement de l'écran",
+  "screenDescription": "Permet à Screenforge de capturer votre écran. Les enregistrements restent sur votre Mac.",
+  "accessibilityTitle": "Accessibilité",
+  "accessibilityDescription": "Permet à Screenforge de suivre votre curseur, vos clics et vos raccourcis clavier, pour que le zoom automatique sache où regarder.",
+  "statusGranted": "Autorisé",
+  "statusMissing": "Pas encore autorisé",
+  "statusWaiting": "En attente de Réglages Système…",
+  "openSettings": "Ouvrir Réglages Système",
+  "relaunchHint": "Vous l'avez activé mais Screenforge ne le voit pas encore ? macOS n'applique parfois le changement qu'après un redémarrage.",
+  "relaunch": "Quitter et rouvrir",
+  "allSet": "Tout est prêt. Lancez un enregistrement quand vous voulez.",
+  "skip": "Passer pour l'instant",
+  "done": "Terminé",
+  "trySample": "Essayer le projet d'exemple",
+  "emptyStateHint": "Ou essayez d'abord l'éditeur, le zoom automatique et l'export sur un court exemple.",
+  "sampleProjectName": "Projet d'exemple",
+  "sampleProjectFailed": "Impossible d'ouvrir le projet d'exemple."
+}

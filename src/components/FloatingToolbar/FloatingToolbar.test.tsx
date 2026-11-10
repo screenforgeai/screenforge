@@ -193,6 +193,7 @@ function createScreenforgeMock(backend: CaptureBackend) {
     setToolbarShape: vi.fn(),
     minimizeToDock: vi.fn(),
     showMain: vi.fn(),
+    showPermissionsGuide: vi.fn(),
     writeDiagnosticLog: vi.fn(),
     trackEvent: vi.fn(),
     identifyUser: vi.fn(),
@@ -303,6 +304,30 @@ describe('FloatingToolbar recording widget', () => {
         expect.objectContaining({ filePath: '/tmp/final.mp4', duration: 3 }),
       );
       expect(screenforge.recordingFailed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('missing macOS permissions', () => {
+    beforeEach(() => installMocks('native'));
+
+    it('opens the permissions guide instead of a quit-and-reopen warning', async () => {
+      screenforge.prepareRecordingStartPermissions.mockRejectedValue(
+        new Error('Screen Recording permission is required before you start.'),
+      );
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+
+      await waitFor(
+        () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+          expect(screenforge.showPermissionsGuide).toHaveBeenCalled();
+        },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
+      expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
     });
   });
 

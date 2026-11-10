@@ -1,0 +1,21 @@
+{
+  "guideTitle": "Screenforge die Bildschirmaufnahme erlauben",
+  "guideDescription": "macOS verlangt vor deiner ersten Aufnahme zwei Berechtigungen. Aktiviere sie in den Systemeinstellungen – dieses Fenster aktualisiert sich, sobald du das tust.",
+  "screenTitle": "Bildschirmaufnahme",
+  "screenDescription": "Damit kann Screenforge deinen Bildschirm aufnehmen. Aufnahmen bleiben auf deinem Mac.",
+  "accessibilityTitle": "Bedienungshilfen",
+  "accessibilityDescription": "Damit kann Screenforge Mauszeiger, Klicks und Tastenkürzel verfolgen, sodass der Auto-Zoom weiß, wohin er schauen soll.",
+  "statusGranted": "Erlaubt",
+  "statusMissing": "Noch nicht erlaubt",
+  "statusWaiting": "Warte auf die Systemeinstellungen …",
+  "openSettings": "Systemeinstellungen öffnen",
+  "relaunchHint": "Schon aktiviert, aber Screenforge hat es noch nicht erkannt? macOS übernimmt die Änderung manchmal erst nach einem Neustart.",
+  "relaunch": "Beenden & neu öffnen",
+  "allSet": "Alles bereit. Starte eine Aufnahme, wann immer du willst.",
+  "skip": "Vorerst überspringen",
+  "done": "Fertig",
+  "trySample": "Beispielprojekt ausprobieren",
+  "emptyStateHint": "Oder probiere Editor, Auto-Zoom und Export zuerst an einem kurzen Beispiel aus.",
+  "sampleProjectName": "Beispielprojekt",
+  "sampleProjectFailed": "Das Beispielprojekt konnte nicht geöffnet werden."
+}

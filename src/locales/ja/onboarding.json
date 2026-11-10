@@ -1,0 +1,21 @@
+{
+  "guideTitle": "Screenforge に画面収録を許可する",
+  "guideDescription": "最初の録画の前に、macOS では 2 つの権限が必要です。システム設定でオンにすると、このウインドウはすぐに更新されます。",
+  "screenTitle": "画面収録",
+  "screenDescription": "Screenforge が画面を録画できるようにします。録画はお使いの Mac に保存されます。",
+  "accessibilityTitle": "アクセシビリティ",
+  "accessibilityDescription": "Screenforge がカーソル、クリック、キーボードショートカットを追跡できるようにし、自動ズームが注目すべき場所を判断できるようにします。",
+  "statusGranted": "許可済み",
+  "statusMissing": "未許可",
+  "statusWaiting": "システム設定を待っています…",
+  "openSettings": "システム設定を開く",
+  "relaunchHint": "オンにしたのに反映されませんか？ macOS では再起動後に変更が適用されることがあります。",
+  "relaunch": "終了して再度開く",
+  "allSet": "準備完了です。いつでも録画を始められます。",
+  "skip": "今はスキップ",
+  "done": "完了",
+  "trySample": "サンプルプロジェクトを試す",
+  "emptyStateHint": "または、短いサンプルでエディタ、自動ズーム、書き出しを先に試せます。",
+  "sampleProjectName": "サンプルプロジェクト",
+  "sampleProjectFailed": "サンプルプロジェクトを開けませんでした。"
+}

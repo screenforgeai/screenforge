@@ -74,6 +74,8 @@ const APP_DISPLAY_NAME = 'Screenforge';
 const extraResources = [
   './src/assets/tray-icon-dark.png',
   './src/assets/tray-icon-light.png',
+  // First-run sample project; its cursor data is bundled into main.js.
+  './src/assets/sample-project/sample-project.mp4',
   // LGPL compliance (FFmpeg, libuiohook): third-party attribution must ship
   // with every distributed build, not just live in the repo.
   './THIRD_PARTY_NOTICES.md',

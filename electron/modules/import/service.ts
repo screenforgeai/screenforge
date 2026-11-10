@@ -3,6 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { RecordingResult } from '../../../src/types/index';
+import {
+  buildSampleRecordingResult,
+  SAMPLE_PROJECT_VIDEO_FILENAME,
+  type SampleProjectManifest,
+} from '../../../src/lib/sampleProject';
+import sampleManifest from '../../../src/assets/sample-project/sample-project.json';
 import { probeExportSource } from '../export/service';
 
 const IMPORTS_DIR = () => path.join(app.getPath('userData'), 'imports');
@@ -59,4 +65,26 @@ export async function importVideoFromPath(sourcePath: string): Promise<Recording
     hasEmbeddedAudio: true,
     isImported: true,
   };
+}
+
+// Packaged builds ship the video as an extraResource (forge.config.ts); in dev
+// it is read straight from the source tree.
+function getSampleProjectVideoPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, SAMPLE_PROJECT_VIDEO_FILENAME)
+    : path.join(app.getAppPath(), 'src/assets/sample-project', SAMPLE_PROJECT_VIDEO_FILENAME);
+}
+
+/**
+ * Copies the bundled sample recording into imports, like an imported video,
+ * and returns it with its scripted cursor data. Nothing is written to the
+ * project library: the sample becomes a project only when the user saves it.
+ */
+export async function importSampleProject(): Promise<RecordingResult> {
+  const importsDir = await ensureImportsDir();
+  const destPath = path.join(importsDir, `sample-${randomUUID()}.mp4`);
+
+  await fs.copyFile(getSampleProjectVideoPath(), destPath);
+
+  return buildSampleRecordingResult(sampleManifest as SampleProjectManifest, destPath, Date.now());
 }

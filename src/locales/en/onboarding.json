@@ -1,0 +1,21 @@
+{
+  "guideTitle": "Let Screenforge record your screen",
+  "guideDescription": "macOS asks for two permissions before your first recording. Turn them on in System Settings and this window updates as soon as you do.",
+  "screenTitle": "Screen Recording",
+  "screenDescription": "Lets Screenforge capture your screen. Recordings stay on your Mac.",
+  "accessibilityTitle": "Accessibility",
+  "accessibilityDescription": "Lets Screenforge follow your cursor, clicks and keyboard shortcuts, so auto-zoom knows where to look.",
+  "statusGranted": "Allowed",
+  "statusMissing": "Not allowed yet",
+  "statusWaiting": "Waiting for System Settings…",
+  "openSettings": "Open System Settings",
+  "relaunchHint": "Turned it on but Screenforge still hasn't noticed? macOS sometimes only applies the change after a restart.",
+  "relaunch": "Quit & Reopen",
+  "allSet": "You're all set. Start a recording whenever you're ready.",
+  "skip": "Skip for now",
+  "done": "Done",
+  "trySample": "Try the sample project",
+  "emptyStateHint": "Or try the editor, auto-zoom and export on a short sample first.",
+  "sampleProjectName": "Sample project",
+  "sampleProjectFailed": "Couldn't open the sample project."
+}
