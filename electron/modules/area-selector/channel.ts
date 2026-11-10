@@ -2,6 +2,7 @@ import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
 import { BrowserWindow } from 'electron';
 import { confirmAreaSelection, cancelAreaSelection, openAreaSelector } from './service';
+import type { SelectedArea } from '../../../src/types/index';
 
 export function registerAreaSelectorChannels(
   preloadPath: string,
@@ -18,9 +19,7 @@ export function registerAreaSelectorChannels(
     cancelAreaSelection();
   });
 
-  handleChannel<[unknown], { x: number; y: number; width: number; height: number } | null>(
-    CH.areaSelector.OPEN,
-    (purpose) =>
-      openAreaSelector(preloadPath, loadURL, purpose === 'screenshot' ? 'screenshot' : 'record'),
+  handleChannel<[unknown], SelectedArea | null>(CH.areaSelector.OPEN, (purpose) =>
+    openAreaSelector(preloadPath, loadURL, purpose === 'screenshot' ? 'screenshot' : 'record'),
   );
 }

@@ -1,14 +1,12 @@
 import { BrowserWindow, screen } from 'electron';
 import log from '../../lib/logger';
 import { pinWindowToAllWorkspaces } from '../../lib/workspace-pin';
+import type { SelectedArea } from '../../../src/types/index';
 
 let selectorWindow: BrowserWindow | null = null;
-let pendingResolve:
-  | ((
-      area: { x: number; y: number; width: number; height: number; displayId?: number } | null,
-    ) => void)
-  | null = null;
-let selectionDisplayId: number | null = null;
+let pendingResolve: ((area: SelectedArea | null) => void) | null = null;
+/** The display the open selector covers, so a capture can crop that one and no other. */
+let selectorDisplay: SelectedArea['display'] | null = null;
 
 function isAlive(): boolean {
   return selectorWindow !== null && !selectorWindow.isDestroyed();
@@ -18,7 +16,7 @@ export function openAreaSelector(
   preloadPath: string,
   loadURL: (win: BrowserWindow, hash: string) => void,
   purpose: 'record' | 'screenshot' = 'record',
-): Promise<{ x: number; y: number; width: number; height: number; displayId?: number } | null> {
+): Promise<SelectedArea | null> {
   if (isAlive()) {
     return Promise.resolve(null);
   }
@@ -27,8 +25,6 @@ export function openAreaSelector(
     pendingResolve = resolve;
 
     const primaryDisplay = screen.getPrimaryDisplay();
-    // The area is in this display's coordinates: keep its id with the area.
-    selectionDisplayId = primaryDisplay.id;
     const allDisplays = screen.getAllDisplays();
 
     log.info('[area-selector] primaryDisplay.bounds', primaryDisplay.bounds);
@@ -40,6 +36,7 @@ export function openAreaSelector(
     );
 
     const { x, y, width, height } = primaryDisplay.bounds;
+    selectorDisplay = { id: primaryDisplay.id, width, height };
 
     const win = new BrowserWindow({
       x,
@@ -89,7 +86,6 @@ export function openAreaSelector(
       if (pendingResolve) {
         pendingResolve(null);
         pendingResolve = null;
-        selectionDisplayId = null;
       }
     });
 
@@ -106,9 +102,9 @@ export function confirmAreaSelection(area: {
 }): void {
   log.info('[area-selector] confirmed', area);
   if (pendingResolve) {
-    pendingResolve(selectionDisplayId === null ? area : { ...area, displayId: selectionDisplayId });
+    const { x, y, width, height } = area;
+    pendingResolve(selectorDisplay ? { x, y, width, height, display: selectorDisplay } : area);
     pendingResolve = null;
-    selectionDisplayId = null;
   }
   if (isAlive()) {
     selectorWindow?.close();
@@ -120,7 +116,6 @@ export function cancelAreaSelection(): void {
   if (pendingResolve) {
     pendingResolve(null);
     pendingResolve = null;
-    selectionDisplayId = null;
   }
   if (isAlive()) {
     selectorWindow?.close();

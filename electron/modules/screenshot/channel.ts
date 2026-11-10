@@ -22,7 +22,22 @@ function isValidCaptureRequest(request: unknown): request is ScreenshotCaptureRe
     return true;
   }
   const a = r.area;
-  return !!a && [a.x, a.y, a.width, a.height].every(Number.isFinite) && a.width > 0 && a.height > 0;
+  if (
+    !a ||
+    ![a.x, a.y, a.width, a.height].every(Number.isFinite) ||
+    a.width <= 0 ||
+    a.height <= 0
+  ) {
+    return false;
+  }
+  const d = a.display;
+  return (
+    d === undefined ||
+    (!!d &&
+      [d.id, d.width, d.height].every((n) => typeof n === 'number' && Number.isFinite(n)) &&
+      d.width > 0 &&
+      d.height > 0)
+  );
 }
 
 type Options = {

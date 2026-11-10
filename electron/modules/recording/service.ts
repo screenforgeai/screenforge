@@ -12,6 +12,7 @@ import type {
   RecordingArea,
   RecordingBoundsSample,
   RecordingSourceLostReason,
+  SelectedArea,
   SystemAudioSupport,
 } from '../../../src/types/index';
 import { buildMergeAudioArgs } from '../../../src/lib/recording/audioMerge';
@@ -1489,14 +1490,20 @@ async function resolveWindowRecordingStartArea(sourceId: string): Promise<Record
  * primary display can change between selecting and pressing Record; if that
  * display is gone, refuse rather than record a different screen.
  */
-function resolveAreaDisplay(displayId: number | undefined): Electron.Display {
-  if (displayId === undefined) {
+function resolveAreaDisplay(selectedOn: SelectedArea['display']): Electron.Display {
+  if (!selectedOn) {
     return screen.getPrimaryDisplay();
   }
-  const display = screen.getAllDisplays().find((d) => d.id === displayId);
+  const display = screen.getAllDisplays().find((d) => d.id === selectedOn.id);
   if (!display) {
     throw new Error(
       'The display the area was selected on is no longer connected. Select the area again.',
+    );
+  }
+  // The area's coordinates describe the display at the size it had then.
+  if (display.bounds.width !== selectedOn.width || display.bounds.height !== selectedOn.height) {
+    throw new Error(
+      'The display the area was selected on has changed resolution. Select the area again.',
     );
   }
   return display;
@@ -1504,7 +1511,7 @@ function resolveAreaDisplay(displayId: number | undefined): Electron.Display {
 
 export async function startRecording(
   sourceId: string,
-  cropArea?: { x: number; y: number; width: number; height: number; displayId?: number } | null,
+  cropArea?: SelectedArea | null,
   options?: { rendererCapture?: boolean },
 ): Promise<void> {
   const startedAt = Date.now();
@@ -1555,7 +1562,7 @@ export async function startRecording(
   // screen source the toolbar happened to pass.
   const isAreaCapture = Boolean(cropArea) && !isWindowCapture;
   let display = isAreaCapture
-    ? resolveAreaDisplay(cropArea?.displayId)
+    ? resolveAreaDisplay(cropArea?.display)
     : resolveDisplayForSource(sourceId);
   const sourceDisplayId = isAreaCapture
     ? resolveDisplayId(display)

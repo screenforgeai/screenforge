@@ -73,6 +73,14 @@ describe('screenshot capture channel', () => {
     ['an area without one', { kind: 'area', sourceId: '' }],
     ['an empty area', { kind: 'area', sourceId: '', area: { x: 0, y: 0, width: 0, height: 5 } }],
     [
+      'an area on a malformed display',
+      {
+        kind: 'area',
+        sourceId: '',
+        area: { x: 0, y: 0, width: 5, height: 5, display: { id: 'x', width: 0, height: 5 } },
+      },
+    ],
+    [
       'a non-finite area',
       { kind: 'area', sourceId: '', area: { x: Number.NaN, y: 0, width: 5, height: 5 } },
     ],

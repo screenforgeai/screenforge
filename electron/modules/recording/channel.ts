@@ -1,5 +1,6 @@
 import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
+import type { SelectedArea } from '../../../src/types/index';
 import {
   saveRecording,
   saveAudioCapture,
@@ -21,15 +22,7 @@ import {
 
 export function registerRecordingChannels(): void {
   handleChannel<
-    [
-      string,
-      (
-        | { x: number; y: number; width: number; height: number; displayId?: number }
-        | null
-        | undefined
-      ),
-      { rendererCapture?: boolean } | undefined,
-    ],
+    [string, SelectedArea | null | undefined, { rendererCapture?: boolean } | undefined],
     void
   >(CH.recording.START, (sourceId, cropArea, options) =>
     startRecording(sourceId, cropArea ?? null, options),

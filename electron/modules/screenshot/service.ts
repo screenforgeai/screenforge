@@ -6,6 +6,7 @@ import {
   getCaptureThumbnailSize,
   getDisplayPixelSize,
   pickSourceForCapture,
+  resolveAreaDisplay,
 } from './capture-geometry';
 
 /**
@@ -25,8 +26,25 @@ export async function captureStill(request: ScreenshotCaptureRequest): Promise<S
   const displays = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();
 
-  const source = pickSourceForCapture(sources, request, { primary, all: displays }, (s) =>
-    s.thumbnail.getSize(),
+  // An area belongs to the display it was drawn on, even if the primary has
+  // changed since; if that display is gone or resized, the area is meaningless.
+  let areaDisplay = primary;
+  if (request.kind === 'area') {
+    if (!request.area) {
+      throw new Error('Area capture requested without an area');
+    }
+    const resolved = resolveAreaDisplay(request.area, displays, primary);
+    if (!resolved) {
+      throw new Error('The display the area was selected on is gone or has changed');
+    }
+    areaDisplay = resolved;
+  }
+
+  const source = pickSourceForCapture(
+    sources,
+    request,
+    { target: areaDisplay, all: displays },
+    (s) => s.thumbnail.getSize(),
   );
   if (!source || source.thumbnail.isEmpty()) {
     throw new Error(`No image available for ${request.kind} capture (${request.sourceId})`);
@@ -34,17 +52,17 @@ export async function captureStill(request: ScreenshotCaptureRequest): Promise<S
 
   let image = source.thumbnail;
   if (request.kind !== 'window') {
-    const display = displays.find((d) => String(d.id) === source.display_id) ?? primary;
+    const display =
+      request.kind === 'area'
+        ? areaDisplay
+        : (displays.find((d) => String(d.id) === source.display_id) ?? primary);
     // Thumbnails are fitted to the largest display, so a smaller one comes back upscaled.
     const current = image.getSize();
     const target = fitWithin(current, getDisplayPixelSize(display));
     if (target.width !== current.width || target.height !== current.height) {
       image = image.resize({ ...target, quality: 'best' });
     }
-    if (request.kind === 'area') {
-      if (!request.area) {
-        throw new Error('Area capture requested without an area');
-      }
+    if (request.kind === 'area' && request.area) {
       const rect = areaToImageRect(request.area, display.size, image.getSize());
       if (!rect) {
         throw new Error('The selected area is empty');
