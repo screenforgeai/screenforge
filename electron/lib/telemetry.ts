@@ -5,6 +5,7 @@ import { PostHog } from 'posthog-node';
 import type { FeedbackSubmission, SerializedError } from '../../src/types/index';
 import { unwrapIpcErrorMessage } from '../../src/lib/ipcError';
 import log from './logger';
+import { redactUserPaths, redactUserPathsDeep } from './redact-paths';
 
 let posthogClient: PostHog | null = null;
 let anonymousId: string | null = null;
@@ -59,8 +60,10 @@ export function initTelemetry({ enabled = true }: { enabled?: boolean } = {}): v
       flushInterval: 5_000,
       // Uncaught exceptions and unhandled rejections in the main process.
       enableExceptionAutocapture: true,
-      // Autocaptured crashes bypass captureException(), so the setting is enforced here too.
-      before_send: (event) => (usageDataEnabled || event?.event === FEEDBACK_EVENT ? event : null),
+      // Autocaptured crashes bypass captureException(), so the setting and the
+      // path redaction are enforced here too.
+      before_send: (event) =>
+        usageDataEnabled || event?.event === FEEDBACK_EVENT ? redactUserPathsDeep(event) : null,
     });
     log.info('[telemetry] PostHog initialized');
   }
@@ -90,7 +93,8 @@ function capture(event: string, properties?: Record<string, unknown>): void {
       distinctId: anonymousId,
       event,
       properties: {
-        ...properties,
+        // Error text often carries file paths, and so the user's name.
+        ...redactUserPathsDeep(properties),
         ...commonProperties(),
       },
     });
@@ -209,15 +213,18 @@ export function captureException(
     }
     recentExceptions.set(key, { sentAt: now, suppressed: 0 });
 
-    const restored = new Error(error.message);
+    // Paths in the message and stack would carry the user's name.
+    const restored = new Error(redactUserPaths(error.message));
     restored.name = error.name || 'Error';
     // Without the renderer's stack, keep a frameless one: this process's own
     // frames (IpcMainImpl...) are the same for every error and would group
     // unrelated errors into one issue.
-    restored.stack = error.stack || `${restored.name}: ${restored.message}`;
+    restored.stack = error.stack
+      ? redactUserPaths(error.stack)
+      : `${restored.name}: ${restored.message}`;
     adoptChunkIds(error.chunkIds);
     posthogClient.captureException(restored, anonymousId, {
-      ...properties,
+      ...redactUserPathsDeep(properties),
       ...(channel && { ipc_channel: channel }),
       ...(recent?.suppressed ? { suppressed_repeats: recent.suppressed } : {}),
       ...commonProperties(),
