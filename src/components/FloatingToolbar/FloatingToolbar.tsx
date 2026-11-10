@@ -38,10 +38,12 @@ import type {
   DesktopSource,
   CursorEvent,
   CaptureBackend,
+  SystemAudioSupport,
   ToolbarShapeRect,
   ScreenshotCaptureRequest,
 } from '../../types/index';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
+import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
 
 type SourceTab = 'display' | 'window' | 'area';
@@ -312,6 +314,8 @@ export const FloatingToolbar = () => {
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [micLoading, setMicLoading] = useState(false);
+  const [systemAudioSupport, setSystemAudioSupport] = useState<SystemAudioSupport | null>(null);
+  const systemAudioNoticeKey = getSystemAudioNoticeKey(systemAudioSupport);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
@@ -373,6 +377,8 @@ export const FloatingToolbar = () => {
   const analyserRafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const recordStateRef = useRef<RecordState>('idle');
+  // The recorded display went away while startRecording was still in flight.
+  const sourceLostDuringStartRef = useRef(false);
   const micLevelRef = useRef(0);
   const micUiUpdateTsRef = useRef(0);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -459,6 +465,12 @@ export const FloatingToolbar = () => {
       })
       .catch((err) => {
         console.error('[recording] could not resolve capture backend:', err);
+      });
+    window.screenforge
+      .getSystemAudioSupport()
+      .then(setSystemAudioSupport)
+      .catch((err) => {
+        console.error('[recording] could not resolve system audio support:', err);
       });
   }, []);
 
@@ -782,6 +794,25 @@ export const FloatingToolbar = () => {
     });
   }, []);
 
+  // The recorded display was unplugged (or switched off) mid-recording: stop
+  // and keep what was captured, and say why instead of failing silently.
+  useEffect(() => {
+    return window.screenforge.onRecordingSourceLost(() => {
+      if (recordStateRef.current === 'countdown') {
+        // The capture is still starting: stop once it has (see handleStart).
+        sourceLostDuringStartRef.current = true;
+        return;
+      }
+      if (recordStateRef.current !== 'recording' && recordStateRef.current !== 'paused') {
+        return;
+      }
+      // Several displays can go at once: stop only for the first event.
+      recordStateRef.current = 'idle';
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      handleStopEvent();
+    });
+  }, [t]);
+
   // Wayland: the user can end the capture from the OS screen-share indicator —
   // treat that like pressing stop.
   useEffect(() => {
@@ -854,6 +885,7 @@ export const FloatingToolbar = () => {
       cameraEnabled,
     });
 
+    sourceLostDuringStartRef.current = false;
     try {
       if (tab === 'window') {
         focusDesktopSourceWindow(selectedSource);
@@ -929,6 +961,13 @@ export const FloatingToolbar = () => {
       };
       cameraRecorderRef.current = recorder;
       recorder.start(1000);
+    }
+
+    if (sourceLostDuringStartRef.current) {
+      sourceLostDuringStartRef.current = false;
+      recordStateRef.current = 'idle';
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      void handleStop();
     }
   }
 
@@ -1983,6 +2022,9 @@ export const FloatingToolbar = () => {
                             micLevel={micLevel}
                             micDevices={micDevices}
                             selectedMicId={selectedMic?.deviceId ?? null}
+                            systemAudioNotice={
+                              systemAudioNoticeKey ? t(systemAudioNoticeKey) : null
+                            }
                             onMenuOpenChange={setMicMenuOpen}
                             onToggle={handleMicToggle}
                             onSelectMicDevice={(deviceId) => {

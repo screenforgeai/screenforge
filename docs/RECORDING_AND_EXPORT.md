@@ -135,3 +135,7 @@ Based on the code review, there are 3 places where quality is currently being lo
 3. **Canvas zoom doesn't set `imageSmoothingQuality: 'high'`** — when the zoom effect magnifies content, the default interpolation (`'low'`) makes it look blurry. Applies to both preview and export.
 
 4. **Old macOS fallback captures at 80% quality** — can be raised to 100%.
+
+---
+
+See also [RELIABILITY.md](RELIABILITY.md) (multi-monitor, system audio and colour checks) and [EXPORT_BENCHMARKS.md](EXPORT_BENCHMARKS.md) (export timing per release).

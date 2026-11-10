@@ -11,15 +11,14 @@ import type {
   RecordingArea,
   RecordingBoundsSample,
   RecordingResult,
+  RecordingSourceLostReason,
+  SelectedArea,
+  SystemAudioSupport,
 } from '../../../src/types/index';
 
 export const recordingBridge = {
   startRecording: createInvokeBridge<
-    [
-      string,
-      { x: number; y: number; width: number; height: number } | null | undefined,
-      { rendererCapture?: boolean }?,
-    ],
+    [string, SelectedArea | null | undefined, { rendererCapture?: boolean }?],
     void
   >(CH.recording.START),
   stopRecording: createInvokeBridge<
@@ -36,6 +35,9 @@ export const recordingBridge = {
     }
   >(CH.recording.STOP),
   getCaptureBackend: createInvokeBridge<[], CaptureBackend>(CH.recording.GET_BACKEND),
+  getSystemAudioSupport: createInvokeBridge<[], SystemAudioSupport>(
+    CH.recording.GET_SYSTEM_AUDIO_SUPPORT,
+  ),
   pauseRecording: createSendBridge<[]>(CH.recording.PAUSE),
   resumeRecording: createSendBridge<[]>(CH.recording.RESUME),
   discardRecording: createInvokeBridge<[], void>(CH.recording.DISCARD),
@@ -53,6 +55,10 @@ export const recordingBridge = {
   onRecordingLoad: createSubscription<RecordingResult>(CH.recording.LOAD),
   onRecordingFailed: createSubscription<string>(CH.recording.FAILED),
   onStopRequested: createVoidSubscription(CH.recording.STOP_REQUESTED),
+  /** The recorded display went away mid-recording; the toolbar stops and explains why. */
+  onRecordingSourceLost: createSubscription<{ reason: RecordingSourceLostReason }>(
+    CH.recording.SOURCE_LOST,
+  ),
   activateAppendMode: createSendBridge<[]>(CH.recording.ACTIVATE_APPEND_MODE),
   getAppendMode: createInvokeBridge<[], boolean>(CH.recording.GET_APPEND_MODE),
   clearAppendMode: createInvokeBridge<[], void>(CH.recording.CLEAR_APPEND_MODE),

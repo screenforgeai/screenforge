@@ -1,0 +1,185 @@
+import { useReducedMotion } from 'motion/react';
+import { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { IconX } from 'src/lib/icons';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from 'src/lib/ui';
+import type { ReleaseNoteItem, ReleaseNotes } from 'src/lib/whatsNew/changelog';
+
+type WhatsNewModalProps = {
+  open: boolean;
+  /** Newest first. */
+  releases: ReleaseNotes[];
+  onClose: () => void;
+};
+
+const SPRING_IN = {
+  initial: { opacity: 0, transform: 'translateY(8px) scale(0.98)' },
+  animate: { opacity: 1, transform: 'translateY(0px) scale(1)' },
+  exit: { opacity: 0, transform: 'translateY(4px) scale(0.98)' },
+  transition: { type: 'spring', stiffness: 420, damping: 34, mass: 0.8 },
+} as const;
+
+const FADE_IN = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+  transition: { duration: 0.12 },
+} as const;
+
+type NoteSectionProps = {
+  label: string;
+  items: ReleaseNoteItem[];
+};
+
+// Entry text is rendered as React text nodes only, never as HTML.
+const NoteSection = ({ label, items }: NoteSectionProps) => (
+  <div>
+    <p className="mb-2.5 text-xs font-medium uppercase tracking-widest text-sf-muted">{label}</p>
+    <ul className="flex flex-col gap-3">
+      {items.map((item, index) => (
+        <li key={index} className="flex gap-3">
+          <span
+            aria-hidden="true"
+            className="mt-[9px] size-1 shrink-0 rounded-full bg-sf-secondary/60"
+          />
+          <div className="min-w-0 max-w-[62ch]">
+            <p className="text-sm leading-6 text-sf-primary">{item.text}</p>
+            {item.details.length > 0 && (
+              <ul className="mt-1 flex flex-col gap-1">
+                {item.details.map((detail, detailIndex) => (
+                  <li key={detailIndex} className="text-[13px] leading-5 text-sf-secondary">
+                    {detail}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
+
+const ReleaseBody = ({ release }: { release: ReleaseNotes }) => {
+  const { t } = useTranslation('whatsNew');
+  return (
+    <div className="flex flex-col gap-6">
+      {release.newItems.length > 0 && (
+        <NoteSection label={t('sectionNew')} items={release.newItems} />
+      )}
+      {release.fixItems.length > 0 && (
+        <NoteSection label={t('sectionFixes')} items={release.fixItems} />
+      )}
+    </div>
+  );
+};
+
+export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) => {
+  const { t } = useTranslation('whatsNew');
+  const reduceMotion = useReducedMotion();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const latest = releases[0];
+  const isRange = releases.length > 1;
+
+  if (!latest) {
+    return null;
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[min(640px,calc(100vh-4rem))] w-[520px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-lg border-sf-border bg-sf-panel p-0 shadow-none outline-none sm:max-w-[520px]"
+        onOpenAutoFocus={(event) => {
+          // Focus the notes (no ring on a button) so arrow keys scroll and Enter dismisses.
+          event.preventDefault();
+          // focusVisible: false keeps the keyboard ring off until the user tabs.
+          scrollRef.current?.focus({ focusVisible: false } as FocusOptions);
+        }}
+        onKeyDown={(event) => {
+          // Buttons keep their own Enter behaviour.
+          if (event.key === 'Enter' && !(event.target as HTMLElement).closest('button')) {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+        {...(reduceMotion ? FADE_IN : SPRING_IN)}
+      >
+        <DialogHeader className="gap-0 border-b border-sf-border/70 px-6 py-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <DialogTitle className="text-lg font-semibold tracking-tight text-sf-primary">
+                {t('title')}
+              </DialogTitle>
+              <span className="text-sm tabular-nums text-sf-muted">
+                {t('versionBadge', { version: latest.version })}
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t('close')}
+              onClick={onClose}
+            >
+              <IconX size={14} />
+            </Button>
+          </div>
+          <DialogDescription className="mt-1 text-sm leading-relaxed text-sf-secondary">
+            {isRange ? t('subtitleRange') : t('subtitleSingle', { version: latest.version })}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div
+          ref={scrollRef}
+          // Tabbable so keyboard users can come back and scroll long notes.
+          tabIndex={0}
+          aria-label={t('title')}
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-5 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sf-border-lt"
+        >
+          {isRange ? (
+            <div className="flex flex-col gap-7">
+              {releases.map((release) => (
+                <section key={release.version} className="flex flex-col gap-4">
+                  <h3 className="flex items-center gap-3 text-xs font-medium tabular-nums text-sf-secondary">
+                    {t('versionHeading', { version: release.version })}
+                    <span aria-hidden="true" className="h-px flex-1 bg-sf-border" />
+                  </h3>
+                  <ReleaseBody release={release} />
+                </section>
+              ))}
+            </div>
+          ) : (
+            <ReleaseBody release={latest} />
+          )}
+        </div>
+
+        <DialogFooter className="items-center justify-end border-t border-sf-border/60 px-6 py-4">
+          <Button
+            type="button"
+            size="sm"
+            className="shadow-none transition-transform active:scale-[0.98]"
+            onClick={onClose}
+          >
+            {t('gotIt')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};

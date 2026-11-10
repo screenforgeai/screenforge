@@ -1,5 +1,6 @@
 import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
+import type { SelectedArea } from '../../../src/types/index';
 import {
   saveRecording,
   saveAudioCapture,
@@ -16,15 +17,12 @@ import {
   concatRecordings,
   reencodeRecording,
   getCaptureBackend,
+  getSystemAudioSupportForCapture,
 } from './service';
 
 export function registerRecordingChannels(): void {
   handleChannel<
-    [
-      string,
-      { x: number; y: number; width: number; height: number } | null | undefined,
-      { rendererCapture?: boolean } | undefined,
-    ],
+    [string, SelectedArea | null | undefined, { rendererCapture?: boolean } | undefined],
     void
   >(CH.recording.START, (sourceId, cropArea, options) =>
     startRecording(sourceId, cropArea ?? null, options),
@@ -86,4 +84,5 @@ export function registerRecordingChannels(): void {
   handleChannel<[string], string>(CH.recording.REENCODE, (filePath) => reencodeRecording(filePath));
 
   handleChannel(CH.recording.GET_BACKEND, () => getCaptureBackend());
+  handleChannel(CH.recording.GET_SYSTEM_AUDIO_SUPPORT, () => getSystemAudioSupportForCapture());
 }

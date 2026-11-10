@@ -44,5 +44,9 @@
   "captureModeVideo": "Video",
   "captureModeScreenshot": "Screenshot",
   "takeScreenshot": "Take screenshot",
-  "area": "Area"
+  "area": "Area",
+  "systemAudioUnsupported_macosTooOld": "System audio isn't recorded on this version of macOS (macOS 13 or later is needed). Only your microphone is recorded.",
+  "systemAudioUnsupported_linux": "System audio isn't recorded on Linux yet. Only your microphone is recorded.",
+  "systemAudioUnsupported_platform": "System audio can't be recorded on this system. Only your microphone is recorded.",
+  "recordingDisplayRemoved": "The display you were recording was disconnected, so the recording stopped. Everything up to that point was kept."
 }

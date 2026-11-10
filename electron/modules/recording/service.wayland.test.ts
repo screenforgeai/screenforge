@@ -19,6 +19,9 @@ const electronMock = vi.hoisted(() => {
     screen: {
       getAllDisplays: () => [primaryDisplay],
       getPrimaryDisplay: () => primaryDisplay,
+      // Display-change listeners the recording registers while it runs.
+      on: () => undefined,
+      removeListener: () => undefined,
     },
   };
 });
