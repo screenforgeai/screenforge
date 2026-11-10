@@ -1,6 +1,7 @@
 import { useStore } from '../../../store';
 import type { Effect, CanvasLayer } from '../types';
 import type { TextClip } from '../../../types';
+import { fontStack } from '../../fonts';
 
 const REFERENCE_HEIGHT = 1080;
 
@@ -90,7 +91,7 @@ function createTextLayer(): CanvasLayer {
           clip.italic ? 'italic' : '',
           clip.bold ? 'bold' : '',
           `${fontSize}px`,
-          `"${clip.fontFamily}", sans-serif`,
+          fontStack(clip.fontFamily),
         ]
           .filter(Boolean)
           .join(' ');

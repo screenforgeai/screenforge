@@ -5,6 +5,7 @@ import { useStore } from '../../../store';
 import type { TextClip } from '../../../store';
 import { getContainRect } from '../../../lib/effects/frame';
 import { cn } from '../../../lib/utils';
+import { fontStack } from 'src/lib/fonts';
 
 const REFERENCE_HEIGHT = 1080;
 
@@ -44,7 +45,7 @@ function measureClipDisplayHeight(
     clip.italic ? 'italic' : '',
     clip.bold ? 'bold' : '',
     `${fontSize}px`,
-    `"${clip.fontFamily}", sans-serif`,
+    fontStack(clip.fontFamily),
   ]
     .filter(Boolean)
     .join(' ');

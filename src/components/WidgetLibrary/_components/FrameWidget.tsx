@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trackEvent } from 'src/lib/analytics';
 import { useShallow } from 'zustand/react/shallow';
@@ -7,7 +7,9 @@ import {
   GRADIENT_PRESETS,
   WALLPAPER_PRESETS,
   CUSTOM_WALLPAPER_SEED,
+  getCustomWallpaperUrl,
   setCustomWallpaperUrl,
+  subscribeCustomWallpaper,
 } from 'src/lib/effects/frame';
 import { getInitialPlaybackTime } from 'src/lib/helpers/segments';
 import { useStore } from '../../../store';
@@ -15,6 +17,7 @@ import type { BackgroundSettings, BackgroundType } from '../../../store';
 import { Button, Slider, ToggleGroup, ToggleGroupItem } from '../../../lib/ui';
 import { cn } from 'src/lib/utils';
 import { IconPhoto, IconPlus } from 'src/lib/icons';
+import { LogoSection } from './LogoSection';
 import {
   WIDGET_EMPTY_STATE_CLASS,
   WIDGET_EMPTY_TITLE_CLASS,
@@ -107,8 +110,12 @@ export const FrameWidget = () => {
   const toInputRef = useRef<HTMLInputElement>(null);
   const solidInputRef = useRef<HTMLInputElement>(null);
   const customWallpaperInputRef = useRef<HTMLInputElement>(null);
-  const [customWallpaperPreview, setCustomWallpaperPreview] = useState<string | null>(null);
-  const [isCustomSelected, setIsCustomSelected] = useState(false);
+  // A style preset can set the custom wallpaper too, so read it from its source.
+  const customWallpaperPreview = useSyncExternalStore(
+    subscribeCustomWallpaper,
+    getCustomWallpaperUrl,
+  );
+  const isCustomSelected = wallpaperSeed === CUSTOM_WALLPAPER_SEED;
 
   const handleCustomWallpaperPick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,9 +125,6 @@ export const FrameWidget = () => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
-      // Both React state updates batch together — tile appears already selected.
-      setCustomWallpaperPreview(dataUrl);
-      setIsCustomSelected(true);
       setCustomWallpaperUrl(dataUrl);
       patchBackground('Change wallpaper', { wallpaperSeed: CUSTOM_WALLPAPER_SEED });
       trackFrame('wallpaper_seed', CUSTOM_WALLPAPER_SEED);
@@ -292,7 +296,6 @@ export const FrameWidget = () => {
                   )}
                   style={{ aspectRatio: '1' }}
                   onClick={() => {
-                    setIsCustomSelected(false);
                     patchBackground('Change wallpaper', { wallpaperSeed: index });
                     trackFrame('wallpaper_seed', index);
                   }}
@@ -319,7 +322,6 @@ export const FrameWidget = () => {
                   )}
                   style={{ aspectRatio: '1' }}
                   onClick={() => {
-                    setIsCustomSelected(true);
                     patchBackground('Change wallpaper', { wallpaperSeed: CUSTOM_WALLPAPER_SEED });
                     trackFrame('wallpaper_seed', CUSTOM_WALLPAPER_SEED);
                   }}
@@ -640,6 +642,8 @@ export const FrameWidget = () => {
               />
             </div>
           </div>
+
+          <LogoSection />
         </section>
       </div>
     </div>

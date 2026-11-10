@@ -1,6 +1,7 @@
 import { useStore } from '../../../store';
 import type { Effect } from '../types';
 import type { CaptionSegment, CaptionSettings } from '../../../types';
+import { fontStack } from '../../fonts';
 
 function findActiveSegment(segments: CaptionSegment[], t: number): CaptionSegment | null {
   return segments.find((s) => t >= s.start && t <= s.end) ?? null;
@@ -28,7 +29,7 @@ function drawCaptionOverlay(
   const weight = style.bold ? '600' : '400';
   const slant = style.italic ? 'italic' : 'normal';
   ctx.save();
-  ctx.font = `${slant} ${weight} ${fontSize}px ${style.fontFamily}, ui-sans-serif, system-ui, sans-serif`;
+  ctx.font = `${slant} ${weight} ${fontSize}px ${fontStack(style.fontFamily)}`;
   ctx.textBaseline = 'middle';
 
   const textWidth = ctx.measureText(segment.text).width;

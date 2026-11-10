@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { useStore } from '../../../store';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
 import type { CaptionSegment, CaptionSettings } from '../../../types';
+import { fontStack } from '../../fonts';
 
 function findActiveSegment(segments: CaptionSegment[], t: number): CaptionSegment | null {
   let lo = 0;
@@ -112,7 +113,7 @@ export const captionsPixiEffect: PixiEffect<null> = {
         segment.words.forEach((word, i) => {
           const wt = wordContainer.children[i] as Text;
           wt.style.fontSize = fontSize;
-          wt.style.fontFamily = `${captions.fontFamily}, system-ui, ui-sans-serif, sans-serif`;
+          wt.style.fontFamily = fontStack(captions.fontFamily);
           wt.style.fontWeight = captions.bold ? '600' : '400';
           wt.style.fontStyle = captions.italic ? 'italic' : 'normal';
           // Trailing space on all but last word keeps inter-word spacing natural

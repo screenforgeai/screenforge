@@ -40,6 +40,7 @@ import {
 import { cn, formatTime } from 'src/lib/utils';
 
 const CURATED_FONTS = [
+  'system-ui',
   'SF Pro Display',
   'Helvetica Neue',
   'Instrument Sans',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FRAME } from '../effects/frame';
+import { DEFAULT_FRAME, type FrameSettings } from '../effects/frame';
 import { DEFAULT_CAMERA_SETTINGS, DEFAULT_KEYBOARD_SETTINGS } from '../../store/defaults';
 import { createCaptureStoreSnapshot } from './captureSnapshot';
 import type { MotionClip } from '../animation/motionClips';
@@ -13,6 +13,12 @@ describe('createCaptureStoreSnapshot', () => {
         background: {
           ...DEFAULT_FRAME.background,
           padding: 120,
+        },
+        logo: {
+          src: 'data:image/png;base64,AA==',
+          corner: 'top-left' as const,
+          size: 0.1,
+          opacity: 80,
         },
       },
       zoomClips: [
@@ -65,6 +71,12 @@ describe('createCaptureStoreSnapshot', () => {
 
     snapshot.frame.cropRect.x = 0.25;
     snapshot.frame.background.padding = 40;
+    // The snapshot types frame as unknown (it crosses IPC); the logo must still be a copy.
+    const exportedFrame = snapshot.frame as FrameSettings;
+    expect(exportedFrame.logo).toEqual(state.frame.logo);
+    if (exportedFrame.logo) {
+      exportedFrame.logo.opacity = 10;
+    }
     snapshot.zoomClips[0].scale = 3.5;
     snapshot.zoomClips[0].preset = 'standard';
     snapshot.zoomClips[0].cinematicIntensity = 0.1;
@@ -79,6 +91,7 @@ describe('createCaptureStoreSnapshot', () => {
 
     expect(state.frame.cropRect.x).toBe(DEFAULT_FRAME.cropRect.x);
     expect(state.frame.background.padding).toBe(120);
+    expect(state.frame.logo.opacity).toBe(80);
     expect(state.zoomClips[0].scale).toBe(2.2);
     expect(state.zoomClips[0].preset).toBe('cinematic');
     expect(state.zoomClips[0].cinematicIntensity).toBe(0.7);

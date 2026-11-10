@@ -73,6 +73,8 @@ import {
   LogoutSquare01Icon,
   UserAccountIcon,
   Link01Icon,
+  Copy01Icon,
+  Building03Icon,
   GlobeIcon,
   Camera01Icon,
   MusicNote01Icon,
@@ -190,5 +192,7 @@ export const IconMusic3 = createIcon(MusicThreeIcon, 'IconMusic3');
 export const IconTimer = createIcon(Timer02Icon, 'IconTimer');
 export const IconLayers = createIcon(Layers01Icon, 'IconLayers');
 export const IconCoffee = createIcon(Coffee01Icon, 'IconCoffee');
+export const IconCopy = createIcon(Copy01Icon, 'IconCopy');
+export const IconBuilding = createIcon(Building03Icon, 'IconBuilding');
 
 export type { CompatIconProps };

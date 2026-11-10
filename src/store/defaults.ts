@@ -1,4 +1,5 @@
 import type {
+  CaptionAppearance,
   ProjectCameraSettings,
   ProjectCursorSettings,
   ProjectKeyboardSettings,
@@ -80,4 +81,20 @@ export const DEFAULT_KEYBOARD_SETTINGS: ProjectKeyboardSettings = {
   opacity: 1.0,
   size: 'medium',
   background: 'dark',
+};
+
+/** How captions look in a new project. */
+export const DEFAULT_CAPTION_APPEARANCE: CaptionAppearance = {
+  fontFamily: 'system-ui',
+  fontScale: 1.0,
+  bold: true,
+  italic: false,
+  textColor: '#ffffff',
+  highlightColor: '#ffffff',
+  textOpacity: 100,
+  backgroundEnabled: true,
+  backgroundColor: '#0a0a0c',
+  backgroundOpacity: 60,
+  backgroundRadius: 30,
+  position: 'bottom',
 };
