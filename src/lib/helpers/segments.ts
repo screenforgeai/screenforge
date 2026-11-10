@@ -746,7 +746,9 @@ export function applyTimelineCuts(
     cameraMediaSegments: camera.segments,
     zoomClips: collapseClipsOverRanges(state.zoomClips, cutRanges, MIN_ZOOM_CLIP_DURATION),
     cameraClips: collapseClipsOverRanges(state.cameraClips, cutRanges, MIN_CAMERA_CLIP_DURATION),
-    maskClips: collapseClipsOverRanges(state.maskClips, cutRanges, MIN_ZOOM_CLIP_DURATION),
+    // A mask is a privacy control, not a presentation clip: keep it for as long
+    // as any frame it covered survives, however short.
+    maskClips: collapseClipsOverRanges(state.maskClips, cutRanges, CUT_EPSILON),
     motionClips: rippleMotionClips(repinned, removedIds, cutRanges),
     cutRanges,
   };

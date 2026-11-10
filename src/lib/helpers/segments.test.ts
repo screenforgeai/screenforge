@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MediaSegment, ZoomClip } from '../../types/timeline';
+import type { MaskClip, MediaSegment, ZoomClip } from '../../types/timeline';
 import type { MotionClip } from '../animation/motionClips';
 import {
   applyTimelineCuts,
@@ -252,6 +252,29 @@ describe('applyTimelineCuts', () => {
       expect.objectContaining({ id: 'later', start: 5, end: 7 }),
     ]);
     expect(result.cutRanges).toEqual([{ start: 2, end: 3 }]);
+  });
+
+  it('keeps a privacy mask while any of the video it covers survives the cut', () => {
+    const mask = {
+      id: 'mask',
+      start: 1,
+      end: 2,
+      x: 0,
+      y: 0,
+      width: 0.5,
+      height: 0.5,
+      type: 'blur',
+      blurAmount: 20,
+      color: '#000000',
+    } as MaskClip;
+    const result = cut({ ...base(), maskClips: [mask] }, [{ start: 1.04, end: 2 }]);
+    expect(length(result.mediaSegments)).toBeCloseTo(9.04);
+    expect(result.maskClips).toHaveLength(1);
+    expect(result.maskClips[0].start).toBeCloseTo(1);
+    expect(result.maskClips[0].end).toBeCloseTo(1.04);
+
+    // A mask whose video is cut away entirely goes with it.
+    expect(cut({ ...base(), maskClips: [mask] }, [{ start: 1, end: 2 }]).maskClips).toEqual([]);
   });
 
   it('keeps the clip intro on the first piece and the outro on the last', () => {
