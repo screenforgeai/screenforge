@@ -1,5 +1,8 @@
 // @vitest-environment node
 
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
@@ -12,6 +15,7 @@ const electronMock = vi.hoisted(() => ({
     getVersion: vi.fn(() => '0.0.22'),
     relaunch: vi.fn(),
     exit: vi.fn(),
+    getPath: vi.fn(),
   },
   shellOpenExternal: vi.fn(),
   isTrustedAccessibilityClient: vi.fn<[boolean], boolean>(),
@@ -185,6 +189,27 @@ describe('app permission service', () => {
 
     expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
     expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalledWith(true);
+  });
+
+  describe('saveScreenshot', () => {
+    it('gives two saves in the same second their own files', async () => {
+      const pictures = await fs.mkdtemp(path.join(os.tmpdir(), 'sf-screenshot-'));
+      electronMock.app.getPath.mockReturnValue(pictures);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-10T12:00:00.000Z'));
+      try {
+        const { saveScreenshot } = await loadServiceModule();
+        const first = await saveScreenshot('data:image/png;base64,AAAA');
+        const second = await saveScreenshot('data:image/png;base64,BBBB');
+
+        expect(second).not.toBe(first);
+        expect((await fs.readFile(first)).toString('base64')).toBe('AAAA');
+        expect((await fs.readFile(second)).toString('base64')).toBe('BBBB');
+      } finally {
+        vi.useRealTimers();
+        await fs.rm(pictures, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('on Linux', () => {

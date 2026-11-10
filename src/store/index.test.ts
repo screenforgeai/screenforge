@@ -226,3 +226,9 @@ describe('click sound in saved projects', () => {
     expect(useStore.getState().cursorClickSoundVolume).toBe(0.3);
   });
 });
+
+describe('cursor size', () => {
+  it("starts new projects at the cursor's natural size (100%)", () => {
+    expect(useStore.getState().cursorSize).toBe(100);
+  });
+});

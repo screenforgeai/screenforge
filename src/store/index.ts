@@ -325,6 +325,7 @@ export const useStore = create<AppStore>((set, get) => {
     },
     focusMode: false,
     isExporting: false,
+    screenshotCapture: null,
     past: [],
     future: [],
     activeGroup: null,
@@ -416,6 +417,8 @@ export const useStore = create<AppStore>((set, get) => {
       })),
     setFocusMode: (v) => set({ focusMode: v }),
     setIsExporting: (v) => set({ isExporting: v }),
+    openScreenshotEditor: (capture) => set({ screenshotCapture: capture }),
+    closeScreenshotEditor: () => set({ screenshotCapture: null }),
     setIsCropEditing: (v) => set({ isCropEditing: v }),
     setLayerHidden: (layer, hidden) =>
       set((state) => ({ hiddenLayers: { ...state.hiddenLayers, [layer]: hidden } })),

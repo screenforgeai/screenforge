@@ -17,6 +17,7 @@ function isAlive(): boolean {
 export function openAreaSelector(
   preloadPath: string,
   loadURL: (win: BrowserWindow, hash: string) => void,
+  purpose: 'record' | 'screenshot' = 'record',
 ): Promise<{ x: number; y: number; width: number; height: number; displayId?: number } | null> {
   if (isAlive()) {
     return Promise.resolve(null);
@@ -67,7 +68,7 @@ export function openAreaSelector(
     // Force it back to the exact display bounds.
     win.setBounds({ x, y, width, height });
 
-    loadURL(win, 'area-selector');
+    loadURL(win, purpose === 'screenshot' ? 'area-selector-screenshot' : 'area-selector');
 
     win.once('ready-to-show', () => {
       win.setBounds({ x, y, width, height });

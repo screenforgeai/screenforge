@@ -48,7 +48,8 @@ if (
   hash === 'teleprompter' ||
   hash === 'scene-overlay' ||
   hash === 'camera-preview' ||
-  hash === 'area-selector'
+  hash === 'area-selector' ||
+  hash === 'area-selector-screenshot'
 ) {
   document.body.classList.add('transparent-window');
 }
@@ -75,6 +76,9 @@ switch (hash) {
     break;
   case 'area-selector':
     rootNode = <AreaSelector />;
+    break;
+  case 'area-selector-screenshot':
+    rootNode = <AreaSelector purpose="screenshot" />;
     break;
   default:
     rootNode = <App />;
