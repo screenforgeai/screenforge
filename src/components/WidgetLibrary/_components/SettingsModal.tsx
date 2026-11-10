@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { identifyUser, trackEvent } from 'src/lib/analytics';
 import { SUPPORTED_LANGUAGES, type UserProfile } from 'src/lib/userProfile';
-import { IconGlobe, IconUserAccount, IconX } from 'src/lib/icons';
+import { IconGlobe, IconLink, IconUserAccount, IconX } from 'src/lib/icons';
+import { DirectorAccountPanel } from './DirectorAccountPanel';
 import i18n from '../../../i18n';
 import {
   Button,
@@ -31,7 +32,7 @@ type Props = {
   onClose: () => void;
 };
 
-type SettingsSection = 'profile' | 'language';
+type SettingsSection = 'profile' | 'language' | 'director';
 
 export const SettingsModal = ({ open, onClose }: Props) => {
   const { t } = useTranslation('settings');
@@ -40,6 +41,7 @@ export const SettingsModal = ({ open, onClose }: Props) => {
   const sectionMeta: Record<SettingsSection, { title: string; description: string }> = {
     profile: { title: t('profile_title'), description: t('profile_description') },
     language: { title: t('language_title'), description: t('language_description') },
+    director: { title: t('director_title'), description: t('director_description') },
   };
 
   const emptyProfile: UserProfile = { name: '', email: '' };
@@ -160,6 +162,12 @@ export const SettingsModal = ({ open, onClose }: Props) => {
                 </span>
                 {t('tabs_language')}
               </TabsTrigger>
+              <TabsTrigger value="director">
+                <span data-tab-icon="">
+                  <IconLink size={15} />
+                </span>
+                {t('tabs_director')}
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -233,20 +241,26 @@ export const SettingsModal = ({ open, onClose }: Props) => {
               </div>
             </TabsContent>
 
+            <TabsContent value="director" className="flex-1 overflow-y-auto px-5 py-5">
+              {activeSection === 'director' && <DirectorAccountPanel />}
+            </TabsContent>
+
             <DialogFooter className="items-center justify-end border-t border-sf-border/60 px-5 py-3">
               <div className="flex shrink-0 items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={onClose}>
                   {t('cancel')}
                 </Button>
-                <Button
-                  size="sm"
-                  disabled={!isDirty || isSaving}
-                  className="gap-1.5 shadow-none transition-transform active:scale-[0.98]"
-                  onClick={() => void handleSave()}
-                >
-                  {isSaving && <Spinner className="size-3.5 fill-white text-white/30" />}
-                  {t('save')}
-                </Button>
+                {activeSection !== 'director' && (
+                  <Button
+                    size="sm"
+                    disabled={!isDirty || isSaving}
+                    className="gap-1.5 shadow-none transition-transform active:scale-[0.98]"
+                    onClick={() => void handleSave()}
+                  >
+                    {isSaving && <Spinner className="size-3.5 fill-white text-white/30" />}
+                    {t('save')}
+                  </Button>
+                )}
               </div>
             </DialogFooter>
           </div>
