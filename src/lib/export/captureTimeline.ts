@@ -390,8 +390,9 @@ export async function captureTimeline(
       }
     };
 
-    const cursorClickEvents =
-      (analyzedData.get('cursor') as CursorData | undefined)?.clickEvents ?? [];
+    const cursorAnalysis = analyzedData.get('cursor') as CursorData | undefined;
+    const cursorClickEvents = cursorAnalysis?.clickEvents ?? [];
+    const cursorPressEvents = cursorAnalysis?.pressEvents ?? [];
     const audioStartedAt = performance.now();
     const audioPromise = renderTimelineAudio({
       recording,
@@ -400,6 +401,7 @@ export async function captureTimeline(
       includeAudio,
       cursor,
       clickEvents: cursorClickEvents,
+      pressEvents: cursorPressEvents,
       musicClips,
       signal,
     });

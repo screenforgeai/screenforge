@@ -1,9 +1,15 @@
 import { motion } from 'motion/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import type { SyntheticEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trackEvent } from 'src/lib/analytics';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Slider,
   ToggleGroup,
   ToggleGroupItem,
@@ -12,10 +18,11 @@ import {
   TooltipContent,
 } from '../../../lib/ui';
 import { useStore } from '../../../store';
-import type { CursorClickEffect } from '../../../store';
+import type { CursorClickEffect, CursorClickSound } from '../../../store';
+import { CLICK_SOUND_OPTIONS, auditionCursorClickSound } from '../../../lib/effects/cursor/audio';
 import { CURSOR_PREVIEW_STATES, CURSOR_REGISTRY } from '../../../lib/effects/cursor/cursors';
 import type { CursorStyle } from '../../../lib/effects/cursor/cursors';
-import { IconPointer, IconInfo } from 'src/lib/icons';
+import { IconPointer, IconInfo, IconPlayerPlayFilled } from 'src/lib/icons';
 import {
   WIDGET_EMPTY_STATE_CLASS,
   WIDGET_EMPTY_TITLE_CLASS,
@@ -30,6 +37,34 @@ const EASING_PRESETS = [
 ] as const;
 
 const clampValue = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+/**
+ * Preview button inside a dropdown option. It stops pointer and click events so
+ * the Select neither picks the option nor closes; you can audition several in a row.
+ */
+const ClickSoundPlayButton = ({ label, onPlay }: { label: string; onPlay: () => void }) => {
+  const stop = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onPointerDown={stop}
+      onPointerUp={stop}
+      onClick={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        onPlay();
+      }}
+      className="flex size-6 items-center justify-center rounded-full text-sf-secondary transition-colors hover:bg-sf-border-lt hover:text-sf-primary"
+    >
+      <IconPlayerPlayFilled size={11} />
+    </button>
+  );
+};
 const PREVIEW_STATE_DURATION = 0.7;
 const PREVIEW_LOOP_DURATION = PREVIEW_STATE_DURATION * CURSOR_PREVIEW_STATES.length;
 const PREVIEW_HOVER_ORDER = [...CURSOR_PREVIEW_STATES.slice(1), CURSOR_PREVIEW_STATES[0]];
@@ -61,6 +96,10 @@ const PREVIEW_LOOP_KEYFRAMES = CURSOR_PREVIEW_STATES.map((_, stateIndex) => {
 export const CursorWidget = () => {
   const { t } = useTranslation('cursor');
   const [hoveredStyle, setHoveredStyle] = useState<CursorStyle | null>(null);
+  // True while the click sound list is being moved through with the keyboard,
+  // so each option reached plays as a preview. Mouse movement turns it off:
+  // hovering an option stays silent and its play button is used instead.
+  const isKeyboardBrowsingSoundsRef = useRef(false);
 
   const {
     recordingResult,
@@ -74,6 +113,8 @@ export const CursorWidget = () => {
     cursorHideWhenIdle,
     cursorIdleHideSeconds,
     cursorContinuousTracking,
+    cursorClickSound,
+    cursorClickSoundVolume,
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
@@ -90,6 +131,8 @@ export const CursorWidget = () => {
       cursorHideWhenIdle: state.cursorHideWhenIdle,
       cursorIdleHideSeconds: state.cursorIdleHideSeconds,
       cursorContinuousTracking: state.cursorContinuousTracking,
+      cursorClickSound: state.cursorClickSound,
+      cursorClickSoundVolume: state.cursorClickSoundVolume,
       commitEdit: state.commitEdit,
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
@@ -310,6 +353,83 @@ export const CursorWidget = () => {
                 {t('none')}
               </ToggleGroupItem>
             </ToggleGroup>
+          </div>
+
+          {/* Click Sound */}
+          <div className="flex flex-col gap-2.5 py-4">
+            <span className={WIDGET_SECTION_HEADING_CLASS}>{t('clickSound')}</span>
+            <Select
+              value={cursorClickSound}
+              onOpenChange={() => {
+                isKeyboardBrowsingSoundsRef.current = false;
+              }}
+              onValueChange={(v) => {
+                const sound = v as CursorClickSound;
+                updateCursor('Change click sound', { cursorClickSound: sound });
+                trackCursor('click_sound', sound);
+                void auditionCursorClickSound(sound, cursorClickSoundVolume);
+              }}
+            >
+              <SelectTrigger aria-label={t('clickSound')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                onKeyDown={() => {
+                  isKeyboardBrowsingSoundsRef.current = true;
+                }}
+                // Capture phase: Radix focuses an option in its own pointermove handler,
+                // so the flag must clear before that focus fires.
+                onPointerMoveCapture={() => {
+                  isKeyboardBrowsingSoundsRef.current = false;
+                }}
+              >
+                {CLICK_SOUND_OPTIONS.map((sound) => (
+                  <SelectItem
+                    key={sound}
+                    value={sound}
+                    onFocus={() => {
+                      if (isKeyboardBrowsingSoundsRef.current) {
+                        void auditionCursorClickSound(sound, cursorClickSoundVolume);
+                      }
+                    }}
+                    endAdornment={
+                      sound === 'none' ? null : (
+                        <ClickSoundPlayButton
+                          label={t('playSound', { sound: t(sound) })}
+                          onPlay={() => {
+                            void auditionCursorClickSound(sound, cursorClickSoundVolume);
+                          }}
+                        />
+                      )
+                    }
+                  >
+                    {t(sound)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {cursorClickSound !== 'none' ? (
+              <Slider
+                min={0}
+                max={100}
+                step={5}
+                inlineLabel={t('volume')}
+                valueLabel={`${Math.round(clampValue(cursorClickSoundVolume, 0, 1) * 100)}%`}
+                value={[Math.round(clampValue(cursorClickSoundVolume, 0, 1) * 100)]}
+                onPointerDown={() =>
+                  beginHistoryGroup('cursor-click-volume', 'Adjust click volume')
+                }
+                onValueChange={([v]) =>
+                  updateCursor('Adjust click volume', { cursorClickSoundVolume: v / 100 })
+                }
+                onValueCommit={([v]) => {
+                  endHistoryGroup('cursor-click-volume');
+                  trackCursor('click_sound_volume', v);
+                  void auditionCursorClickSound(cursorClickSound, v / 100);
+                }}
+              />
+            ) : null}
           </div>
 
           {/* Camera Follow */}

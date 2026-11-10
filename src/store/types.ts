@@ -22,7 +22,7 @@ export type { MusicClip };
 
 export type CursorStyle = BaseCursorStyle;
 export type CursorClickEffect = 'ripple' | 'none';
-export type CursorClickSound = 'none' | 'magic-mouse' | 'mx-master';
+export type CursorClickSound = 'none' | 'soft' | 'mouse' | 'trackpad' | 'pop' | 'tick';
 export type WidgetTab =
   | 'recordings'
   | 'video'
