@@ -1,4 +1,9 @@
-import type { CinematicTiltDirection, CinematicTiltMode, ZoomClip } from '../../../types/timeline';
+import type {
+  CinematicTiltDirection,
+  CinematicTiltMode,
+  ZoomClip,
+  ZoomEasing,
+} from '../../../types/timeline';
 import {
   normalizeCinematicBackgroundFade,
   normalizeCinematicDepth,
@@ -7,13 +12,16 @@ import {
   normalizeCinematicTilt,
   normalizeCinematicTiltDirection,
   normalizeCinematicTiltMode,
+  normalizeZoomEasing,
 } from './clip';
+import { getZoomEasingProfile } from './style';
 
 interface CameraState {
   scale: number;
   cx: number;
   cy: number;
   mode: 'auto' | 'manual';
+  easing: ZoomEasing;
 }
 interface CursorPos {
   nx: number;
@@ -38,7 +46,7 @@ export interface CinematicZoomState {
   tiltDirection: CinematicTiltDirection;
 }
 
-const IDENTITY: CameraState = { scale: 1, cx: 0.5, cy: 0.5, mode: 'manual' };
+const IDENTITY: CameraState = { scale: 1, cx: 0.5, cy: 0.5, mode: 'manual', easing: 'standard' };
 const CINEMATIC_MIN_RAMP_SECONDS = 0.26;
 const INACTIVE_CINEMATIC: CinematicZoomState = {
   amount: 0,
@@ -59,11 +67,6 @@ const INACTIVE_CINEMATIC: CinematicZoomState = {
   tiltDirection: 'left',
 };
 const BRIDGE_MAX_GAP = 0.6;
-
-function easeInOut(t: number): number {
-  const c = Math.max(0, Math.min(1, t));
-  return c < 0.5 ? 2 * c * c : -1 + (4 - 2 * c) * c;
-}
 
 function smootherStep(t: number): number {
   const c = Math.max(0, Math.min(1, t));
@@ -182,7 +185,7 @@ function getBridgeState(
       ? cursorToCameraCenter(cursorPos.ny, scale)
       : lerp(prev.cy, next.cy, progress);
 
-  return { scale, cx, cy, mode };
+  return { scale, cx, cy, mode, easing: normalizeZoomEasing(prev.easing) };
 }
 
 function resolveCinematicRampDuration(duration: number, requested: number): number {
@@ -240,13 +243,19 @@ export function interpolateCamera(
     return IDENTITY;
   }
 
+  // The easing preset stretches or shortens the clip's ramps and picks the curve.
+  const easing = normalizeZoomEasing(active.easing);
+  const profile = getZoomEasingProfile(easing);
+  const easeIn = active.easeIn * profile.rampScale;
+  const easeOut = active.easeOut * profile.rampScale;
+
   // When easeIn + easeOut exceeds the clip duration, proportionally shrink both
   // so they fit. Without this, the easeIn→easeOut boundary produces a scale jump
   // (e.g. from ~2.0 down to ~1.5 in one frame) for short clips.
-  const totalRamp = active.easeIn + active.easeOut;
+  const totalRamp = easeIn + easeOut;
   const rampScale = totalRamp > duration ? duration / totalRamp : 1;
-  const effectiveEaseIn = active.easeIn * rampScale;
-  const effectiveEaseOut = active.easeOut * rampScale;
+  const effectiveEaseIn = easeIn * rampScale;
+  const effectiveEaseOut = easeOut * rampScale;
 
   let progress = 1;
   if (elapsed < effectiveEaseIn) {
@@ -255,7 +264,7 @@ export function interpolateCamera(
     progress = remaining / effectiveEaseOut;
   }
 
-  const eased = easeInOut(progress);
+  const eased = profile.ease(progress);
   let scale = 1 + (active.scale - 1) * eased;
 
   const { prev, next } = findAdjacentClips(clips, t);
@@ -271,7 +280,7 @@ export function interpolateCamera(
   const cx = useManual || !cursorPos ? active.cx : cursorToCameraCenter(cursorPos.nx, scale);
   const cy = useManual || !cursorPos ? active.cy : cursorToCameraCenter(cursorPos.ny, scale);
 
-  return { scale, cx, cy, mode: active.mode };
+  return { scale, cx, cy, mode: active.mode, easing };
 }
 
 export function resolveCinematicZoomState(
@@ -299,8 +308,10 @@ export function resolveCinematicZoomState(
 
   const elapsed = t - active.start;
   const remaining = active.end - t;
-  const cinematicEaseIn = resolveCinematicRampDuration(duration, active.easeIn);
-  const cinematicEaseOut = resolveCinematicRampDuration(duration, active.easeOut);
+  // Keep the optical envelope in step with the easing preset's ramp length.
+  const { rampScale } = getZoomEasingProfile(active.easing);
+  const cinematicEaseIn = resolveCinematicRampDuration(duration, active.easeIn * rampScale);
+  const cinematicEaseOut = resolveCinematicRampDuration(duration, active.easeOut * rampScale);
   let progress = 1;
   if (cinematicEaseIn > 0 && elapsed < cinematicEaseIn) {
     progress = elapsed / cinematicEaseIn;

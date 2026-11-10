@@ -922,5 +922,7 @@ export function detectZoomClips(recording: RecordingResult): ZoomClip[] {
       candidate.scale,
     ),
     easeOut: candidate.easeOut,
+    // Remembered so zoom intensity can be re-applied without losing the analysis.
+    autoScale: candidate.scale,
   }));
 }

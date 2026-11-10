@@ -221,6 +221,8 @@ export interface SavedProject {
   motionClips?: import('../lib/animation/motionClips').MotionClip[];
   /** Set once clip transitions have been converted to Motion (see migrateTransitions). */
   motionVersion?: number;
+  /** Auto-zoom intensity and easing; absent in projects saved before it existed. */
+  zoomStyle?: import('./timeline').ZoomStyleSettings;
   background?: import('../lib/effects/frame').BackgroundSettings;
   savedAt: string;
   thumbnail: string; // base64 data URL, empty string if none
@@ -269,6 +271,7 @@ export interface CaptureStoreSnapshot {
   cameraClips: unknown[];
   maskClips: unknown[];
   motionClips?: unknown[]; // MotionClip[]
+  zoomStyle?: import('./timeline').ZoomStyleSettings;
 }
 
 /** Parameters sent to the hidden export-worker BrowserWindow. */
@@ -445,6 +448,8 @@ export interface StylePreset {
   camera: ProjectCameraSettings;
   keyboard: ProjectKeyboardSettings;
   captionsAppearance: CaptionAppearance;
+  /** Auto-zoom intensity and easing; absent in presets saved before it existed. */
+  zoomStyle?: import('./timeline').ZoomStyleSettings;
 }
 
 export interface CaptionSettings {

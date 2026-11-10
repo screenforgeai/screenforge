@@ -62,6 +62,53 @@ describe('interpolateCamera', () => {
   });
 });
 
+describe('interpolateCamera easing presets', () => {
+  // A lone 4s clip, 2x, 0.6s in / 0.8s out — the defaults auto-zoom produces.
+  const clipWith = (easing?: 'gentle' | 'standard' | 'snappy') => {
+    const clip = defaultZoomClip('zoom-ease', 0, 4, 0.5, 0.5, 2);
+    if (easing) {
+      return { ...clip, easing };
+    }
+    // Clips saved before easing presets existed have no `easing` field.
+    const legacy: Partial<typeof clip> = { ...clip };
+    delete legacy.easing;
+    return legacy as typeof clip;
+  };
+  const scaleAt = (easing: 'gentle' | 'standard' | 'snappy' | undefined, t: number) =>
+    interpolateCamera([clipWith(easing)], t)?.scale ?? 1;
+  const legacyQuad = (p: number) => (p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p);
+
+  it('keeps today\'s ramp exactly for "standard" and for clips saved without easing', () => {
+    for (const t of [0.05, 0.15, 0.3, 0.45, 0.6, 2, 3.3, 3.6, 3.9]) {
+      const elapsed = t;
+      const remaining = 4 - t;
+      const progress = elapsed < 0.6 ? elapsed / 0.6 : remaining < 0.8 ? remaining / 0.8 : 1;
+      const expected = 1 + legacyQuad(progress);
+      expect(scaleAt('standard', t)).toBeCloseTo(expected, 10);
+      expect(scaleAt(undefined, t)).toBeCloseTo(expected, 10);
+    }
+  });
+
+  it('ramps in more slowly with "gentle"', () => {
+    expect(scaleAt('gentle', 0.3)).toBeLessThan(scaleAt('standard', 0.3));
+    expect(scaleAt('standard', 0.6)).toBeCloseTo(2, 10);
+    expect(scaleAt('gentle', 0.6)).toBeLessThan(2);
+    expect(scaleAt('gentle', 2)).toBeCloseTo(2, 10);
+  });
+
+  it('reaches full zoom sooner and leaves later with "snappy"', () => {
+    expect(scaleAt('snappy', 0.45)).toBeCloseTo(2, 10);
+    expect(scaleAt('standard', 0.45)).toBeLessThan(2);
+    expect(scaleAt('snappy', 3.3)).toBeCloseTo(2, 10);
+    expect(scaleAt('standard', 3.3)).toBeLessThan(2);
+  });
+
+  it('reports the active clip easing so the camera can pace its panning', () => {
+    expect(interpolateCamera([clipWith('gentle')], 1)?.easing).toBe('gentle');
+    expect(interpolateCamera([clipWith(undefined)], 1)?.easing).toBe('standard');
+  });
+});
+
 describe('normalizeZoomClip', () => {
   it('defaults legacy clips to standard cinematic settings', () => {
     const clip = normalizeZoomClip({
@@ -84,6 +131,23 @@ describe('normalizeZoomClip', () => {
     expect(clip.cinematicTilt).toBe(0.65);
     expect(clip.cinematicMotionBlur).toBe(0.2);
     expect(clip.cinematicTiltMode).toBe('follow');
+    expect(clip.easing).toBe('standard');
+    expect(clip.autoScale).toBeUndefined();
+  });
+
+  it('keeps a valid easing and analysed scale, and drops invalid ones', () => {
+    const base = defaultZoomClip('zoom-auto-0', 0, 2, 0.5, 0.5, 2);
+    expect(normalizeZoomClip({ ...base, easing: 'snappy', autoScale: 2.4 })).toMatchObject({
+      easing: 'snappy',
+      autoScale: 2.4,
+    });
+    const invalid = normalizeZoomClip({
+      ...base,
+      easing: 'wobbly' as never,
+      autoScale: Number.NaN,
+    });
+    expect(invalid.easing).toBe('standard');
+    expect('autoScale' in invalid).toBe(false);
   });
 
   it('preserves follow tilt mode through normalization', () => {

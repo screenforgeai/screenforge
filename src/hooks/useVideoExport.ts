@@ -182,6 +182,7 @@ export function useVideoExport() {
       cursorClickSoundVolume,
       cursorEnabled,
       zoomClips,
+      zoomStyle,
       textClips,
       camera,
       keyboard,
@@ -309,6 +310,7 @@ export function useVideoExport() {
         {
           frame,
           zoomClips,
+          zoomStyle,
           textClips,
           camera,
           keyboard,

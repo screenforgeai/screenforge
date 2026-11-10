@@ -7,6 +7,7 @@ import { captureTimeline } from '../lib/export/captureTimeline';
 import { setCustomWallpaperUrl } from '../lib/effects/frame/wallpapers';
 import { useStore } from '../store';
 import { normalizeMotionClips } from '../lib/animation/motionClips';
+import { normalizeZoomStyle } from '../lib/effects/zoom/style';
 
 const ExportWorker = () => {
   useEffect(() => {
@@ -24,6 +25,7 @@ const ExportWorker = () => {
       useStore.setState({
         frame: snap.frame as FrameSettings,
         zoomClips: snap.zoomClips as ZoomClip[],
+        zoomStyle: normalizeZoomStyle(snap.zoomStyle),
         textClips: snap.textClips as TextClip[],
         mediaSegments: params.mediaSegments as MediaSegment[],
         camera: snap.camera,

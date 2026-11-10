@@ -3,6 +3,7 @@ import type {
   CinematicTiltDirection,
   CinematicTiltMode,
   ZoomClip,
+  ZoomEasing,
   ZoomPreset,
 } from '../../../types/timeline';
 
@@ -15,7 +16,9 @@ type ZoomClipCinematicFields =
   | 'cinematicTilt'
   | 'cinematicMotionBlur'
   | 'cinematicTiltMode'
-  | 'cinematicTiltDirection';
+  | 'cinematicTiltDirection'
+  | 'easing'
+  | 'autoScale';
 
 export type LegacyZoomClip = Omit<ZoomClip, ZoomClipCinematicFields> &
   Partial<Record<ZoomClipCinematicFields, unknown>>;
@@ -78,9 +81,20 @@ export function normalizeCinematicTiltDirection(value: unknown): CinematicTiltDi
   return DEFAULT_ZOOM_CLIP.cinematicTiltDirection;
 }
 
+export function normalizeZoomEasing(value: unknown): ZoomEasing {
+  return value === 'gentle' || value === 'snappy' ? value : 'standard';
+}
+
+function normalizeAutoScale(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 export function normalizeZoomClip(clip: LegacyZoomClip): ZoomClip {
+  const { autoScale: rawAutoScale, ...rest } = clip;
+  const autoScale = normalizeAutoScale(rawAutoScale);
   return {
-    ...clip,
+    ...rest,
+    ...(autoScale !== undefined ? { autoScale } : {}),
     preset: normalizeZoomPreset(clip.preset),
     cinematicIntensity: normalizeCinematicIntensity(clip.cinematicIntensity),
     cinematicDepth: normalizeCinematicDepth(clip.cinematicDepth),
@@ -90,6 +104,7 @@ export function normalizeZoomClip(clip: LegacyZoomClip): ZoomClip {
     cinematicMotionBlur: normalizeCinematicMotionBlur(clip.cinematicMotionBlur),
     cinematicTiltMode: normalizeCinematicTiltMode(clip.cinematicTiltMode),
     cinematicTiltDirection: normalizeCinematicTiltDirection(clip.cinematicTiltDirection),
+    easing: normalizeZoomEasing(clip.easing),
   };
 }
 

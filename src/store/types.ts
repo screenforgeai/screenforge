@@ -11,6 +11,7 @@ import type {
   MaskClip,
   SelectedZoomAction,
   ZoomClip,
+  ZoomStyleSettings,
   MediaSegment,
 } from '../types/timeline';
 import type { CursorStyle as BaseCursorStyle } from '../lib/effects/cursor/cursors';
@@ -60,6 +61,7 @@ export interface EditorSessionState {
   currentProjectId: string | null;
   selectedClip: SelectedZoomAction;
   zoomClips: ZoomClip[];
+  zoomStyle: ZoomStyleSettings;
   mediaSegments: MediaSegment[];
   cameraMediaSegments: MediaSegment[];
   isGapPlayback: boolean;
@@ -91,6 +93,7 @@ export interface EditorSessionState {
 export interface HistorySnapshot {
   recordingResult: import('../types/index').RecordingResult | null;
   zoomClips: ZoomClip[];
+  zoomStyle: ZoomStyleSettings;
   mediaSegments: MediaSegment[];
   cameraMediaSegments: MediaSegment[];
   cursorEnabled: boolean;
@@ -130,6 +133,7 @@ export interface HistoryGroup {
 export interface EditableStorePatch {
   recordingResult?: import('../types/index').RecordingResult | null;
   zoomClips?: ZoomClip[];
+  zoomStyle?: ZoomStyleSettings;
   mediaSegments?: MediaSegment[];
   cameraMediaSegments?: MediaSegment[];
   cursorEnabled?: boolean;

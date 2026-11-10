@@ -60,6 +60,7 @@ function buildProjectFromState(
     name: snapshot.recordingName,
     result: snapshot.recordingResult,
     zoomClips: snapshot.zoomClips,
+    zoomStyle: snapshot.zoomStyle,
     mediaSegments: snapshot.mediaSegments,
     frame: snapshot.frame,
     cursor: snapshot.cursor,

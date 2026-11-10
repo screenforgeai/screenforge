@@ -3,7 +3,7 @@ import type {
   ProjectCursorSettings,
   ProjectKeyboardSettings,
 } from '../types';
-import type { ZoomClip } from '../types/timeline';
+import type { ZoomClip, ZoomStyleSettings } from '../types/timeline';
 
 export const DEFAULT_CURSOR_SETTINGS: ProjectCursorSettings = {
   enabled: true,
@@ -37,6 +37,7 @@ export const DEFAULT_ZOOM_CLIP: Pick<
   | 'cinematicMotionBlur'
   | 'cinematicTiltMode'
   | 'cinematicTiltDirection'
+  | 'easing'
 > = {
   scale: 2,
   cx: 0.5,
@@ -53,6 +54,13 @@ export const DEFAULT_ZOOM_CLIP: Pick<
   cinematicMotionBlur: 0.2,
   cinematicTiltMode: 'follow',
   cinematicTiltDirection: 'left',
+  easing: 'standard',
+};
+
+/** Intensity 1 and 'standard' easing reproduce auto-zoom exactly as it was before. */
+export const DEFAULT_ZOOM_STYLE: ZoomStyleSettings = {
+  intensity: 1,
+  easing: 'standard',
 };
 
 export const DEFAULT_CAMERA_SETTINGS: ProjectCameraSettings = {

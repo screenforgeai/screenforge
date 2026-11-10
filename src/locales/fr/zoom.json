@@ -32,5 +32,11 @@
   "advanced": "Advanced",
   "easing": "Atténuation",
   "easeIn": "Fondu entrant",
-  "easeOut": "Fondu sortant"
+  "easeOut": "Fondu sortant",
+  "autoZoomStyle": "Style du zoom automatique",
+  "intensity": "Intensité",
+  "intensityHint": "S'applique aux zooms détectés automatiquement que vous n'avez pas ajustés à la main.",
+  "easingGentle": "Doux",
+  "easingStandard": "Standard",
+  "easingSnappy": "Vif"
 }

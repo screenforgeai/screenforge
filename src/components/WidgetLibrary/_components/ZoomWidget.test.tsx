@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultCinematicZoomClip, defaultZoomClip } from 'src/lib/effects/zoom';
@@ -99,5 +99,43 @@ describe('ZoomWidget zoom clip controls', () => {
       expect(clips).toHaveLength(2);
       expect(clips[1].preset).toBe('cinematic');
     });
+  });
+});
+
+describe('ZoomWidget intensity slider history', () => {
+  const intensityThumb = () => {
+    let root = screen.getByText('Intensity').closest('[data-orientation]') as HTMLElement;
+    while (root.parentElement?.closest('[data-orientation]')) {
+      root = root.parentElement.closest('[data-orientation]') as HTMLElement;
+    }
+    return within(root).getByRole('slider', { hidden: true });
+  };
+
+  it('closes its undo group when a press ends without changing the value', () => {
+    render(<ZoomWidget />);
+    const thumb = intensityThumb();
+
+    fireEvent.pointerDown(thumb, { pointerId: 1, button: 0 });
+    expect(useStore.getState().activeGroup?.key).toBe('zoom-intensity');
+    // Radix only commits a changed value; the press still releases the pointer.
+    fireEvent.lostPointerCapture(thumb, { pointerId: 1 });
+    expect(useStore.getState().activeGroup).toBeNull();
+
+    // So the next edit counts as unsaved on its own, instead of vanishing into the group.
+    const before = useStore.getState().editVersion;
+    act(() => {
+      useStore.getState().commitEdit('Add zoom', () => ({
+        zoomClips: [defaultZoomClip('zoom-2', 4, 6, 0.5, 0.5, 2)],
+      }));
+    });
+    expect(useStore.getState().editVersion).toBeGreaterThan(before);
+  });
+
+  it('closes its undo group if the panel closes mid-drag', () => {
+    const { unmount } = render(<ZoomWidget />);
+    fireEvent.pointerDown(intensityThumb(), { pointerId: 1, button: 0 });
+    expect(useStore.getState().activeGroup?.key).toBe('zoom-intensity');
+    unmount();
+    expect(useStore.getState().activeGroup).toBeNull();
   });
 });
