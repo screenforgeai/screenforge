@@ -515,6 +515,88 @@ export type DirectorAccountState =
       remembered: boolean;
     };
 
+/** Video types Director's share links accept. */
+export type ShareContentType = 'video/mp4' | 'video/webm';
+
+/** A project's share link as the library shows it. */
+export interface ProjectShareLink {
+  shareId: string;
+  title: string;
+  watchUrl: string | null;
+  /** ISO time; null means the link never expires (paid plans). */
+  expiresAt: string | null;
+  status: 'live' | 'expired' | 'removed';
+  sharedAt: string | null;
+}
+
+/** An upload that stopped before it finished, kept so it can resume. */
+export interface PendingShareUpload {
+  shareId: string;
+  filePath: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  projectId: string | null;
+  title: string;
+  durationS: number;
+  contentType: ShareContentType;
+}
+
+export type ShareErrorCode =
+  | 'unsupported-format'
+  | 'file-missing'
+  | 'too-large'
+  | 'too-long'
+  | 'limit-reached'
+  | 'signed-out'
+  | 'interrupted'
+  | 'busy'
+  | 'not-found'
+  | 'failed';
+
+export interface ShareRequest {
+  filePath: string;
+  projectId: string | null;
+  title: string;
+  durationS: number;
+}
+
+/** The one share upload that can run at a time. */
+export type ShareJobState =
+  | { status: 'idle' }
+  | { status: 'preparing'; filePath: string; projectId: string | null }
+  | {
+      status: 'uploading';
+      filePath: string;
+      projectId: string | null;
+      uploadedBytes: number;
+      totalBytes: number;
+    }
+  | { status: 'finishing'; filePath: string; projectId: string | null }
+  | {
+      status: 'done';
+      filePath: string;
+      projectId: string | null;
+      link: ProjectShareLink;
+      copied: boolean;
+    }
+  | {
+      status: 'failed';
+      filePath: string;
+      projectId: string | null;
+      error: ShareErrorCode;
+      /** True when sharing the same file again picks up where it stopped. */
+      resumable: boolean;
+    };
+
+/** What the project library shows: each project's link, and uploads that stopped. */
+export interface ShareLibrary {
+  links: Record<string, ProjectShareLink>;
+  pending: Record<string, { fileName: string; sizeBytes: number }>;
+}
+
+/** Result of a library action (remove a link, discard an upload, ...). */
+export type ShareActionResult = { ok: true } | { ok: false; error: ShareErrorCode };
+
 export interface ScreenforgeAPI {
   onPreloadProgress: (cb: (p: PreloadProgress) => void) => () => void;
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void;
@@ -583,6 +665,21 @@ export interface ScreenforgeAPI {
   cancelDirectorSignIn: () => Promise<void>;
   signOutOfDirector: () => Promise<void>;
   onDirectorAccountChanged: (cb: (state: DirectorAccountState) => void) => () => void;
+  /** Uploads an exported mp4/webm to Director and copies its link (needs the sign-in). */
+  shareVideo: (request: ShareRequest) => Promise<ShareJobState>;
+  cancelShare: () => Promise<void>;
+  getShareState: () => Promise<ShareJobState>;
+  onShareStateChanged: (cb: (state: ShareJobState) => void) => () => void;
+  /** True when sharing this file again resumes an interrupted upload. */
+  canResumeShare: (filePath: string) => Promise<boolean>;
+  getShareLibrary: () => Promise<ShareLibrary>;
+  /** Brings link status and expiry up to date from Director. */
+  refreshShareLibrary: () => Promise<ShareLibrary>;
+  onShareLibraryChanged: (cb: (library: ShareLibrary) => void) => () => void;
+  removeShareLink: (projectId: string) => Promise<ShareActionResult>;
+  copyShareLink: (projectId: string) => Promise<boolean>;
+  resumeProjectShare: (projectId: string) => Promise<ShareJobState>;
+  discardProjectShare: (projectId: string) => Promise<ShareActionResult>;
   getSettings: () => Promise<{ profile: { name: string; email: string }; language: string }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };

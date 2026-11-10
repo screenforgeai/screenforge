@@ -21,6 +21,13 @@ vi.mock('../store', () => ({
     }),
 }));
 
+// The share panel has its own tests; here we only check what it's given.
+vi.mock('./Share/SharePanel', () => ({
+  SharePanel: (props: Record<string, unknown>) => (
+    <div data-testid="share-panel">{JSON.stringify(props)}</div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // window.screenforge mock
 // ---------------------------------------------------------------------------
@@ -28,6 +35,7 @@ const mockSuggestExportPath = vi.fn();
 const mockCheckFileExists = vi.fn();
 const mockPickExportPath = vi.fn();
 const mockCheckFFmpegStatus = vi.fn();
+const mockRevealExportInFolder = vi.fn().mockResolvedValue(undefined);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -47,6 +55,7 @@ beforeEach(() => {
       checkFileExists: mockCheckFileExists,
       pickExportPath: mockPickExportPath,
       checkFFmpegStatus: mockCheckFFmpegStatus,
+      revealExportInFolder: mockRevealExportInFolder,
     },
     writable: true,
     configurable: true,
@@ -332,5 +341,56 @@ describe('ExportModal — estimated size', () => {
     renderModal();
     await pickSelectOption('Format', 'GIF');
     expect(screen.getByText(/Estimated size:/i)).toHaveTextContent('~156 MB');
+  });
+});
+
+describe('ExportModal — after a successful export', () => {
+  const renderDone = (outputPath: string, onClose = vi.fn()) => {
+    render(
+      <ExportModal
+        open={true}
+        recordingName="My Recording"
+        exportState={{
+          status: 'success',
+          progress: 1,
+          error: null,
+          outputPath,
+          resourceStats: null,
+          warnings: [],
+        }}
+        onClose={onClose}
+        onCancelExport={vi.fn()}
+        onExport={vi.fn()}
+        onOpenFFmpegSetup={vi.fn()}
+      />,
+    );
+    return { onClose };
+  };
+
+  it('says where the file went, can show it, and offers to share it', async () => {
+    const { onClose } = renderDone('/Users/test/output.mp4');
+    expect(screen.getByText(/export completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/saved to \/users\/test\/output\.mp4/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /show in folder/i }));
+    expect(mockRevealExportInFolder).toHaveBeenCalledWith('/Users/test/output.mp4');
+
+    const panel = JSON.parse(screen.getByTestId('share-panel').textContent ?? '{}');
+    expect(panel).toEqual({
+      filePath: '/Users/test/output.mp4',
+      format: 'mp4',
+      durationS: 60,
+      title: 'My Recording',
+      projectId: null,
+    });
+
+    expect(screen.queryByRole('button', { name: /^export$/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^done$/i }));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('passes the exported format, so GIF and MOV can explain they cannot be shared', () => {
+    renderDone('/Users/test/output.gif');
+    const panel = JSON.parse(screen.getByTestId('share-panel').textContent ?? '{}');
+    expect(panel.format).toBe('gif');
   });
 });

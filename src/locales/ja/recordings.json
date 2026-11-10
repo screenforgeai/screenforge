@@ -75,5 +75,21 @@
   "scenes_recorded": "録画済み",
   "scenes_markDone": "完了としてマーク",
   "scenes_prevScene": "前のシーン",
-  "scenes_nextScene": "次のシーン"
+  "scenes_nextScene": "次のシーン",
+  "link_expires": "{{date}} に期限切れ",
+  "link_neverExpires": "期限なし",
+  "link_expired": "リンクの期限切れ",
+  "link_removed": "リンクは削除されました",
+  "link_copy": "リンクをコピー",
+  "link_copied": "リンクをコピーしました",
+  "link_remove": "リンクを削除",
+  "link_removeTitle": "共有リンクを削除しますか？",
+  "link_removeDesc": "「{{name}}」のリンクを知っている人は、視聴できなくなります。",
+  "link_removeConfirm": "リンクを削除",
+  "link_removeFailed": "リンクを削除できませんでした。もう一度お試しください。",
+  "link_removeFailed_signedOut": "このリンクを削除するには、Director にもう一度サインインしてください。",
+  "link_uploading": "アップロード中 {{percent}}%",
+  "link_paused": "アップロード一時停止",
+  "link_resume": "再開",
+  "link_discard": "破棄"
 }

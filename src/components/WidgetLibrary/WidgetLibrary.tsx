@@ -4,6 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { trackEvent } from 'src/lib/analytics';
 import {
+  onOpenSettings,
+  takePendingSettings,
+  type SettingsSection,
+} from 'src/lib/settingsNavigation';
+import {
   IconBlur,
   IconCaptions,
   IconChatFeedback,
@@ -86,6 +91,7 @@ export const WidgetLibrary = () => {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>();
   const [createScenesOpen, setCreateScenesOpen] = useState(false);
   const active = useStore((s) => s.activeWidget);
   const isExporting = useStore((s) => s.isExporting);
@@ -121,6 +127,19 @@ export const WidgetLibrary = () => {
     discardAndOpenNewRecording,
   } = useNewRecordingFlow();
   const { isImporting, importAsNewProject } = useImportVideo();
+
+  // Other parts of the app can open Settings on a section (e.g. Share link → Director).
+  useEffect(() => {
+    const open = (section: SettingsSection) => {
+      setSettingsSection(section);
+      setSettingsOpen(true);
+    };
+    const pending = takePendingSettings();
+    if (pending) {
+      open(pending);
+    }
+    return onOpenSettings(open);
+  }, []);
 
   // Forward scene mutations coming from the overlay window into the store
   useEffect(() => {
@@ -338,7 +357,10 @@ export const WidgetLibrary = () => {
                   size="icon"
                   aria-label="Settings"
                   className="flex size-9 items-center justify-center rounded-md text-sf-secondary transition-colors hover:bg-secondary hover:text-sf-primary"
-                  onClick={() => setSettingsOpen(true)}
+                  onClick={() => {
+                    setSettingsSection(undefined);
+                    setSettingsOpen(true);
+                  }}
                 >
                   <IconSettings className="size-4.5" />
                 </Button>
@@ -383,7 +405,11 @@ export const WidgetLibrary = () => {
         onClose={() => setFeedbackOpen(false)}
       />
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        section={settingsSection}
+        onClose={() => setSettingsOpen(false)}
+      />
       <CreateScenesModal
         open={createScenesOpen}
         onClose={() => setCreateScenesOpen(false)}

@@ -75,5 +75,21 @@
   "scenes_recorded": "Grabado",
   "scenes_markDone": "Marcar como hecho",
   "scenes_prevScene": "Escena anterior",
-  "scenes_nextScene": "Siguiente escena"
+  "scenes_nextScene": "Siguiente escena",
+  "link_expires": "Caduca el {{date}}",
+  "link_neverExpires": "No caduca nunca",
+  "link_expired": "Enlace caducado",
+  "link_removed": "Enlace eliminado",
+  "link_copy": "Copiar enlace",
+  "link_copied": "Enlace copiado",
+  "link_remove": "Eliminar enlace",
+  "link_removeTitle": "¿Eliminar el enlace para compartir?",
+  "link_removeDesc": "Quienes tengan el enlace a \"{{name}}\" ya no podrán verlo.",
+  "link_removeConfirm": "Eliminar enlace",
+  "link_removeFailed": "No se pudo eliminar el enlace. Inténtalo de nuevo.",
+  "link_removeFailed_signedOut": "Vuelve a iniciar sesión en Director para eliminar este enlace.",
+  "link_uploading": "Subiendo {{percent}} %",
+  "link_paused": "Subida en pausa",
+  "link_resume": "Reanudar",
+  "link_discard": "Descartar"
 }

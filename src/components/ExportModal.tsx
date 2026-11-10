@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
-import { IconFolderOpen, IconHeart, IconX } from 'src/lib/icons';
+import { IconCheck, IconFolderOpen, IconHeart, IconX } from 'src/lib/icons';
 import type { ExportState } from '../hooks/useVideoExport';
 import { useStore } from '../store';
 import {
@@ -27,7 +27,8 @@ import {
 import { trackEvent } from '../lib/analytics';
 import { estimateDisplayExportSizeBytes } from '../lib/export/estimate';
 import { stripExt } from '../lib/utils';
-import type { ExportSettings } from '../types';
+import type { ExportFormat, ExportSettings } from '../types';
+import { SharePanel } from './Share/SharePanel';
 
 const KOFI_URL = 'https://ko-fi.com/mohibarshi';
 
@@ -76,6 +77,14 @@ function dirnameFromFilePath(filePath: string): string | null {
     return null;
   }
   return filePath.slice(0, slashIdx);
+}
+
+const EXPORT_FORMATS: readonly ExportFormat[] = ['mp4', 'mov', 'webm', 'gif'];
+
+/** The format of the file the export wrote (it can differ from the one picked). */
+function formatFromPath(filePath: string, fallback: ExportFormat): ExportFormat {
+  const ext = filePath.slice(filePath.lastIndexOf('.') + 1).toLowerCase();
+  return EXPORT_FORMATS.find((format) => format === ext) ?? fallback;
 }
 
 const QUALITY_PRESET: Record<
@@ -155,12 +164,14 @@ const ExportModal = ({
   const [willOverwrite, setWillOverwrite] = useState(false);
   const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
   const captions = useStore((s) => s.captions);
+  const currentProjectId = useStore((s) => s.currentProjectId);
   const exportStartRef = useRef<number | null>(null);
   // Tracks which (recordingName, format) pair the current outputPath was generated for,
   // so we re-suggest when the recording or format changes even if a path is already set.
   const hydratedKeyRef = useRef<string | null>(null);
 
   const isExporting = exportState.status === 'rendering' || exportState.status === 'encoding';
+  const exportedPath = exportState.status === 'success' ? exportState.outputPath : null;
 
   // Reset isSubmitting immediately when the export terminates for any reason.
   // cancelExport() sets status='cancelled' before runExport throws, so without this
@@ -385,182 +396,226 @@ const ExportModal = ({
           </Button>
         </div>
 
-        {/* Body */}
-        <div className="flex flex-col gap-4 px-6 py-5">
-          {/* Quality — hidden for GIF (palette-based, quality setting doesn't apply) */}
-          {!isGif && (
-            <div>
-              <label className="mb-2 block text-md font-medium text-sf-secondary">
-                {t('quality')}
-              </label>
-              <Select
-                value={settings.quality}
-                onValueChange={(v) => {
-                  setSettings((prev) => ({ ...prev, quality: v as ExportSettings['quality'] }));
-                  trackEvent('export_settings_changed', { property: 'quality', value: v });
-                }}
-                disabled={isExporting}
-              >
-                <SelectTrigger className={controlCls}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fast">{t('fast')}</SelectItem>
-                  <SelectItem value="balanced">{t('balanced')}</SelectItem>
-                  <SelectItem value="high">{t('high')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* GIF info banner */}
-          {isGif && !isExporting && (
-            <p className="rounded-md border border-sf-border bg-sf-panel px-3 py-2 text-md text-sf-secondary">
-              {t('gifInfo')}
-            </p>
-          )}
-
-          {/* Format / Resolution / FPS */}
-          <div className="grid grid-cols-3 gap-[10px]">
-            <div>
-              <label className="mb-2 block text-md font-medium text-sf-secondary">
-                {t('format')}
-              </label>
-              <Select
-                value={settings.format}
-                onValueChange={(v) => {
-                  setSettings((prev) => {
-                    const format = v as ExportSettings['format'];
-                    const fps =
-                      format === 'gif'
-                        ? normalizeExportFpsForFormat(format, prev.fps)
-                        : isVideoExportFps(prev.fps)
-                          ? prev.fps
-                          : DEFAULT_VIDEO_EXPORT_FPS;
-                    return { ...prev, format, fps };
-                  });
-                  trackEvent('export_settings_changed', { property: 'format', value: v });
-                }}
-                disabled={isExporting}
-              >
-                <SelectTrigger className={controlCls}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="mp4">MP4</SelectItem>
-                  <SelectItem value="mov">MOV</SelectItem>
-                  <SelectItem value="webm">WebM</SelectItem>
-                  <SelectItem value="gif">GIF</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="mb-2 block text-md font-medium text-sf-secondary">
-                {t('resolution')}
-              </label>
-              <Select
-                value={settings.resolution}
-                onValueChange={(v) => {
-                  setSettings((prev) => ({
-                    ...prev,
-                    resolution: v as ExportSettings['resolution'],
-                  }));
-                  trackEvent('export_settings_changed', { property: 'resolution', value: v });
-                }}
-                disabled={isExporting}
-              >
-                <SelectTrigger className={controlCls}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="720p">720p</SelectItem>
-                  <SelectItem value="1080p">1080p</SelectItem>
-                  <SelectItem value="4k">4K</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="mb-2 block text-md font-medium text-sf-secondary">{t('fps')}</label>
-              <Select
-                value={String(settings.fps)}
-                onValueChange={(v) => {
-                  setSettings((prev) => ({
-                    ...prev,
-                    fps: normalizeExportFpsForFormat(prev.format, Number(v)),
-                  }));
-                  trackEvent('export_settings_changed', { property: 'fps', value: Number(v) });
-                }}
-                disabled={isExporting}
-              >
-                <SelectTrigger className={controlCls}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {fpsOptions.map((option) => (
-                    <SelectItem key={option} value={String(option)}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Save to */}
-          <div>
-            <label className="mb-2 block text-md font-medium text-sf-secondary">
-              {t('saveTo')}
-            </label>
-            <div className="w-full flex gap-2">
-              <div className="w-full ">
-                <Input
-                  type="text"
-                  value={outputPath}
-                  readOnly
-                  placeholder={t('chooseDest')}
-                  className="h-9 flex-1 cursor-text select-text border-sf-border bg-sf-panel text-md text-sf-primary placeholder:text-sf-muted"
-                  disabled={isExporting}
-                />
+        {/* Done: where the file went, and the share link (#26) */}
+        {exportedPath && (
+          <>
+            {/* min-w-0: the dialog is a grid, so a long path would widen it past the window. */}
+            <div className="flex min-w-0 flex-col gap-4 px-6 py-5">
+              <div className="flex items-start gap-2">
+                <IconCheck size={16} className="mt-0.5 shrink-0 text-sf-green" />
+                <div className="min-w-0">
+                  <p className="text-md font-medium text-sf-primary">{t('exportCompleted')}</p>
+                  <p className="truncate text-md text-sf-secondary" title={exportedPath}>
+                    {t('exportedTo', { path: exportedPath })}
+                  </p>
+                </div>
               </div>
+              <SharePanel
+                filePath={exportedPath}
+                format={formatFromPath(exportedPath, settings.format)}
+                durationS={duration}
+                title={recordingName}
+                projectId={currentProjectId ?? null}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-sf-border/40 px-6 pb-[20px] pt-[14px]">
               <Button
-                type="button"
                 variant="outline"
                 size="md"
-                className="h-9 shrink-0 border-sf-border bg-sf-panel text-sf-secondary hover:text-sf-primary"
-                onClick={handleBrowse}
-                disabled={isExporting}
+                className="border-sf-border text-sf-secondary hover:text-sf-primary"
+                onClick={() =>
+                  void window.screenforge.revealExportInFolder(exportedPath).catch(() => undefined)
+                }
               >
                 <IconFolderOpen size={14} />
-                {t('browse')}
+                {t('showInFolder')}
+              </Button>
+              <Button size="md" onClick={onClose}>
+                {t('done')}
               </Button>
             </div>
-          </div>
+          </>
+        )}
 
-          {/* Estimated file size — shown only before export starts */}
-          {!isExporting && estimatedSize && (
-            <p className="text-md text-sf-muted -mt-2">
-              {t('estimatedSize')}{' '}
-              <span className="tabular-nums text-sf-secondary">{estimatedSize}</span>
-            </p>
-          )}
-
-          {/* Progress */}
-          {isExporting && (
-            <div className="rounded-lg border border-sf-border bg-sf-panel px-3 pb-4 py-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="flex items-center gap-2 text-md text-sf-secondary">
-                  {progressLabel(exportState, t)}{' '}
-                  <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
-                </span>
-                <span className="flex items-center gap-2 text-md text-sf-primary">
-                  {etaSeconds !== null && progressPct > 2 && (
-                    <span className="tabular-nums text-sf-muted">{formatEta(etaSeconds)}</span>
-                  )}
-                  <span className="tabular-nums font-medium">{progressPct}%</span>
-                </span>
+        {/* Body */}
+        {!exportedPath && (
+          <div className="flex flex-col gap-4 px-6 py-5">
+            {/* Quality — hidden for GIF (palette-based, quality setting doesn't apply) */}
+            {!isGif && (
+              <div>
+                <label className="mb-2 block text-md font-medium text-sf-secondary">
+                  {t('quality')}
+                </label>
+                <Select
+                  value={settings.quality}
+                  onValueChange={(v) => {
+                    setSettings((prev) => ({ ...prev, quality: v as ExportSettings['quality'] }));
+                    trackEvent('export_settings_changed', { property: 'quality', value: v });
+                  }}
+                  disabled={isExporting}
+                >
+                  <SelectTrigger className={controlCls}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fast">{t('fast')}</SelectItem>
+                    <SelectItem value="balanced">{t('balanced')}</SelectItem>
+                    <SelectItem value="high">{t('high')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Progress key={exportState.status} value={progressPct ?? 0} />
-              {/* <div className="mt-3 rounded-md">
+            )}
+
+            {/* GIF info banner */}
+            {isGif && !isExporting && (
+              <p className="rounded-md border border-sf-border bg-sf-panel px-3 py-2 text-md text-sf-secondary">
+                {t('gifInfo')}
+              </p>
+            )}
+
+            {/* Format / Resolution / FPS */}
+            <div className="grid grid-cols-3 gap-[10px]">
+              <div>
+                <label className="mb-2 block text-md font-medium text-sf-secondary">
+                  {t('format')}
+                </label>
+                <Select
+                  value={settings.format}
+                  onValueChange={(v) => {
+                    setSettings((prev) => {
+                      const format = v as ExportSettings['format'];
+                      const fps =
+                        format === 'gif'
+                          ? normalizeExportFpsForFormat(format, prev.fps)
+                          : isVideoExportFps(prev.fps)
+                            ? prev.fps
+                            : DEFAULT_VIDEO_EXPORT_FPS;
+                      return { ...prev, format, fps };
+                    });
+                    trackEvent('export_settings_changed', { property: 'format', value: v });
+                  }}
+                  disabled={isExporting}
+                >
+                  <SelectTrigger className={controlCls}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mp4">MP4</SelectItem>
+                    <SelectItem value="mov">MOV</SelectItem>
+                    <SelectItem value="webm">WebM</SelectItem>
+                    <SelectItem value="gif">GIF</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-2 block text-md font-medium text-sf-secondary">
+                  {t('resolution')}
+                </label>
+                <Select
+                  value={settings.resolution}
+                  onValueChange={(v) => {
+                    setSettings((prev) => ({
+                      ...prev,
+                      resolution: v as ExportSettings['resolution'],
+                    }));
+                    trackEvent('export_settings_changed', { property: 'resolution', value: v });
+                  }}
+                  disabled={isExporting}
+                >
+                  <SelectTrigger className={controlCls}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="720p">720p</SelectItem>
+                    <SelectItem value="1080p">1080p</SelectItem>
+                    <SelectItem value="4k">4K</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-2 block text-md font-medium text-sf-secondary">
+                  {t('fps')}
+                </label>
+                <Select
+                  value={String(settings.fps)}
+                  onValueChange={(v) => {
+                    setSettings((prev) => ({
+                      ...prev,
+                      fps: normalizeExportFpsForFormat(prev.format, Number(v)),
+                    }));
+                    trackEvent('export_settings_changed', { property: 'fps', value: Number(v) });
+                  }}
+                  disabled={isExporting}
+                >
+                  <SelectTrigger className={controlCls}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fpsOptions.map((option) => (
+                      <SelectItem key={option} value={String(option)}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Save to */}
+            <div>
+              <label className="mb-2 block text-md font-medium text-sf-secondary">
+                {t('saveTo')}
+              </label>
+              <div className="w-full flex gap-2">
+                <div className="w-full ">
+                  <Input
+                    type="text"
+                    value={outputPath}
+                    readOnly
+                    placeholder={t('chooseDest')}
+                    className="h-9 flex-1 cursor-text select-text border-sf-border bg-sf-panel text-md text-sf-primary placeholder:text-sf-muted"
+                    disabled={isExporting}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  className="h-9 shrink-0 border-sf-border bg-sf-panel text-sf-secondary hover:text-sf-primary"
+                  onClick={handleBrowse}
+                  disabled={isExporting}
+                >
+                  <IconFolderOpen size={14} />
+                  {t('browse')}
+                </Button>
+              </div>
+            </div>
+
+            {/* Estimated file size — shown only before export starts */}
+            {!isExporting && estimatedSize && (
+              <p className="text-md text-sf-muted -mt-2">
+                {t('estimatedSize')}{' '}
+                <span className="tabular-nums text-sf-secondary">{estimatedSize}</span>
+              </p>
+            )}
+
+            {/* Progress */}
+            {isExporting && (
+              <div className="rounded-lg border border-sf-border bg-sf-panel px-3 pb-4 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-md text-sf-secondary">
+                    {progressLabel(exportState, t)}{' '}
+                    <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
+                  </span>
+                  <span className="flex items-center gap-2 text-md text-sf-primary">
+                    {etaSeconds !== null && progressPct > 2 && (
+                      <span className="tabular-nums text-sf-muted">{formatEta(etaSeconds)}</span>
+                    )}
+                    <span className="tabular-nums font-medium">{progressPct}%</span>
+                  </span>
+                </div>
+                <Progress key={exportState.status} value={progressPct ?? 0} />
+                {/* <div className="mt-3 rounded-md">
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded border border-sf-border bg-sf-panel px-2 py-1.5 font-mono">
                     <div className="text-sm uppercase tracking-[0.12em] text-sf-secondary">CPU</div>
@@ -591,93 +646,96 @@ const ExportModal = ({
                   </div>
                 </div>
               </div> */}
-            </div>
-          )}
+              </div>
+            )}
 
-          {/* Overwrite warning */}
-          {willOverwrite && !isExporting && (
-            <div className="rounded-lg border border-[#7a5c1e] bg-[#2a1f0e] px-3 py-2 text-md text-[#e8b84b]">
-              {t('willOverwrite')}
-            </div>
-          )}
+            {/* Overwrite warning */}
+            {willOverwrite && !isExporting && (
+              <div className="rounded-lg border border-[#7a5c1e] bg-[#2a1f0e] px-3 py-2 text-md text-[#e8b84b]">
+                {t('willOverwrite')}
+              </div>
+            )}
 
-          {exportState.warnings.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {exportState.warnings.map((warning, index) => (
-                <div
-                  key={`${warning}-${index}`}
-                  className="rounded-lg border border-[#7a5c1e] bg-[#2a1f0e] px-3 py-2 text-md text-[#e8b84b]"
+            {exportState.warnings.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {exportState.warnings.map((warning, index) => (
+                  <div
+                    key={`${warning}-${index}`}
+                    className="rounded-lg border border-[#7a5c1e] bg-[#2a1f0e] px-3 py-2 text-md text-[#e8b84b]"
+                  >
+                    {warning}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* FFmpeg missing warning */}
+            {!ffmpegAvailable && !isExporting && (
+              <div className="flex items-center gap-2 rounded-lg border border-[#6f1f2d] bg-[#2c1117] px-3 py-2 text-md text-sf-red">
+                <AlertTriangle size={13} className="shrink-0" />
+                {t('ffmpegMissing')}
+                <button
+                  className="ml-auto shrink-0 underline underline-offset-2 opacity-80 transition-opacity hover:opacity-100"
+                  onClick={() => {
+                    onClose();
+                    onOpenFFmpegSetup();
+                  }}
                 >
-                  {warning}
-                </div>
-              ))}
-            </div>
-          )}
+                  {t('installIt')}
+                </button>
+              </div>
+            )}
 
-          {/* FFmpeg missing warning */}
-          {!ffmpegAvailable && !isExporting && (
-            <div className="flex items-center gap-2 rounded-lg border border-[#6f1f2d] bg-[#2c1117] px-3 py-2 text-md text-sf-red">
-              <AlertTriangle size={13} className="shrink-0" />
-              {t('ffmpegMissing')}
-              <button
-                className="ml-auto shrink-0 underline underline-offset-2 opacity-80 transition-opacity hover:opacity-100"
-                onClick={() => {
-                  onClose();
-                  onOpenFFmpegSetup();
-                }}
-              >
-                {t('installIt')}
-              </button>
-            </div>
-          )}
-
-          {/* Error */}
-          {(localError || exportState.error) && (
-            <div className="rounded-lg border border-[#6f1f2d] bg-[#2c1117] px-3 py-2 text-md text-sf-primary">
-              {localError ?? exportState.error}
-            </div>
-          )}
-        </div>
+            {/* Error */}
+            {(localError || exportState.error) && (
+              <div className="rounded-lg border border-[#6f1f2d] bg-[#2c1117] px-3 py-2 text-md text-sf-primary">
+                {localError ?? exportState.error}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
-        <div className="flex items-center gap-2 border-t border-sf-border/40 px-6 pb-[20px] pt-[14px]">
-          {!isExporting && (
-            <p className="mr-auto text-xs text-sf-muted">
-              {t('freeForever')}
-              <button
-                type="button"
-                className="inline-flex cursor-pointer items-center gap-0.5 underline underline-offset-2 transition-colors hover:text-sf-secondary"
-                onClick={() => {
-                  trackEvent('kofi_clicked', { source: 'export_modal' });
-                  window.screenforge.openExternalUrl(KOFI_URL);
-                }}
-              >
-                {t('supportUs')}
-                <IconHeart size={10} className="text-sf-red" />
-              </button>
-            </p>
-          )}
-          {isExporting ? (
-            <Button variant="destructive" size="sm" onClick={onCancelExport} className="ml-auto">
-              {t('cancelExport')}
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                size="md"
-                className="border-sf-border text-sf-secondary hover:text-sf-primary"
-                onClick={onClose}
-              >
-                {t('cancel')}
+        {!exportedPath && (
+          <div className="flex items-center gap-2 border-t border-sf-border/40 px-6 pb-[20px] pt-[14px]">
+            {!isExporting && (
+              <p className="mr-auto text-xs text-sf-muted">
+                {t('freeForever')}
+                <button
+                  type="button"
+                  className="inline-flex cursor-pointer items-center gap-0.5 underline underline-offset-2 transition-colors hover:text-sf-secondary"
+                  onClick={() => {
+                    trackEvent('kofi_clicked', { source: 'export_modal' });
+                    window.screenforge.openExternalUrl(KOFI_URL);
+                  }}
+                >
+                  {t('supportUs')}
+                  <IconHeart size={10} className="text-sf-red" />
+                </button>
+              </p>
+            )}
+            {isExporting ? (
+              <Button variant="destructive" size="sm" onClick={onCancelExport} className="ml-auto">
+                {t('cancelExport')}
               </Button>
-              <Button size="md" onClick={handleExport} disabled={isSubmitting} className="gap-2">
-                {isSubmitting && <Spinner className="size-3.5 fill-white text-white/30" />}
-                {t('export')}
-              </Button>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="md"
+                  className="border-sf-border text-sf-secondary hover:text-sf-primary"
+                  onClick={onClose}
+                >
+                  {t('cancel')}
+                </Button>
+                <Button size="md" onClick={handleExport} disabled={isSubmitting} className="gap-2">
+                  {isSubmitting && <Spinner className="size-3.5 fill-white text-white/30" />}
+                  {t('export')}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
