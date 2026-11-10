@@ -19,9 +19,9 @@ import {
   defaultZoomClip,
   inferZoomDefaultsAtTime,
 } from 'src/lib/effects/zoom';
+import { normalizeZoomEasing } from 'src/lib/effects/zoom/clip';
 import {
   applyZoomStyle,
-  normalizeZoomEasing,
   ZOOM_EASINGS,
   ZOOM_INTENSITY_MAX,
   ZOOM_INTENSITY_MIN,
