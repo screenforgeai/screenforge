@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { identifyUser, trackEvent } from 'src/lib/analytics';
 import { SUPPORTED_LANGUAGES, type UserProfile } from 'src/lib/userProfile';
-import { IconGlobe, IconUserAccount, IconX } from 'src/lib/icons';
+import { IconGlobe, IconShield, IconUserAccount, IconX } from 'src/lib/icons';
 import i18n from '../../../i18n';
 import {
   Button,
@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
   Spinner,
+  Switch,
+  SwitchThumb,
   Tabs,
   TabsContent,
   TabsList,
@@ -31,7 +33,7 @@ type Props = {
   onClose: () => void;
 };
 
-type SettingsSection = 'profile' | 'language';
+type SettingsSection = 'profile' | 'language' | 'privacy';
 
 export const SettingsModal = ({ open, onClose }: Props) => {
   const { t } = useTranslation('settings');
@@ -40,6 +42,7 @@ export const SettingsModal = ({ open, onClose }: Props) => {
   const sectionMeta: Record<SettingsSection, { title: string; description: string }> = {
     profile: { title: t('profile_title'), description: t('profile_description') },
     language: { title: t('language_title'), description: t('language_description') },
+    privacy: { title: t('privacy_title'), description: t('privacy_description') },
   };
 
   const emptyProfile: UserProfile = { name: '', email: '' };
@@ -54,6 +57,10 @@ export const SettingsModal = ({ open, onClose }: Props) => {
   const initialLang = i18n.language.split('-')[0];
   const [currentLang, setCurrentLang] = useState<string>(initialLang);
   const [savedLang, setSavedLang] = useState<string>(initialLang);
+
+  // Privacy state
+  const [telemetryEnabled, setTelemetryEnabled] = useState(true);
+  const [savedTelemetryEnabled, setSavedTelemetryEnabled] = useState(true);
 
   const hasOpenedRef = useRef(false);
 
@@ -73,6 +80,8 @@ export const SettingsModal = ({ open, onClose }: Props) => {
       const lang = s.language.split('-')[0];
       setCurrentLang(lang);
       setSavedLang(lang);
+      setTelemetryEnabled(s.telemetryEnabled);
+      setSavedTelemetryEnabled(s.telemetryEnabled);
     });
   }, [open]);
 
@@ -80,13 +89,33 @@ export const SettingsModal = ({ open, onClose }: Props) => {
     profile.name.trim() !== savedProfile.name.trim() ||
     profile.email.trim() !== savedProfile.email.trim();
   const langDirty = currentLang !== savedLang;
-  const isDirty = activeSection === 'profile' ? profileDirty : langDirty;
+  const telemetryDirty = telemetryEnabled !== savedTelemetryEnabled;
+  const isDirty = {
+    profile: profileDirty,
+    language: langDirty,
+    privacy: telemetryDirty,
+  }[activeSection];
 
   const handleLangChange = (code: string) => {
     setCurrentLang(code);
   };
 
   const handleSave = async () => {
+    if (activeSection === 'privacy') {
+      setIsSaving(true);
+      try {
+        await Promise.all([
+          window.screenforge.saveSettings({ telemetryEnabled }),
+          new Promise((r) => setTimeout(r, 500)),
+        ]);
+        setSavedTelemetryEnabled(telemetryEnabled);
+        toast.success(t('saved'));
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     if (activeSection === 'language') {
       setIsSaving(true);
       try {
@@ -160,6 +189,12 @@ export const SettingsModal = ({ open, onClose }: Props) => {
                 </span>
                 {t('tabs_language')}
               </TabsTrigger>
+              <TabsTrigger value="privacy">
+                <span data-tab-icon="">
+                  <IconShield size={15} />
+                </span>
+                {t('tabs_privacy')}
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -231,6 +266,32 @@ export const SettingsModal = ({ open, onClose }: Props) => {
                   </SelectContent>
                 </Select>
               </div>
+            </TabsContent>
+
+            <TabsContent value="privacy" className="flex-1 overflow-y-auto px-5 py-5">
+              <label
+                htmlFor="settings-telemetry"
+                className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-sf-border/50 bg-[#111116] px-3 py-2.5 transition-colors hover:border-sf-border-lt hover:bg-[#15151b]"
+              >
+                <div className="grid gap-0.5">
+                  <span className="text-sm font-medium leading-none text-sf-primary">
+                    {t('shareUsageData_label')}
+                  </span>
+                  <span className="text-xs leading-4 text-sf-muted">
+                    {t('shareUsageData_desc')}
+                  </span>
+                </div>
+                <Switch
+                  id="settings-telemetry"
+                  size="xs"
+                  checked={telemetryEnabled}
+                  disabled={isSaving}
+                  onCheckedChange={setTelemetryEnabled}
+                  className="shrink-0"
+                >
+                  <SwitchThumb />
+                </Switch>
+              </label>
             </TabsContent>
 
             <DialogFooter className="items-center justify-end border-t border-sf-border/60 px-5 py-3">

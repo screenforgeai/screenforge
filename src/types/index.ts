@@ -565,11 +565,20 @@ export interface ScreenforgeAPI {
   importVideoForInsert: () => Promise<RecordingResult | null>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
-  getSettings: () => Promise<{ profile: { name: string; email: string }; language: string }>;
+  getSettings: () => Promise<{
+    profile: { name: string; email: string };
+    language: string;
+    telemetryEnabled: boolean;
+  }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };
     language?: string;
-  }) => Promise<{ profile: { name: string; email: string }; language: string }>;
+    telemetryEnabled?: boolean;
+  }) => Promise<{
+    profile: { name: string; email: string };
+    language: string;
+    telemetryEnabled: boolean;
+  }>;
   startExport: (request: ExportRequest) => Promise<ExportResult>;
   cancelExport: (jobId: string) => Promise<void>;
   pickExportPath: (
