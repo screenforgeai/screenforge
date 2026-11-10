@@ -7,6 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Spinner,
   Tooltip,
@@ -24,6 +25,8 @@ interface FloatingToolbarMicProps {
   micLevel: number;
   micDevices: MediaDeviceInfo[];
   selectedMicId: string | null;
+  /** Why system audio won't be in the recording on this OS; null when it will. */
+  systemAudioNotice?: string | null;
   onMenuOpenChange: (open: boolean) => void;
   onToggle: () => void;
   onSelectMicDevice: (deviceId: string) => void;
@@ -37,6 +40,7 @@ export const FloatingToolbarMic = ({
   micLevel,
   micDevices,
   selectedMicId,
+  systemAudioNotice = null,
   onMenuOpenChange,
   onToggle,
   onSelectMicDevice,
@@ -87,7 +91,14 @@ export const FloatingToolbarMic = ({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="top">{tooltipLabel}</TooltipContent>
+        <TooltipContent side="top">
+          {tooltipLabel}
+          {isIdle && systemAudioNotice && (
+            <span className="mt-1 block max-w-60 text-xs text-sf-secondary">
+              {systemAudioNotice}
+            </span>
+          )}
+        </TooltipContent>
       </Tooltip>
 
       <DropdownMenu
@@ -139,6 +150,14 @@ export const FloatingToolbarMic = ({
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>
+          )}
+          {systemAudioNotice && (
+            <>
+              <DropdownMenuSeparator />
+              <p role="note" className="max-w-60 px-2 py-1.5 text-xs text-sf-secondary">
+                {systemAudioNotice}
+              </p>
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

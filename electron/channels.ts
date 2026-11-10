@@ -29,6 +29,8 @@ export const CH = {
     CONCAT: 'recording:concat',
     REENCODE: 'recording:reencode',
     GET_BACKEND: 'recording:get-backend',
+    GET_SYSTEM_AUDIO_SUPPORT: 'recording:get-system-audio-support',
+    SOURCE_LOST: 'recording:source-lost',
   },
   library: {
     SAVE: 'library:save',

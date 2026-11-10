@@ -22,6 +22,7 @@ import { registerRecordingChannels } from './modules/recording/channel';
 import {
   isRecordingBusy,
   onRecordingActivityChanged,
+  onRecordingSourceLost,
   setToolbarWindowTitle,
   setExcludedWindowBoundsProvider,
 } from './modules/recording/service';
@@ -479,6 +480,9 @@ app.on('ready', async () => {
     } else {
       setAppTrayRecordingState(false);
     }
+  });
+  onRecordingSourceLost((info) => {
+    toolbarWindow?.webContents.send(CH.recording.SOURCE_LOST, info);
   });
   onExportActivityChanged(() => notifyUpdaterActivityChanged());
 
