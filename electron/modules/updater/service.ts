@@ -12,6 +12,11 @@ import {
 const MAC_UPDATE_BASE_URL = process.env.SCREENFORGE_MAC_UPDATE_BASE_URL?.trim() ?? '';
 const WIN_UPDATE_BASE_URL = process.env.SCREENFORGE_WIN_UPDATE_BASE_URL?.trim() ?? '';
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// Electron's autoUpdater can't update .deb/.rpm/AppImage installs, so Linux
+// only checks the latest published release and the user installs it from the
+// download page.
+const LINUX_RELEASES_URL = process.env.SCREENFORGE_LINUX_RELEASES_URL?.trim() ?? '';
+const LINUX_RELEASES_TIMEOUT_MS = 15_000;
 
 type StartUpdaterOptions = {
   isAppBusy: () => boolean;
@@ -28,8 +33,42 @@ type AdapterFactoryOptions = {
   isPackaged?: boolean;
   macUpdateBaseUrl?: string;
   winUpdateBaseUrl?: string;
+  linuxReleasesUrl?: string;
   updater?: AutoUpdaterLike;
 };
+
+type ReleasesResponse = {
+  data?: {
+    availability?: {
+      platforms?: {
+        linux?: { version?: string } | null;
+      };
+    };
+  };
+};
+
+function parseVersionParts(version: string): number[] | null {
+  const core = version.trim().replace(/^v/, '').split('-')[0];
+  const parts = core.split('.');
+  return parts.every((part) => /^\d+$/.test(part)) ? parts.map(Number) : null;
+}
+
+export function isNewerVersion(candidate: string, current: string): boolean {
+  const next = parseVersionParts(candidate);
+  const installed = parseVersionParts(current);
+  if (!next || !installed) {
+    return false;
+  }
+
+  for (let index = 0; index < Math.max(next.length, installed.length); index += 1) {
+    const difference = (next[index] ?? 0) - (installed[index] ?? 0);
+    if (difference !== 0) {
+      return difference > 0;
+    }
+  }
+
+  return false;
+}
 
 function parseVersionFromReleaseName(releaseName?: string): string | undefined {
   if (!releaseName) {
@@ -175,6 +214,55 @@ class WinUpdaterAdapter implements ActiveUpdaterAdapter {
   }
 }
 
+class LinuxUpdaterAdapter implements ActiveUpdaterAdapter {
+  readonly kind = 'active' as const;
+
+  private listeners: UpdaterAdapterListeners | null = null;
+
+  constructor(
+    private readonly releasesUrl: string,
+    private readonly currentVersion: string,
+  ) {}
+
+  start(listeners: UpdaterAdapterListeners): void {
+    this.listeners = listeners;
+  }
+
+  async checkForUpdates(): Promise<void> {
+    const listeners = this.listeners;
+    if (!listeners) {
+      return;
+    }
+
+    log.info('[updater] checking for updates');
+    listeners.onChecking();
+
+    const response = await fetch(this.releasesUrl, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(LINUX_RELEASES_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      throw new Error(`Could not check for updates (HTTP ${response.status}).`);
+    }
+
+    const body = (await response.json()) as ReleasesResponse;
+    const latestVersion = body.data?.availability?.platforms?.linux?.version?.trim();
+
+    if (latestVersion && isNewerVersion(latestVersion, this.currentVersion)) {
+      log.info('[updater] newer Linux release published', { latestVersion });
+      listeners.onManualUpdateAvailable({ version: latestVersion.replace(/^v/, '') });
+      return;
+    }
+
+    log.info('[updater] no update available');
+    listeners.onUpdateNotAvailable();
+  }
+
+  quitAndInstall(): void {
+    throw new Error('Linux updates are installed from the download page.');
+  }
+}
+
 function createDisabledAdapter(reason: UpdaterDisabledReason): UpdaterAdapter {
   return {
     kind: 'disabled',
@@ -188,6 +276,7 @@ export function createUpdaterAdapter(options: AdapterFactoryOptions = {}): Updat
   const isPackaged = options.isPackaged ?? app.isPackaged;
   const macUpdateBaseUrl = options.macUpdateBaseUrl ?? MAC_UPDATE_BASE_URL;
   const winUpdateBaseUrl = options.winUpdateBaseUrl ?? WIN_UPDATE_BASE_URL;
+  const linuxReleasesUrl = options.linuxReleasesUrl ?? LINUX_RELEASES_URL;
   const updater = options.updater ?? autoUpdater;
 
   if (!isPackaged) {
@@ -201,13 +290,23 @@ export function createUpdaterAdapter(options: AdapterFactoryOptions = {}): Updat
   }
 
   if (platform === 'linux') {
-    log.info('[updater] disabled', {
-      reason: 'unsupported',
+    if (!linuxReleasesUrl) {
+      log.info('[updater] disabled', {
+        reason: 'missing_feed',
+        currentVersion: app.getVersion(),
+        platform,
+        arch,
+      });
+      return createDisabledAdapter('missing_feed');
+    }
+
+    log.info('[updater] enabled (check only)', {
       currentVersion: app.getVersion(),
       platform,
       arch,
+      releasesUrl: linuxReleasesUrl,
     });
-    return createDisabledAdapter('unsupported');
+    return new LinuxUpdaterAdapter(linuxReleasesUrl, app.getVersion());
   }
 
   if (platform === 'win32') {

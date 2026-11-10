@@ -8,6 +8,9 @@ export type UpdaterAdapterUpdate = {
 export type UpdaterAdapterListeners = {
   onChecking: () => void;
   onUpdateAvailable: (update?: UpdaterAdapterUpdate) => void;
+  // A newer version exists but the adapter can't download it; the user
+  // installs it themselves.
+  onManualUpdateAvailable: (update: UpdaterAdapterUpdate) => void;
   onUpdateNotAvailable: () => void;
   onUpdateDownloaded: (update?: UpdaterAdapterUpdate) => void;
   onError: (error: Error) => void;
@@ -107,7 +110,8 @@ export class UpdaterController {
     this.started = true;
     this.adapter.start({
       onChecking: () => {
-        if (this.pendingReadyState) {
+        // Keep a known newer version on screen while re-checking.
+        if (this.pendingReadyState || this.state.status === 'available') {
           return;
         }
 
@@ -124,6 +128,14 @@ export class UpdaterController {
           status: 'downloading',
           availableVersion: update?.version ?? this.state.availableVersion,
           releaseNotes: update?.releaseNotes ?? this.state.releaseNotes,
+        });
+      },
+      onManualUpdateAvailable: (update) => {
+        this.setState({
+          currentVersion: this.currentVersion,
+          status: 'available',
+          availableVersion: update.version,
+          releaseNotes: update.releaseNotes,
         });
       },
       onUpdateNotAvailable: () => {
@@ -205,7 +217,9 @@ export class UpdaterController {
   async checkForUpdatesNow(): Promise<UpdaterState> {
     if (
       this.adapter.kind !== 'active' ||
-      (this.state.status !== 'idle' && this.state.status !== 'error')
+      (this.state.status !== 'idle' &&
+        this.state.status !== 'available' &&
+        this.state.status !== 'error')
     ) {
       return this.getState();
     }

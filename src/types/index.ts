@@ -36,10 +36,13 @@ export type StartupPermissionStatus =
 
 export type StartupPermissionMap = Record<StartupPermission, StartupPermissionStatus>;
 
+// 'available' means a newer version exists that the user installs themselves
+// (Linux, where the app can't update itself).
 export type UpdaterStatus =
   | 'disabled'
   | 'idle'
   | 'checking'
+  | 'available'
   | 'downloading'
   | 'downloaded'
   | 'ready'

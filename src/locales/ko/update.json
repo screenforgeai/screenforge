@@ -4,6 +4,8 @@
   "checking": "확인 중...",
   "retryUpdate": "업데이트 재시도",
   "updateReady": "업데이트 준비 완료",
+  "updateAvailable": "업데이트 가능",
+  "updateAvailableTitle": "{{version}}이(가) 출시되었습니다. 다운로드한 후 Screenforge를 설치했던 방법으로 설치하세요.",
   "readyLabel": "업데이트 준비 완료 · {{version}}",
   "restartWhenDone": "완료 후 재시작",
   "updateDesc": "{{version}} 다운로드가 백그라운드에서 완료되었습니다. Screenforge는 재시작 전에 작업을 저장합니다.",

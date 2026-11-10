@@ -57,7 +57,7 @@ Making a good product demo or tutorial usually means recording, then spending an
 |---|---|---|
 | **macOS** (Apple Silicon) | [screenforge.co/download/mac](https://screenforge.co/download/mac) | Code-signed and notarized |
 | **Windows** (x64) | [screenforge.co/download/windows](https://screenforge.co/download/windows) | Squirrel installer, auto-updates |
-| **Linux** (x64) | [screenforge.co/download/linux](https://screenforge.co/download/linux) | `.deb`, `.rpm`, AppImage and `.zip`; records on X11 and Wayland |
+| **Linux** (x64) | [screenforge.co/download/linux](https://screenforge.co/download/linux) | `.deb`, `.rpm`, AppImage and `.zip`; records on X11 and Wayland; shows when a new version is out |
 
 All builds are also on the [GitHub releases page](https://github.com/screenforgeai/screenforge/releases). See [`CHANGELOG.md`](./CHANGELOG.md) for what changed in each version.
 
