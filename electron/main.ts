@@ -217,7 +217,8 @@ if (IS_EXPORT_HARNESS_MODE && EXPORT_HARNESS_RESULT) {
 // One Screenforge handles links: a second launch (how Windows and Linux
 // deliver a clicked link) hands its link to the first and quits. The export
 // harness runs headless next to a normal instance, so it never takes the lock.
-if (!IS_EXPORT_HARNESS_MODE && !app.requestSingleInstanceLock()) {
+const HAS_SINGLE_INSTANCE_LOCK = IS_EXPORT_HARNESS_MODE || app.requestSingleInstanceLock();
+if (!HAS_SINGLE_INSTANCE_LOCK) {
   app.quit();
 }
 
@@ -242,6 +243,10 @@ function handleAppLink(url: string): void {
   }
   const link = parseAppLink(url);
   log.info('[app-link] received', { type: link?.type ?? 'unknown' });
+  // Any page can open a screenforge-app:// URL: only links we know bring the app forward.
+  if (!link) {
+    return;
+  }
   // Every link brings Screenforge forward: after a Director sign-in the app
   // finishes on its own, by polling.
   mainWindow.show();
@@ -403,6 +408,11 @@ function createToolbarWindow(): BrowserWindow {
 }
 
 app.on('ready', async () => {
+  // app.quit() above does not stop 'ready' on Windows and Linux: the losing
+  // instance must not create windows or read the Director account.
+  if (!HAS_SINGLE_INSTANCE_LOCK) {
+    return;
+  }
   registerProtocols([APP_ORIGIN]);
 
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>

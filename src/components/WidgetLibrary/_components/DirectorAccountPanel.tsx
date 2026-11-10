@@ -3,6 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { useDirectorAccount } from 'src/hooks/useDirectorAccount';
 import { Button, Spinner } from '../../../lib/ui';
 
+// The main process handles its own sign-in errors; only a failed IPC call lands here.
+const logFailure = (scope: string) => (error: unknown) => {
+  window.screenforge.writeDiagnosticLog(scope, {
+    message: error instanceof Error ? error.message : String(error),
+  });
+};
+
 /** Settings › Director: the optional sign-in (screenforgeai/screenforge#25). */
 export const DirectorAccountPanel = () => {
   const { t } = useTranslation('settings');
@@ -36,7 +43,11 @@ export const DirectorAccountPanel = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => void window.screenforge.cancelDirectorSignIn()}
+            onClick={() =>
+              void window.screenforge
+                .cancelDirectorSignIn()
+                .catch(logFailure('settings.director.cancel-failed'))
+            }
           >
             {t('director_cancel')}
           </Button>
@@ -90,7 +101,14 @@ export const DirectorAccountPanel = () => {
         </p>
       )}
       <div>
-        <Button size="sm" onClick={() => void window.screenforge.signInToDirector()}>
+        <Button
+          size="sm"
+          onClick={() =>
+            void window.screenforge
+              .signInToDirector()
+              .catch(logFailure('settings.director.sign-in-failed'))
+          }
+        >
           {t('director_signIn')}
         </Button>
       </div>

@@ -10,6 +10,7 @@ const api = {
   cancelDirectorSignIn: vi.fn().mockResolvedValue(undefined),
   signOutOfDirector: vi.fn().mockResolvedValue(undefined),
   openExternalUrl: vi.fn(),
+  writeDiagnosticLog: vi.fn(),
 };
 
 const showing = (state: DirectorAccountState) => {
@@ -32,6 +33,30 @@ describe('DirectorAccountPanel', () => {
     expect(await screen.findByText(/share videos as links/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /sign in with director/i }));
     expect(api.signInToDirector).toHaveBeenCalled();
+  });
+
+  it('logs, rather than leaves unhandled, a sign-in or cancel the main process rejects', async () => {
+    api.signInToDirector.mockRejectedValueOnce(new Error('no handler'));
+    showing({ status: 'signed-out' });
+    fireEvent.click(await screen.findByRole('button', { name: /sign in with director/i }));
+    await waitFor(() =>
+      expect(api.writeDiagnosticLog).toHaveBeenCalledWith('settings.director.sign-in-failed', {
+        message: 'no handler',
+      }),
+    );
+    cleanup();
+
+    api.cancelDirectorSignIn.mockRejectedValueOnce(new Error('no handler'));
+    showing({
+      status: 'signing-in',
+      approveUrl: 'https://director.screenforge.co/desktop-login/C',
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /cancel/i }));
+    await waitFor(() =>
+      expect(api.writeDiagnosticLog).toHaveBeenCalledWith('settings.director.cancel-failed', {
+        message: 'no handler',
+      }),
+    );
   });
 
   it('says to approve in the browser while waiting, and can cancel or reopen the page', async () => {

@@ -14,6 +14,20 @@ describe('directorApiBase', () => {
       'http://localhost:8000/api',
     );
   });
+
+  it('keeps an https override, and plain http only on this computer', () => {
+    const base = (url: string) => directorApiBase({ SCREENFORGE_DIRECTOR_API_URL: url });
+    expect(base('https://staging.director.test/api/')).toBe('https://staging.director.test/api');
+    expect(base('http://127.0.0.1:8000/api')).toBe('http://127.0.0.1:8000/api');
+    expect(base('http://[::1]:8000/api')).toBe('http://[::1]:8000/api');
+  });
+
+  it('falls back to production Director rather than send the token in clear text', () => {
+    const base = (url: string) => directorApiBase({ SCREENFORGE_DIRECTOR_API_URL: url });
+    expect(base('http://director.example.com/api')).toBe('https://api.director.screenforge.co/api');
+    expect(base('not a url')).toBe('https://api.director.screenforge.co/api');
+    expect(base('file:///etc/passwd')).toBe('https://api.director.screenforge.co/api');
+  });
 });
 
 describe('Director client', () => {
@@ -90,6 +104,24 @@ describe('Director client', () => {
     const err = await client.pollLoginCode('x').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DirectorApiError);
     expect(err).toMatchObject({ status: 400, code: 'LOGIN_CODE_INVALID' });
+  });
+
+  it('gives every call a deadline, so a stalled request cannot hang sign-in or sign-out', async () => {
+    const fetch = vi.fn().mockResolvedValue(json(200, { data: { status: 'pending' } }));
+    const client = createDirectorClient({ baseUrl: 'https://api.test/api', fetch });
+    await client.pollLoginCode('CODE');
+    const signal = fetch.mock.calls[0][1].signal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+  });
+
+  it('reports a timed-out call like any network failure, with status 0', async () => {
+    const fetch = vi.fn().mockRejectedValue(new DOMException('timed out', 'TimeoutError'));
+    const client = createDirectorClient({ baseUrl: 'https://api.test/api', fetch });
+    await expect(client.pollLoginCode('CODE')).rejects.toMatchObject({
+      status: 0,
+      code: 'NETWORK_ERROR',
+    });
   });
 
   it('reports a network failure as a DirectorApiError with status 0', async () => {
