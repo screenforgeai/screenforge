@@ -110,6 +110,46 @@ describe('screenshot service', () => {
     ).rejects.toThrow();
   });
 
+  it('crops the display the area was drawn on, even if the primary changes during the picker', async () => {
+    const drawnOn = fakeImage(2880, 1800, 'drawn-on');
+    electronMock.getSources.mockResolvedValue([
+      { id: 'screen:1:0', display_id: '1', thumbnail: drawnOn },
+      { id: 'screen:2:0', display_id: '2', thumbnail: fakeImage(1920, 1080, 'new-primary') },
+    ]);
+    // The secondary became the primary while the picker was open.
+    electronMock.getPrimaryDisplay.mockReturnValue(secondary);
+
+    const capture = await captureStill({
+      kind: 'area',
+      sourceId: '',
+      area: { x: 10, y: 20, width: 300, height: 200, display: { id: 1, width: 1440, height: 900 } },
+    });
+
+    expect(drawnOn.crop).toHaveBeenCalledWith({ x: 20, y: 40, width: 600, height: 400 });
+    expect(capture).toMatchObject({ kind: 'area', width: 600, height: 400 });
+  });
+
+  it('refuses an area whose display is gone or has changed size', async () => {
+    electronMock.getSources.mockResolvedValue([
+      { id: 'screen:1:0', display_id: '1', thumbnail: fakeImage(2880, 1800) },
+    ]);
+    const area = { x: 0, y: 0, width: 10, height: 10 };
+    await expect(
+      captureStill({
+        kind: 'area',
+        sourceId: '',
+        area: { ...area, display: { id: 7, width: 1440, height: 900 } },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      captureStill({
+        kind: 'area',
+        sourceId: '',
+        area: { ...area, display: { id: 1, width: 1280, height: 800 } },
+      }),
+    ).rejects.toThrow();
+  });
+
   it('scales an upscaled thumbnail of a smaller display back to native size', async () => {
     // Thumbnail size is 2880×1800 (largest display); a 1920×1080 display comes back fitted to it.
     const thumb = fakeImage(2880, 1620);
