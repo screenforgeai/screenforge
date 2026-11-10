@@ -109,6 +109,31 @@ describe('useSampleProject', () => {
     expect(persistence.beginNewRecording).toHaveBeenCalledOnce();
   });
 
+  it('imports once when the guide and the empty canvas both ask for the sample', async () => {
+    const pendingImports: Array<(value: RecordingResult) => void> = [];
+    const api = installScreenforge(
+      vi.fn(
+        () =>
+          new Promise<RecordingResult>((resolve) => {
+            pendingImports.push(resolve);
+          }),
+      ),
+    );
+    const guide = renderHook(() => useSampleProject());
+    const canvas = renderHook(() => useSampleProject());
+
+    await act(async () => {
+      const first = guide.result.current.openSampleProject('permissions_guide');
+      const second = canvas.result.current.openSampleProject('empty_state');
+      await Promise.resolve();
+      pendingImports.forEach((resolve) => resolve(sampleResult));
+      await Promise.all([first, second]);
+    });
+
+    expect(api.importSampleProject).toHaveBeenCalledOnce();
+    expect(persistence.beginNewRecording).toHaveBeenCalledOnce();
+  });
+
   it('tells the user when the sample cannot be opened', async () => {
     installScreenforge(vi.fn().mockRejectedValue(new Error('missing resource')));
     const { result } = renderHook(() => useSampleProject());

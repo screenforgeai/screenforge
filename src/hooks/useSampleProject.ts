@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -8,6 +8,11 @@ import { trackEvent } from '../lib/analytics';
 
 export type SampleProjectSource = 'empty_state' | 'permissions_guide';
 
+// Shared by every caller (the permissions guide and the empty canvas each
+// have their own hook): one import at a time, app-wide. State lags a render
+// behind, so a double click needs this synchronous flag too.
+let sampleImportInFlight = false;
+
 /**
  * Opens the bundled sample recording as a new, unsaved project. Like a fresh
  * recording, it only lands in the library once the user confirms its title.
@@ -15,8 +20,6 @@ export type SampleProjectSource = 'empty_state' | 'permissions_guide';
 export const useSampleProject = () => {
   const { t } = useTranslation('onboarding');
   const [isOpeningSample, setIsOpeningSample] = useState(false);
-  // State lags a render behind, so a double click would import twice without this.
-  const inFlightRef = useRef(false);
   const { beginNewRecording, flushPendingSave } = useProjectPersistence();
   const { loadRecordingSession, setRecordingName, setActiveWidget } = useStore(
     useShallow((s) => ({
@@ -28,10 +31,10 @@ export const useSampleProject = () => {
 
   const openSampleProject = useCallback(
     async (source: SampleProjectSource) => {
-      if (inFlightRef.current) {
+      if (sampleImportInFlight) {
         return;
       }
-      inFlightRef.current = true;
+      sampleImportInFlight = true;
       setIsOpeningSample(true);
       try {
         if (useStore.getState().recordingResult && !(await flushPendingSave())) {
@@ -48,7 +51,7 @@ export const useSampleProject = () => {
       } catch {
         toast.error(t('sampleProjectFailed'));
       } finally {
-        inFlightRef.current = false;
+        sampleImportInFlight = false;
         setIsOpeningSample(false);
       }
     },
