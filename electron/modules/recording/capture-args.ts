@@ -31,6 +31,26 @@ export function clampCaptureBounds(
 }
 
 /**
+ * RGB screen pixels → limited-range yuv420p using the BT.709 matrix.
+ * FFmpeg's default is BT.601 and it doesn't tag the file, while Chromium —
+ * the editor preview and the export's decoder — reads untagged H.264 as
+ * BT.709, so reds, oranges and blues came out shifted in both.
+ */
+export const RGB_TO_BT709_FILTER = 'scale=out_color_matrix=bt709:out_range=tv';
+
+/** Tags the stream as BT.709 limited range so every player decodes it the same way. */
+export const BT709_TAG_ARGS = [
+  '-colorspace',
+  'bt709',
+  '-color_primaries',
+  'bt709',
+  '-color_trc',
+  'bt709',
+  '-color_range',
+  'tv',
+];
+
+/**
  * Linux X11 display grab. `displayEnv` is the X11 DISPLAY string (e.g. ":0").
  * The cursor is not drawn — Screenforge renders its own cursor from the
  * uiohook event stream.
@@ -60,9 +80,13 @@ export function buildX11GrabArgs(
     '-b:v',
     '20000k',
     // x11grab feeds BGR0; openh264 only encodes yuv420p, so convert explicitly
-    // (also keeps Chromium's <video> decoder happy).
+    // (also keeps Chromium's <video> decoder happy), with the BT.709 matrix
+    // Chromium decodes it with.
+    '-vf',
+    RGB_TO_BT709_FILTER,
     '-pix_fmt',
     'yuv420p',
+    ...BT709_TAG_ARGS,
     '-y',
     outPath,
   ];

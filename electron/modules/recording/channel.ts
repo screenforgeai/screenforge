@@ -16,13 +16,18 @@ import {
   concatRecordings,
   reencodeRecording,
   getCaptureBackend,
+  getSystemAudioSupportForCapture,
 } from './service';
 
 export function registerRecordingChannels(): void {
   handleChannel<
     [
       string,
-      { x: number; y: number; width: number; height: number } | null | undefined,
+      (
+        | { x: number; y: number; width: number; height: number; displayId?: number }
+        | null
+        | undefined
+      ),
       { rendererCapture?: boolean } | undefined,
     ],
     void
@@ -86,4 +91,5 @@ export function registerRecordingChannels(): void {
   handleChannel<[string], string>(CH.recording.REENCODE, (filePath) => reencodeRecording(filePath));
 
   handleChannel(CH.recording.GET_BACKEND, () => getCaptureBackend());
+  handleChannel(CH.recording.GET_SYSTEM_AUDIO_SUPPORT, () => getSystemAudioSupportForCapture());
 }

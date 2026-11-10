@@ -26,6 +26,7 @@ vi.mock('framer-motion', () => {
     'onDragStart',
     'onDragEnd',
     'onAnimationComplete',
+    'layoutId',
   ];
 
   const passthrough = (tag: string) => {
@@ -46,6 +47,7 @@ vi.mock('framer-motion', () => {
     motion: new Proxy({}, { get: (_target, key) => passthrough(String(key)) }),
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
     useDragControls: () => ({ start: () => undefined }),
+    useReducedMotion: () => false,
   };
 });
 
@@ -150,7 +152,11 @@ function createScreenforgeMock(backend: CaptureBackend) {
     onSceneOverlayReady: vi.fn(noopUnsubscribe),
     onSceneOverlayClosed: vi.fn(noopUnsubscribe),
     onStopRequested: vi.fn(noopUnsubscribe),
+    onRecordingSourceLost: vi.fn(noopUnsubscribe),
+    getSystemAudioSupport: vi.fn().mockResolvedValue({ supported: true }),
     prepareRecordingStartPermissions: vi.fn().mockResolvedValue(undefined),
+    prepareScreenshotPermissions: vi.fn().mockResolvedValue(undefined),
+    captureScreenshot: vi.fn().mockResolvedValue(undefined),
     startRecording: vi.fn().mockResolvedValue(undefined),
     stopRecording: vi.fn().mockResolvedValue({
       mouseData: [],
@@ -229,6 +235,14 @@ function installMocks(backend: CaptureBackend): void {
 
 // Generous enough for a loaded 2-core CI runner; local runs finish in ms.
 const ASYNC_UI_TIMEOUT_MS = 5000;
+
+/** The toolbar's most recent onRecordingSourceLost callback. */
+function latestSourceLostHandler(): (info: { reason: 'display-removed' }) => void {
+  const calls = screenforge.onRecordingSourceLost.mock.calls as unknown as Array<
+    [(info: { reason: 'display-removed' }) => void]
+  >;
+  return calls[calls.length - 1][0];
+}
 
 async function clickRecordAndFinishCountdown(): Promise<void> {
   render(<FloatingToolbar />);
@@ -327,6 +341,71 @@ describe('FloatingToolbar recording widget', () => {
         expect.anything(),
       );
     });
+
+    it('stops and explains why when the recorded display is disconnected', async () => {
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+
+      const onSourceLost = screenforge.onRecordingSourceLost.mock.calls.at(-1)?.[0] as (info: {
+        reason: 'display-removed';
+      }) => void;
+      act(() => onSourceLost({ reason: 'display-removed' }));
+
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+      expect(screenforge.systemWarning).toHaveBeenCalledWith(
+        'The display you were recording was disconnected, so the recording stopped. Everything up to that point was kept.',
+      );
+    });
+
+    it('stops only once when the display-removed event arrives twice', async () => {
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+
+      const onSourceLost = latestSourceLostHandler();
+      act(() => {
+        onSourceLost({ reason: 'display-removed' });
+        onSourceLost({ reason: 'display-removed' });
+      });
+
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops as soon as it starts when the display went away while starting', async () => {
+      let finishStart: () => void = () => undefined;
+      screenforge.startRecording.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishStart = resolve;
+          }),
+      );
+      await clickRecordAndFinishCountdown();
+      await waitFor(() => expect(screenforge.startRecording).toHaveBeenCalled());
+
+      const onSourceLost = latestSourceLostHandler();
+      act(() => onSourceLost({ reason: 'display-removed' }));
+      await act(async () => finishStart());
+
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+      expect(screenforge.systemWarning).toHaveBeenCalledWith(
+        'The display you were recording was disconnected, so the recording stopped. Everything up to that point was kept.',
+      );
+    });
+
+    it('ignores a disconnected display while not recording', async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.onRecordingSourceLost).toHaveBeenCalled());
+
+      const onSourceLost = screenforge.onRecordingSourceLost.mock.calls.at(-1)?.[0] as (info: {
+        reason: 'display-removed';
+      }) => void;
+      act(() => onSourceLost({ reason: 'display-removed' }));
+
+      expect(screenforge.stopRecording).not.toHaveBeenCalled();
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
+    });
   });
 
   describe('Wayland portal backend (Linux)', () => {
@@ -418,6 +497,91 @@ describe('FloatingToolbar recording widget', () => {
       expect(recorder.state).toBe('inactive');
       expect(portalTrack.stop).toHaveBeenCalled();
       expect(screenforge.recordingFinished).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('screenshot mode', () => {
+    beforeEach(() => installMocks('native'));
+
+    const switchToScreenshot = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+    };
+
+    it('swaps Record for a shutter and hides the video-only controls', async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      expect(screen.getByRole('button', { name: 'More options' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+      expect(screen.getByRole('button', { name: 'Screenshot' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Take screenshot' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+    });
+
+    it('captures the display, asking only for screen access', async () => {
+      await switchToScreenshot();
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      await waitFor(() =>
+        expect(screenforge.captureScreenshot).toHaveBeenCalledWith({
+          kind: 'display',
+          sourceId: 'screen:0',
+        }),
+      );
+      // Screenshots don't track the cursor, so no Accessibility prompt.
+      expect(screenforge.prepareScreenshotPermissions).toHaveBeenCalled();
+      expect(screenforge.prepareRecordingStartPermissions).not.toHaveBeenCalled();
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+    });
+
+    it('opens the area selector in screenshot mode, then captures the area', async () => {
+      screenforge.openAreaSelector.mockResolvedValue({ x: 1, y: 2, width: 300, height: 200 });
+      await switchToScreenshot();
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+      await waitFor(() =>
+        expect(screenforge.captureScreenshot).toHaveBeenCalledWith({
+          kind: 'area',
+          sourceId: 'screen:0',
+          area: { x: 1, y: 2, width: 300, height: 200 },
+        }),
+      );
+      expect(screenforge.openAreaSelector).toHaveBeenCalledWith('screenshot');
+    });
+
+    it('does nothing when the area selection is cancelled', async () => {
+      await switchToScreenshot();
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+      await waitFor(() => expect(screenforge.openAreaSelector).toHaveBeenCalled());
+      expect(screenforge.captureScreenshot).not.toHaveBeenCalled();
+    });
+
+    it('stops when screen access is missing', async () => {
+      screenforge.prepareScreenshotPermissions.mockRejectedValue(new Error('Screen access needed'));
+      await switchToScreenshot();
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      await waitFor(() =>
+        expect(screenforge.systemWarning).toHaveBeenCalledWith('Screen access needed'),
+      );
+      expect(screenforge.captureScreenshot).not.toHaveBeenCalled();
+    });
+
+    it('warns when the capture fails', async () => {
+      screenforge.captureScreenshot.mockRejectedValue(new Error('boom'));
+      await switchToScreenshot();
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      await waitFor(() =>
+        expect(screenforge.systemWarning).toHaveBeenCalledWith(
+          expect.stringMatching(/couldn't take the screenshot/i),
+        ),
+      );
+      expect(screenforge.writeDiagnosticLog).toHaveBeenCalledWith(
+        'toolbar.screenshot.failed',
+        expect.objectContaining({ kind: 'display', message: 'boom' }),
+      );
     });
   });
 });

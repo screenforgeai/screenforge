@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
-import { IconPlayerRecordFilled, IconRestart } from 'src/lib/icons';
+import { IconCamera, IconPlayerRecordFilled, IconRestart } from 'src/lib/icons';
+import type { AreaSelectorPurpose } from 'src/types';
 
 type SelectionRect = {
   x: number;
@@ -72,7 +73,13 @@ function modeToCursor(mode: DragMode): string {
   }
 }
 
-export const AreaSelector = () => {
+type Props = {
+  /** Screenshot swaps the record button for the camera shutter. */
+  purpose?: AreaSelectorPurpose;
+};
+
+export const AreaSelector = ({ purpose = 'record' }: Props) => {
+  const isScreenshot = purpose === 'screenshot';
   const [confirmedRect, setConfirmedRect] = useState<SelectionRect | null>(null);
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
@@ -392,7 +399,9 @@ export const AreaSelector = () => {
                 whiteSpace: 'nowrap',
               }}
             >
-              Drag to select a recording area · Esc to cancel
+              {isScreenshot
+                ? 'Drag to select an area to capture · Esc to cancel'
+                : 'Drag to select a recording area · Esc to cancel'}
             </div>
           </motion.div>
         )}
@@ -434,17 +443,24 @@ export const AreaSelector = () => {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="cursor-pointer flex h-9 w-9 items-center justify-center rounded-full bg-[#e54d4d] text-white shadow-[0_0_14px_rgba(229,77,77,0.5)] hover:bg-[#ef5f5f] active:scale-95"
+                  aria-label={isScreenshot ? 'Take screenshot' : 'Start Recording'}
+                  className={
+                    isScreenshot
+                      ? 'cursor-pointer flex h-9 w-9 items-center justify-center rounded-full bg-[#f5f5f7] text-[#111113] shadow-[0_0_14px_rgba(255,255,255,0.35)] hover:bg-white hover:text-[#111113] active:scale-95'
+                      : 'cursor-pointer flex h-9 w-9 items-center justify-center rounded-full bg-[#e54d4d] text-white shadow-[0_0_14px_rgba(229,77,77,0.5)] hover:bg-[#ef5f5f] active:scale-95'
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     handleConfirm();
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  <IconPlayerRecordFilled size={14} />
+                  {isScreenshot ? <IconCamera size={16} /> : <IconPlayerRecordFilled size={14} />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Start Recording</TooltipContent>
+              <TooltipContent side="top">
+                {isScreenshot ? 'Take screenshot' : 'Start Recording'}
+              </TooltipContent>
             </Tooltip>
           </motion.div>
         )}

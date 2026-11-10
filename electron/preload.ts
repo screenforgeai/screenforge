@@ -14,6 +14,8 @@ import { sceneOverlayBridge } from './modules/scene-overlay/bridge';
 import { cameraPreviewBridge } from './modules/camera-preview/bridge';
 import { areaSelectorBridge } from './modules/area-selector/bridge';
 import { importBridge } from './modules/import/bridge';
+import { whatsNewBridge } from './modules/whats-new/bridge';
+import { screenshotBridge } from './modules/screenshot/bridge';
 
 contextBridge.exposeInMainWorld('screenforge', {
   ...sourcesBridge,
@@ -31,5 +33,7 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...cameraPreviewBridge,
   ...areaSelectorBridge,
   ...importBridge,
+  ...whatsNewBridge,
+  ...screenshotBridge,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 });

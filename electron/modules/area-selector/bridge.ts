@@ -8,7 +8,7 @@ export const areaSelectorBridge = {
   >(CH.areaSelector.CONFIRM),
   cancelAreaSelection: createSendBridge<[]>(CH.areaSelector.CANCEL),
   openAreaSelector: createInvokeBridge<
-    [],
-    { x: number; y: number; width: number; height: number } | null
+    [purpose?: 'record' | 'screenshot'],
+    { x: number; y: number; width: number; height: number; displayId?: number } | null
   >(CH.areaSelector.OPEN),
 };

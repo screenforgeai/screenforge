@@ -36,10 +36,13 @@ export type StartupPermissionStatus =
 
 export type StartupPermissionMap = Record<StartupPermission, StartupPermissionStatus>;
 
+// 'available' means a newer version exists that the user installs themselves
+// (Linux, where the app can't update itself).
 export type UpdaterStatus =
   | 'disabled'
   | 'idle'
   | 'checking'
+  | 'available'
   | 'downloading'
   | 'downloaded'
   | 'ready'
@@ -69,6 +72,19 @@ export interface UpdaterState {
  */
 export type CaptureBackend = 'native' | 'ffmpeg-x11' | 'wayland-portal' | 'unsupported';
 
+/** Why system (desktop) audio can't be recorded alongside the screen here. */
+export type SystemAudioUnsupportedReason =
+  | 'macos-too-old'
+  | 'linux-not-supported'
+  | 'platform-not-supported';
+
+export type SystemAudioSupport =
+  | { supported: true }
+  | { supported: false; reason: SystemAudioUnsupportedReason };
+
+/** Why a recording had to stop on its own (sent to the toolbar). */
+export type RecordingSourceLostReason = 'display-removed';
+
 export interface DesktopSource {
   id: string;
   name: string;
@@ -76,6 +92,26 @@ export interface DesktopSource {
   appIcon: string | null;
   appName?: string;
   windowTitle?: string;
+}
+
+export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
+
+export interface ScreenshotCaptureRequest {
+  kind: ScreenshotCaptureKind;
+  /** Desktop source id ("screen:…" / "window:…"). Ignored for areas (primary display). */
+  sourceId: string;
+  /** Area selection in primary-display DIPs (from the area selector). */
+  area?: { x: number; y: number; width: number; height: number } | null;
+}
+
+/** A still image handed to the Screenshot editor. */
+export interface ScreenshotCapture {
+  /** Where it came from: a live capture, or the editor's current preview frame. */
+  kind: ScreenshotCaptureKind | 'frame';
+  /** PNG data URL. */
+  dataUrl: string;
+  width: number;
+  height: number;
 }
 
 export interface WindowFocusTarget {
@@ -503,6 +539,8 @@ export interface TextClip {
   animationOutDuration: number;
 }
 
+export type AreaSelectorPurpose = 'record' | 'screenshot';
+
 export interface ScreenforgeAPI {
   onPreloadProgress: (cb: (p: PreloadProgress) => void) => () => void;
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void;
@@ -510,6 +548,8 @@ export interface ScreenforgeAPI {
   checkForUpdatesNow: () => Promise<UpdaterState>;
   getAppVersion: () => Promise<string>;
   prepareRecordingStartPermissions: () => Promise<void>;
+  /** Screen access only (no Accessibility), for screenshots. */
+  prepareScreenshotPermissions: () => Promise<void>;
   getStartupPermissionStatuses: () => Promise<StartupPermissionMap>;
   requestScreenAccess: () => Promise<StartupPermissionStatus>;
   requestMediaAccess: (permission: RequestableMediaPermission) => Promise<StartupPermissionStatus>;
@@ -522,7 +562,7 @@ export interface ScreenforgeAPI {
   getSources: () => Promise<DesktopSource[]>;
   startRecording: (
     sourceId: string,
-    cropArea?: { x: number; y: number; width: number; height: number } | null,
+    cropArea?: { x: number; y: number; width: number; height: number; displayId?: number } | null,
     options?: { rendererCapture?: boolean },
   ) => Promise<void>;
   getCaptureBackend: () => Promise<CaptureBackend>;
@@ -554,6 +594,8 @@ export interface ScreenforgeAPI {
   onRecordingProcessing: (cb: () => void) => () => void;
   onRecordingFailed: (cb: (message: string) => void) => () => void;
   onStopRequested: (cb: () => void) => () => void;
+  onRecordingSourceLost: (cb: (info: { reason: RecordingSourceLostReason }) => void) => () => void;
+  getSystemAudioSupport: () => Promise<SystemAudioSupport>;
   activateAppendMode: () => void;
   getAppendMode: () => Promise<boolean>;
   clearAppendMode: () => Promise<void>;
@@ -565,6 +607,12 @@ export interface ScreenforgeAPI {
   importVideoForInsert: () => Promise<RecordingResult | null>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
+  /** Main window startup only: whether to open "What's new". Marks the running version as seen. */
+  consumeWhatsNewOnLaunch: () => Promise<{
+    show: boolean;
+    sinceVersion: string | null;
+    currentVersion: string;
+  }>;
   getSettings: () => Promise<{
     profile: { name: string; email: string };
     language: string;
@@ -664,6 +712,9 @@ export interface ScreenforgeAPI {
   captureException: (error: SerializedError, properties?: Record<string, unknown>) => void;
   submitFeedback: (feedback: FeedbackSubmission) => void;
   saveScreenshot: (dataUrl: string) => Promise<string>;
+  captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<void>;
+  copyScreenshotToClipboard: (dataUrl: string) => Promise<void>;
+  onScreenshotCaptured: (cb: (capture: ScreenshotCapture) => void) => () => void;
   minimizeToDock: () => void;
   quitApp: () => void;
   toggleTeleprompter: () => void;
@@ -692,11 +743,14 @@ export interface ScreenforgeAPI {
     height: number;
   }) => Promise<void>;
   cancelAreaSelection: () => void;
-  openAreaSelector: () => Promise<{
+  /** `purpose` picks the confirm button: record (default) or take a screenshot. */
+  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<{
     x: number;
     y: number;
     width: number;
     height: number;
+    /** The display the area was drawn on (its coordinates are in that display). */
+    displayId?: number;
   } | null>;
 }
 

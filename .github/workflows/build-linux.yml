@@ -103,6 +103,9 @@ jobs:
           POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
           # The Screenforge PostHog project (not a secret).
           POSTHOG_CLI_PROJECT_ID: '708071'
+          # Where the app checks for a newer Linux release; it then sends the
+          # user to the download page. Fork builds leave it unset.
+          SCREENFORGE_LINUX_RELEASES_URL: https://screenforge.co/api/builds
 
       - name: Generate SHA256 checksums
         run: |

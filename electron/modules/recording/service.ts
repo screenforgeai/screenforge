@@ -11,6 +11,8 @@ import type {
   CursorType,
   RecordingArea,
   RecordingBoundsSample,
+  RecordingSourceLostReason,
+  SystemAudioSupport,
 } from '../../../src/types/index';
 import { buildMergeAudioArgs } from '../../../src/lib/recording/audioMerge';
 import { summarizeCursorEvents } from '../../../src/lib/recording/cursorTiming';
@@ -33,7 +35,7 @@ import {
   type CaptureBackend,
 } from '../../lib/linux-capture';
 import { prepareRecordingStartPermissionsIfNeeded } from '../app/service';
-import { createNativeCursorPointNormalizer } from './utils/native-cursor-normalizer';
+import { createNativeCursorPointMapper } from './utils/cursor-point-mapper';
 import { getMacWindowMetadata, parseWindowIdFromSourceId } from '../sources/service';
 import { probeExportSource } from '../export/service';
 import { computeFallbackCaptureBitrate, formatFFmpegBitrate } from './captureQuality';
@@ -49,6 +51,7 @@ import {
   type CaptureSegment,
 } from './capture-args';
 import { getX11WindowGeometry } from './x11-window-geometry';
+import { getSystemAudioSupport } from './system-audio';
 import {
   normalizeKeyboardModifiers,
   normalizeKeyLabel,
@@ -191,6 +194,87 @@ export function onRecordingActivityChanged(listener: () => void): () => void {
   };
 }
 
+// ── Display changes during a recording ───────────────────────────────────────
+
+type RecordingSourceLostListener = (info: { reason: RecordingSourceLostReason }) => void;
+
+const recordingSourceLostListeners = new Set<RecordingSourceLostListener>();
+let stopWatchingDisplays: (() => void) | null = null;
+
+/**
+ * Fires when the display being recorded disappears mid-recording (unplugged,
+ * lid closed, monitor switched off). The capture can't continue on it, so the
+ * UI should stop the recording and keep what was captured so far.
+ */
+export function onRecordingSourceLost(listener: RecordingSourceLostListener): () => void {
+  recordingSourceLostListeners.add(listener);
+  return () => {
+    recordingSourceLostListeners.delete(listener);
+  };
+}
+
+/**
+ * Watches display changes for the length of a recording. `capturedDisplayId`
+ * is null for window recordings: the OS moves a window off a removed display,
+ * and the capture follows it, so only display recordings are stopped.
+ */
+function watchDisplaysDuringRecording(capturedDisplayId: number | null): void {
+  unwatchDisplaysDuringRecording();
+
+  const onRemoved = (_event: unknown, removed: Electron.Display) => {
+    const isCaptured = capturedDisplayId !== null && removed.id === capturedDisplayId;
+    log.warn('[recording] display removed during recording', {
+      removedId: removed.id,
+      capturedDisplayId,
+      isCaptured,
+    });
+    if (!isCaptured) {
+      return;
+    }
+    for (const listener of recordingSourceLostListeners) {
+      listener({ reason: 'display-removed' });
+    }
+  };
+  const onAdded = (_event: unknown, added: Electron.Display) => {
+    log.info('[recording] display added during recording', {
+      addedId: added.id,
+      bounds: added.bounds,
+      scaleFactor: added.scaleFactor,
+    });
+  };
+  const onMetricsChanged = (
+    _event: unknown,
+    changed: Electron.Display,
+    changedMetrics: string[],
+  ) => {
+    if (changed.id !== capturedDisplayId) {
+      return;
+    }
+    // Resolution or scale changes mid-recording keep capturing at the old
+    // size; cursor positions use the bounds from when recording started.
+    log.warn('[recording] recorded display changed during recording', {
+      displayId: changed.id,
+      changedMetrics,
+      bounds: changed.bounds,
+      scaleFactor: changed.scaleFactor,
+    });
+  };
+
+  screen.on('display-removed', onRemoved);
+  screen.on('display-added', onAdded);
+  screen.on('display-metrics-changed', onMetricsChanged);
+  stopWatchingDisplays = () => {
+    screen.removeListener('display-removed', onRemoved);
+    screen.removeListener('display-added', onAdded);
+    screen.removeListener('display-metrics-changed', onMetricsChanged);
+  };
+}
+
+function unwatchDisplaysDuringRecording(): void {
+  stopWatchingDisplays?.();
+  stopWatchingDisplays = null;
+}
+
 export function isRecordingBusy(): boolean {
   return (
     captureProc !== null ||
@@ -214,6 +298,14 @@ export function getCaptureBackend(): CaptureBackend {
   }
   // macOS < 13 AVFoundation / any other FFmpeg-based fallback
   return 'ffmpeg-x11';
+}
+
+/** Whether this machine's capture path records system audio, and why not. */
+export function getSystemAudioSupportForCapture(): SystemAudioSupport {
+  return getSystemAudioSupport({
+    platform: process.platform,
+    captureBackend: getCaptureBackend(),
+  });
 }
 
 function getPackagedUiohookDir(resourcesPath: string): string {
@@ -704,12 +796,17 @@ async function startNativeCapture(
 
   const normalizePoint =
     sourceWindowId === null
-      ? createNativeCursorPointNormalizer(display, (info) => {
-          log.info(
-            '[recording:native] cursor coordinate mode:',
-            info.mode,
-            `(scale=${info.scaleFactor}, logicalHits=${info.logicalHits}, scaledHits=${info.scaledHits}, samples=${info.samples})`,
-          );
+      ? createNativeCursorPointMapper(display, {
+          platform: process.platform,
+          screenToDipPoint:
+            process.platform === 'win32' ? (point) => screen.screenToDipPoint(point) : undefined,
+          onModeResolved: (info) => {
+            log.info(
+              '[recording:native] cursor coordinate mode:',
+              info.mode,
+              `(scale=${info.scaleFactor}, logicalHits=${info.logicalHits}, scaledHits=${info.scaledHits}, samples=${info.samples})`,
+            );
+          },
         })
       : null;
 
@@ -1059,6 +1156,9 @@ async function stopNativeCapture(): Promise<string> {
 // ── Crop recording ────────────────────────────────────────────────────────────
 
 let activeCropArea: { x: number; y: number; width: number; height: number } | null = null;
+// The display the crop area was drawn on, fixed at start: the crop is in its
+// logical pixels, and the primary display can change while recording.
+let activeCropDisplay: Pick<Electron.Display, 'bounds' | 'scaleFactor'> | null = null;
 
 export function setActiveCropArea(area: {
   x: number;
@@ -1071,6 +1171,7 @@ export function setActiveCropArea(area: {
 
 export function clearActiveCropArea(): void {
   activeCropArea = null;
+  activeCropDisplay = null;
 }
 
 /**
@@ -1383,9 +1484,27 @@ async function resolveWindowRecordingStartArea(sourceId: string): Promise<Record
   };
 }
 
+/**
+ * The display an area was selected on. The selector records it, because the
+ * primary display can change between selecting and pressing Record; if that
+ * display is gone, refuse rather than record a different screen.
+ */
+function resolveAreaDisplay(displayId: number | undefined): Electron.Display {
+  if (displayId === undefined) {
+    return screen.getPrimaryDisplay();
+  }
+  const display = screen.getAllDisplays().find((d) => d.id === displayId);
+  if (!display) {
+    throw new Error(
+      'The display the area was selected on is no longer connected. Select the area again.',
+    );
+  }
+  return display;
+}
+
 export async function startRecording(
   sourceId: string,
-  cropArea?: { x: number; y: number; width: number; height: number } | null,
+  cropArea?: { x: number; y: number; width: number; height: number; displayId?: number } | null,
   options?: { rendererCapture?: boolean },
 ): Promise<void> {
   const startedAt = Date.now();
@@ -1431,9 +1550,20 @@ export async function startRecording(
     );
   }
 
-  let display = resolveDisplayForSource(sourceId);
-  const sourceDisplayId = parseDisplayIdFromSource(sourceId);
+  // The area selector only opens on the primary display, so an area is always
+  // in the primary display's coordinates — record that display, whichever
+  // screen source the toolbar happened to pass.
+  const isAreaCapture = Boolean(cropArea) && !isWindowCapture;
+  let display = isAreaCapture
+    ? resolveAreaDisplay(cropArea?.displayId)
+    : resolveDisplayForSource(sourceId);
+  const sourceDisplayId = isAreaCapture
+    ? resolveDisplayId(display)
+    : parseDisplayIdFromSource(sourceId);
   const sourceWindowId = parseWindowIdFromSourceId(sourceId);
+  if (isAreaCapture) {
+    activeCropDisplay = { bounds: { ...display.bounds }, scaleFactor: display.scaleFactor };
+  }
 
   if (isWindowCapture) {
     let initialBounds = await resolveWindowRecordingStartArea(sourceId);
@@ -1486,45 +1616,15 @@ export async function startRecording(
 
   const outPath = createTempPath('screenforge', 'mp4');
 
-  if (shouldUseNativeCapture()) {
-    log.info('[recording] using native capture helper');
-    await startNativeCapture(display, outPath, sourceDisplayId, sourceWindowId);
-    recordingStartTime = Date.now();
-    log.info('[recording:native] recordingStartTime set after "Recording started"', {
-      recordingStartTime,
-      nativeMediaStartTimeAtSet: nativeMediaStartTime,
-      alreadyHaveMediaStart: nativeMediaStartTime !== null,
-    });
-    if (activeWindowRecording && recordingBoundsTimeline.length === 0) {
-      ensureRecordingBoundsSample({ ...recordingArea, timestamp: recordingStartTime });
-    }
-    // CGEventTap in the helper replaces uiohook-napi on macOS 13+
-  } else {
-    const bin = await getFFmpegPath();
-    const captureArea = isWindowCapture && recordingArea ? recordingArea : undefined;
-    ffmpegCaptureSpawn = {
-      bin,
-      buildArgs: (segmentPath) => buildCaptureArgs(display, segmentPath, captureArea),
-    };
-    ffmpegSegments = [];
-    ffmpegSegmentTransition = Promise.resolve();
-
-    // Wait until FFmpeg opens the output file before starting mouse tracking.
-    try {
-      await startFFmpegSegment(outPath);
-    } catch (error) {
-      ffmpegCaptureSpawn = null;
-      emitRecordingActivityChanged();
-      throw error;
-    }
-
-    recordingStartTime = Date.now();
-    try {
-      await startCursorTracking();
-    } catch (error) {
-      await stopFFmpegCapture().catch(() => undefined);
-      throw error;
-    }
+  // Watch from before the capture starts: a display unplugged while FFmpeg or
+  // the native helper is still starting must not leave a dead recording.
+  watchDisplaysDuringRecording(isWindowCapture ? null : resolveDisplayId(display));
+  try {
+    await startCapture();
+  } catch (error) {
+    unwatchDisplaysDuringRecording();
+    activeCropDisplay = null;
+    throw error;
   }
 
   log.info('[recording] start completed', {
@@ -1532,6 +1632,49 @@ export async function startRecording(
     outputPath: outPath,
     startupLatencyMs: Date.now() - startedAt,
   });
+
+  async function startCapture(): Promise<void> {
+    if (shouldUseNativeCapture()) {
+      log.info('[recording] using native capture helper');
+      await startNativeCapture(display, outPath, sourceDisplayId, sourceWindowId);
+      recordingStartTime = Date.now();
+      log.info('[recording:native] recordingStartTime set after "Recording started"', {
+        recordingStartTime,
+        nativeMediaStartTimeAtSet: nativeMediaStartTime,
+        alreadyHaveMediaStart: nativeMediaStartTime !== null,
+      });
+      if (activeWindowRecording && recordingBoundsTimeline.length === 0) {
+        ensureRecordingBoundsSample({ ...recordingArea, timestamp: recordingStartTime });
+      }
+      // CGEventTap in the helper replaces uiohook-napi on macOS 13+
+    } else {
+      const bin = await getFFmpegPath();
+      const captureArea = isWindowCapture && recordingArea ? recordingArea : undefined;
+      ffmpegCaptureSpawn = {
+        bin,
+        buildArgs: (segmentPath) => buildCaptureArgs(display, segmentPath, captureArea),
+      };
+      ffmpegSegments = [];
+      ffmpegSegmentTransition = Promise.resolve();
+
+      // Wait until FFmpeg opens the output file before starting mouse tracking.
+      try {
+        await startFFmpegSegment(outPath);
+      } catch (error) {
+        ffmpegCaptureSpawn = null;
+        emitRecordingActivityChanged();
+        throw error;
+      }
+
+      recordingStartTime = Date.now();
+      try {
+        await startCursorTracking();
+      } catch (error) {
+        await stopFFmpegCapture().catch(() => undefined);
+        throw error;
+      }
+    }
+  }
 }
 
 export async function stopRecording(rendererCapture?: {
@@ -1549,6 +1692,7 @@ export async function stopRecording(rendererCapture?: {
   filePath: string;
 }> {
   log.info('[recording] stop requested');
+  unwatchDisplaysDuringRecording();
   // Let an in-flight FFmpeg pause/resume settle so its pause span is closed.
   await ffmpegSegmentTransition;
   const wallStopTime = Date.now();
@@ -1591,17 +1735,18 @@ export async function stopRecording(rendererCapture?: {
 
   // Apply crop if an active crop area was set before recording started
   const cropAreaToApply = activeCropArea;
+  const cropDisplay = activeCropDisplay ?? screen.getPrimaryDisplay();
   clearActiveCropArea();
 
   if (cropAreaToApply) {
     try {
-      const display = screen.getPrimaryDisplay();
-      const scaleFactor = display.scaleFactor ?? 1;
+      const scaleFactor = cropDisplay.scaleFactor ?? 1;
       log.info('[recording] applying crop area', { cropAreaToApply, scaleFactor });
       filePath = await cropRecording(filePath, cropAreaToApply, scaleFactor);
+      // The crop is relative to its display; cursor events are global.
       recordingArea = {
-        x: cropAreaToApply.x,
-        y: cropAreaToApply.y,
+        x: cropDisplay.bounds.x + cropAreaToApply.x,
+        y: cropDisplay.bounds.y + cropAreaToApply.y,
         width: cropAreaToApply.width,
         height: cropAreaToApply.height,
       };
@@ -1715,6 +1860,7 @@ export async function stopRecording(rendererCapture?: {
 
 export async function discardRecording(): Promise<void> {
   log.info('[recording] discard requested');
+  unwatchDisplaysDuringRecording();
   appendMode = false;
   clearActiveCropArea();
 

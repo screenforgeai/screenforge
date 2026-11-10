@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useEffectEvent, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import {
   IconX,
@@ -18,6 +18,7 @@ import {
   IconMoreVertical,
   IconScript,
   IconCrop,
+  IconCamera,
 } from 'src/lib/icons';
 import { trackEvent } from 'src/lib/analytics';
 import { readableErrorMessage } from 'src/lib/ipcError';
@@ -38,9 +39,12 @@ import type {
   DesktopSource,
   CursorEvent,
   CaptureBackend,
+  SystemAudioSupport,
   ToolbarShapeRect,
+  ScreenshotCaptureRequest,
 } from '../../types/index';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
+import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
 
 type SourceTab = 'display' | 'window' | 'area';
@@ -87,6 +91,17 @@ function chooseCameraRecorderOptions(): MediaRecorderOptions {
 const Divider = () => {
   return <div className="h-6 w-px bg-sf-border-lt" />;
 };
+
+/**
+ * One spring drives every part of the Video ↔ Screenshot switch, so the pill,
+ * the collapsing controls and the shutter move as one gesture. A spring rather
+ * than a fixed curve keeps it smooth when the switch is flicked mid-animation;
+ * a small bounce gives it life without a wobble.
+ */
+const MODE_SPRING = { type: 'spring', visualDuration: 0.42, bounce: 0.14 } as const;
+/** Content fades lead the spring so nothing is seen squeezing. */
+const MODE_FADE = { duration: 0.18, ease: [0.32, 0.72, 0, 1] } as const;
+const INSTANT = { duration: 0 } as const;
 
 function formatTime(secs: number): string {
   const m = String(Math.floor(secs / 60)).padStart(2, '0');
@@ -280,6 +295,11 @@ function getWindowSourceRelevance(source: DesktopSource): number {
 export const FloatingToolbar = () => {
   const { t } = useTranslation('toolbar');
   const [tab, setTab] = useState<SourceTab>('display');
+  // One source picker serves both: Video records it, Screenshot grabs a still.
+  const [captureMode, setCaptureMode] = useState<'video' | 'photo'>('video');
+  const reduceMotion = useReducedMotion();
+  const modeSpring = reduceMotion ? INSTANT : MODE_SPRING;
+  const modeFade = reduceMotion ? INSTANT : MODE_FADE;
   const [recordState, setRecordState] = useState<RecordState>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [countdown, setCountdown] = useState(3);
@@ -291,6 +311,8 @@ export const FloatingToolbar = () => {
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [micLoading, setMicLoading] = useState(false);
+  const [systemAudioSupport, setSystemAudioSupport] = useState<SystemAudioSupport | null>(null);
+  const systemAudioNoticeKey = getSystemAudioNoticeKey(systemAudioSupport);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
@@ -352,6 +374,8 @@ export const FloatingToolbar = () => {
   const analyserRafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const recordStateRef = useRef<RecordState>('idle');
+  // The recorded display went away while startRecording was still in flight.
+  const sourceLostDuringStartRef = useRef(false);
   const micLevelRef = useRef(0);
   const micUiUpdateTsRef = useRef(0);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -438,6 +462,12 @@ export const FloatingToolbar = () => {
       })
       .catch((err) => {
         console.error('[recording] could not resolve capture backend:', err);
+      });
+    window.screenforge
+      .getSystemAudioSupport()
+      .then(setSystemAudioSupport)
+      .catch((err) => {
+        console.error('[recording] could not resolve system audio support:', err);
       });
   }, []);
 
@@ -562,6 +592,20 @@ export const FloatingToolbar = () => {
       return true;
     } catch (err) {
       logToolbarDiagnostic('toolbar.recording.permissions-failed', {
+        message: getErrorMessage(err),
+      });
+      window.screenforge.systemWarning(getErrorMessage(err));
+      return false;
+    }
+  }, []);
+
+  // Screenshots need screen access only: no cursor tracking, so no Accessibility.
+  const ensureScreenshotPermissions = useCallback(async (): Promise<boolean> => {
+    try {
+      await window.screenforge.prepareScreenshotPermissions();
+      return true;
+    } catch (err) {
+      logToolbarDiagnostic('toolbar.screenshot.permissions-failed', {
         message: getErrorMessage(err),
       });
       window.screenforge.systemWarning(getErrorMessage(err));
@@ -747,6 +791,25 @@ export const FloatingToolbar = () => {
     });
   }, []);
 
+  // The recorded display was unplugged (or switched off) mid-recording: stop
+  // and keep what was captured, and say why instead of failing silently.
+  useEffect(() => {
+    return window.screenforge.onRecordingSourceLost(() => {
+      if (recordStateRef.current === 'countdown') {
+        // The capture is still starting: stop once it has (see handleStart).
+        sourceLostDuringStartRef.current = true;
+        return;
+      }
+      if (recordStateRef.current !== 'recording' && recordStateRef.current !== 'paused') {
+        return;
+      }
+      // Several displays can go at once: stop only for the first event.
+      recordStateRef.current = 'idle';
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      handleStopEvent();
+    });
+  }, [t]);
+
   // Wayland: the user can end the capture from the OS screen-share indicator —
   // treat that like pressing stop.
   useEffect(() => {
@@ -819,6 +882,7 @@ export const FloatingToolbar = () => {
       cameraEnabled,
     });
 
+    sourceLostDuringStartRef.current = false;
     try {
       if (tab === 'window') {
         focusDesktopSourceWindow(selectedSource);
@@ -895,6 +959,58 @@ export const FloatingToolbar = () => {
       cameraRecorderRef.current = recorder;
       recorder.start(1000);
     }
+
+    if (sourceLostDuringStartRef.current) {
+      sourceLostDuringStartRef.current = false;
+      recordStateRef.current = 'idle';
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      void handleStop();
+    }
+  }
+
+  async function takePhoto(request: ScreenshotCaptureRequest) {
+    try {
+      await window.screenforge.captureScreenshot(request);
+      trackEvent('screenshot_taken', { kind: request.kind });
+    } catch (err) {
+      window.screenforge.writeDiagnosticLog('toolbar.screenshot.failed', {
+        kind: request.kind,
+        message: getErrorMessage(err),
+      });
+      trackEvent('screenshot_failed', { source: request.kind });
+      window.screenforge.systemWarning(t('captureFailed', { ns: 'screenshot' }));
+    }
+  }
+
+  async function handleShutterClick() {
+    if (!(await ensureScreenshotPermissions())) {
+      return;
+    }
+    if (tab === 'window' && selectedSource) {
+      await takePhoto({ kind: 'window', sourceId: selectedSource.id });
+      return;
+    }
+    await takePhoto({
+      kind: 'display',
+      sourceId: resolveSourceIdForTab('display', selectedSource, sources) ?? 'screen:0',
+    });
+  }
+
+  async function handleAreaPhotoClick() {
+    setTab('area');
+    if (!(await ensureScreenshotPermissions())) {
+      return;
+    }
+    const area = await window.screenforge.openAreaSelector('screenshot');
+    if (!area) {
+      setTab('display');
+      return;
+    }
+    await takePhoto({
+      kind: 'area',
+      sourceId: resolveSourceIdForTab('display', selectedSource, sources) ?? 'screen:0',
+      area,
+    });
   }
 
   async function handleAreaRecordClick() {
@@ -1647,6 +1763,57 @@ export const FloatingToolbar = () => {
                     <Divider />
                   </div>
 
+                  {/* Video | Screenshot */}
+                  <div
+                    role="group"
+                    aria-label={t('captureMode')}
+                    className="flex items-center gap-0.5 rounded-full bg-sf-bg p-1"
+                  >
+                    {(['video', 'photo'] as const).map((mode) => (
+                      <Tooltip key={mode}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-pressed={captureMode === mode}
+                            aria-label={
+                              mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')
+                            }
+                            onClick={() => setCaptureMode(mode)}
+                            className={`${toolbarButtonCls} relative flex cursor-pointer items-center justify-center rounded-full p-2 outline-none hover:bg-transparent ${
+                              captureMode === mode
+                                ? 'text-sf-primary'
+                                : 'text-sf-secondary hover:text-sf-primary'
+                            } transition-colors duration-300`}
+                          >
+                            {/* One pill that slides between the two icons. */}
+                            {captureMode === mode && (
+                              <motion.span
+                                layoutId="capture-mode-pill"
+                                transition={modeSpring}
+                                className="absolute inset-0 rounded-full bg-[#1e1e22] shadow-sm"
+                              />
+                            )}
+                            <span className="relative z-10 flex">
+                              {mode === 'video' ? (
+                                <IconVideo size={16} />
+                              ) : (
+                                <IconCamera size={16} />
+                              )}
+                            </span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')}
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
+
+                  <div className="mx-3">
+                    <Divider />
+                  </div>
+
                   {/* Source tabs */}
                   <div className="flex items-center gap-0.5 rounded-full bg-sf-bg p-1">
                     <Tooltip>
@@ -1762,13 +1929,18 @@ export const FloatingToolbar = () => {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => void handleAreaRecordClick()}
+                          aria-label={t('area')}
+                          onClick={() =>
+                            void (captureMode === 'photo'
+                              ? handleAreaPhotoClick()
+                              : handleAreaRecordClick())
+                          }
                           className={`${toolbarButtonCls} ${tabCls(tab === 'area')}`}
                         >
                           <IconCrop size={16} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Area</TooltipContent>
+                      <TooltipContent side="top">{t('area')}</TooltipContent>
                     </Tooltip>
                   </div>
 
@@ -1808,182 +1980,228 @@ export const FloatingToolbar = () => {
                     </AnimatePresence>
                   </motion.div>
 
-                  <div className="mx-3">
-                    <Divider />
-                  </div>
-
-                  {/* Mic */}
-                  <FloatingToolbarMic
-                    recordState={recordState}
-                    micEnabled={micEnabled}
-                    micLoading={micLoading}
-                    micLevel={micLevel}
-                    micDevices={micDevices}
-                    selectedMicId={selectedMic?.deviceId ?? null}
-                    onMenuOpenChange={setMicMenuOpen}
-                    onToggle={handleMicToggle}
-                    onSelectMicDevice={(deviceId) => {
-                      void handleMicDeviceSelect(deviceId);
-                    }}
-                    onOpenMicMenu={() => {
-                      void refreshMicDevices();
-                    }}
-                  />
-
-                  <div className="mx-3">
-                    <Divider />
-                  </div>
-
-                  {/* Camera */}
-                  <div className="flex items-center gap-1 rounded-full bg-sf-bg p-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => {
-                            void handleCameraToggle();
-                          }}
-                          disabled={cameraLocked || cameraLoading}
-                          className={`${toolbarButtonCls} cursor-pointer rounded-full transition-colors ${
-                            cameraEnabled
-                              ? 'bg-[#1e1e22] text-sf-primary'
-                              : 'text-sf-secondary hover:text-sf-primary'
-                          }`}
-                        >
-                          {cameraLoading ? (
-                            <Spinner className="size-4 text-sf-border fill-sf-primary" />
-                          ) : cameraEnabled ? (
-                            <IconVideo size={16} />
-                          ) : (
-                            <IconVideoOff size={16} />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {cameraLocked
-                          ? t('cameraLocked')
-                          : cameraLoading
-                            ? t('loadingCamera')
-                            : cameraEnabled
-                              ? t('cameraOff')
-                              : t('cameraOn')}
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <DropdownMenu
-                      onOpenChange={(open) => {
-                        setCameraMenuOpen(open);
-                        if (open) {
-                          void refreshCameraDevices();
-                        }
-                      }}
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              disabled={cameraLocked || cameraLoading || cameraDevices.length === 0}
-                              className={`${toolbarButtonCls} px-1.5 text-sf-primary/80 hover:bg-[#1e1e22] hover:text-sf-primary`}
-                            >
-                              <ChevronDown className="size-3.5" strokeWidth={2.25} />
-                            </Button>
-                          </DropdownMenuTrigger>
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          {selectedCamera?.label
-                            ? t('cameraSourceLabel', { label: selectedCamera.label })
-                            : t('cameraSource')}
-                        </TooltipContent>
-                      </Tooltip>
-
-                      <DropdownMenuContent
-                        side="top"
-                        sideOffset={10}
-                        align="center"
-                        className="min-w-[220px] max-h-56"
+                  {/* Video-only controls fold away for screenshots: the
+                      width springs shut while the controls fade and blur out
+                      ahead of it, so the toolbar reads as one piece reshaping
+                      rather than buttons popping. */}
+                  <AnimatePresence initial={false}>
+                    {captureMode === 'video' && (
+                      <motion.div
+                        key="video-controls"
+                        className="flex items-center"
+                        initial={{ width: 0, overflow: 'hidden' }}
+                        animate={{
+                          width: 'auto',
+                          transition: modeSpring,
+                          transitionEnd: { overflow: 'visible' },
+                        }}
+                        exit={{ width: 0, overflow: 'hidden', transition: modeSpring }}
                       >
-                        {cameraDevices.length === 0 ? (
-                          <FloatingToolbarMenuEmptyState
-                            icon={<IconVideoOff size={16} />}
-                            title={t('noCameras_title')}
-                            description={t('noCameras_desc')}
+                        <motion.div
+                          className="flex w-max items-center"
+                          initial={{ opacity: 0, scale: 0.92, filter: 'blur(4px)' }}
+                          animate={{
+                            opacity: 1,
+                            scale: 1,
+                            filter: 'blur(0px)',
+                            transition: { ...modeFade, delay: reduceMotion ? 0 : 0.08 },
+                          }}
+                          exit={{
+                            opacity: 0,
+                            scale: 0.92,
+                            filter: 'blur(4px)',
+                            transition: modeFade,
+                          }}
+                        >
+                          <div className="mx-3">
+                            <Divider />
+                          </div>
+
+                          {/* Mic */}
+                          <FloatingToolbarMic
+                            recordState={recordState}
+                            micEnabled={micEnabled}
+                            micLoading={micLoading}
+                            micLevel={micLevel}
+                            micDevices={micDevices}
+                            selectedMicId={selectedMic?.deviceId ?? null}
+                            systemAudioNotice={
+                              systemAudioNoticeKey ? t(systemAudioNoticeKey) : null
+                            }
+                            onMenuOpenChange={setMicMenuOpen}
+                            onToggle={handleMicToggle}
+                            onSelectMicDevice={(deviceId) => {
+                              void handleMicDeviceSelect(deviceId);
+                            }}
+                            onOpenMicMenu={() => {
+                              void refreshMicDevices();
+                            }}
                           />
-                        ) : (
-                          <DropdownMenuRadioGroup
-                            value={selectedCamera?.deviceId}
-                            onValueChange={(value) => {
-                              void handleCameraDeviceSelect(value);
+
+                          <div className="mx-3">
+                            <Divider />
+                          </div>
+
+                          {/* Camera */}
+                          <div className="flex items-center gap-1 rounded-full bg-sf-bg p-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => {
+                                    void handleCameraToggle();
+                                  }}
+                                  disabled={cameraLocked || cameraLoading}
+                                  className={`${toolbarButtonCls} cursor-pointer rounded-full transition-colors ${
+                                    cameraEnabled
+                                      ? 'bg-[#1e1e22] text-sf-primary'
+                                      : 'text-sf-secondary hover:text-sf-primary'
+                                  }`}
+                                >
+                                  {cameraLoading ? (
+                                    <Spinner className="size-4 text-sf-border fill-sf-primary" />
+                                  ) : cameraEnabled ? (
+                                    <IconVideo size={16} />
+                                  ) : (
+                                    <IconVideoOff size={16} />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {cameraLocked
+                                  ? t('cameraLocked')
+                                  : cameraLoading
+                                    ? t('loadingCamera')
+                                    : cameraEnabled
+                                      ? t('cameraOff')
+                                      : t('cameraOn')}
+                              </TooltipContent>
+                            </Tooltip>
+
+                            <DropdownMenu
+                              onOpenChange={(open) => {
+                                setCameraMenuOpen(open);
+                                if (open) {
+                                  void refreshCameraDevices();
+                                }
+                              }}
+                            >
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      disabled={
+                                        cameraLocked || cameraLoading || cameraDevices.length === 0
+                                      }
+                                      className={`${toolbarButtonCls} px-1.5 text-sf-primary/80 hover:bg-[#1e1e22] hover:text-sf-primary`}
+                                    >
+                                      <ChevronDown className="size-3.5" strokeWidth={2.25} />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {selectedCamera?.label
+                                    ? t('cameraSourceLabel', { label: selectedCamera.label })
+                                    : t('cameraSource')}
+                                </TooltipContent>
+                              </Tooltip>
+
+                              <DropdownMenuContent
+                                side="top"
+                                sideOffset={10}
+                                align="center"
+                                className="min-w-[220px] max-h-56"
+                              >
+                                {cameraDevices.length === 0 ? (
+                                  <FloatingToolbarMenuEmptyState
+                                    icon={<IconVideoOff size={16} />}
+                                    title={t('noCameras_title')}
+                                    description={t('noCameras_desc')}
+                                  />
+                                ) : (
+                                  <DropdownMenuRadioGroup
+                                    value={selectedCamera?.deviceId}
+                                    onValueChange={(value) => {
+                                      void handleCameraDeviceSelect(value);
+                                    }}
+                                  >
+                                    {cameraDevices.map((device, idx) => (
+                                      <DropdownMenuRadioItem
+                                        key={device.deviceId}
+                                        value={device.deviceId}
+                                      >
+                                        {device.label || `Camera ${idx + 1}`}
+                                      </DropdownMenuRadioItem>
+                                    ))}
+                                  </DropdownMenuRadioGroup>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+
+                          <div className="mx-1"></div>
+
+                          {/* More options */}
+                          <DropdownMenu
+                            open={moreMenuOpen}
+                            onOpenChange={(open) => {
+                              if (!open && teleprompterLoadingRef.current) {
+                                return;
+                              }
+                              setMoreMenuOpen(open);
                             }}
                           >
-                            {cameraDevices.map((device, idx) => (
-                              <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
-                                {device.label || `Camera ${idx + 1}`}
-                              </DropdownMenuRadioItem>
-                            ))}
-                          </DropdownMenuRadioGroup>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  <div className="mx-1"></div>
-
-                  {/* More options */}
-                  <DropdownMenu
-                    open={moreMenuOpen}
-                    onOpenChange={(open) => {
-                      if (!open && teleprompterLoadingRef.current) {
-                        return;
-                      }
-                      setMoreMenuOpen(open);
-                    }}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className={`${toolbarButtonCls} cursor-pointer rounded-full text-sf-secondary hover:text-sf-primary ${moreMenuOpen ? 'bg-[#1e1e22] text-sf-primary' : ''}`}
-                          >
-                            <IconMoreVertical size={16} />
-                          </Button>
-                        </DropdownMenuTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{t('moreOptions')}</TooltipContent>
-                    </Tooltip>
-                    <DropdownMenuContent
-                      side="top"
-                      sideOffset={10}
-                      align="center"
-                      className="min-w-[180px]"
-                    >
-                      <DropdownMenuItem
-                        className="gap-2.5"
-                        onSelect={() => {
-                          const opening = !teleprompterOpen;
-                          window.screenforge.toggleTeleprompter();
-                          setTeleprompterOpen(opening);
-                          if (opening) {
-                            teleprompterLoadingRef.current = true;
-                            setTeleprompterLoading(true);
-                          }
-                        }}
-                      >
-                        <IconScript size={15} className="shrink-0 text-sf-secondary" />
-                        <span className="flex-1">{t('teleprompter')}</span>
-                        {teleprompterOpen &&
-                          (teleprompterLoading ? (
-                            <Spinner className="size-3 shrink-0 fill-sf-secondary text-sf-border" />
-                          ) : (
-                            <IconCheck size={12} className="shrink-0 text-primary" />
-                          ))}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={t('moreOptions')}
+                                    className={`${toolbarButtonCls} cursor-pointer rounded-full text-sf-secondary hover:text-sf-primary ${moreMenuOpen ? 'bg-[#1e1e22] text-sf-primary' : ''}`}
+                                  >
+                                    <IconMoreVertical size={16} />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">{t('moreOptions')}</TooltipContent>
+                            </Tooltip>
+                            <DropdownMenuContent
+                              side="top"
+                              sideOffset={10}
+                              align="center"
+                              className="min-w-[180px]"
+                            >
+                              <DropdownMenuItem
+                                className="gap-2.5"
+                                onSelect={() => {
+                                  const opening = !teleprompterOpen;
+                                  window.screenforge.toggleTeleprompter();
+                                  setTeleprompterOpen(opening);
+                                  if (opening) {
+                                    teleprompterLoadingRef.current = true;
+                                    setTeleprompterLoading(true);
+                                  }
+                                }}
+                              >
+                                <IconScript size={15} className="shrink-0 text-sf-secondary" />
+                                <span className="flex-1">{t('teleprompter')}</span>
+                                {teleprompterOpen &&
+                                  (teleprompterLoading ? (
+                                    <Spinner className="size-3 shrink-0 fill-sf-secondary text-sf-border" />
+                                  ) : (
+                                    <IconCheck size={12} className="shrink-0 text-primary" />
+                                  ))}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <div className="mx-2"></div>
 
@@ -1994,16 +2212,67 @@ export const FloatingToolbar = () => {
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => {
-                          void handleRecordClick();
+                          void (captureMode === 'photo'
+                            ? handleShutterClick()
+                            : handleRecordClick());
                         }}
-                        aria-label={t('record')}
+                        aria-label={captureMode === 'photo' ? t('takeScreenshot') : t('record')}
                         disabled={(tab === 'window' && !selectedSource) || tab === 'area'}
-                        className={`${toolbarButtonCls} flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-[#e54d4d] text-white shadow-[0_0_14px_rgba(229,77,77,0.5)] transition-all hover:bg-[#ef5f5f] active:scale-95 disabled:opacity-40`}
+                        className={`${toolbarButtonCls} relative flex h-9 w-9 cursor-pointer items-center justify-center overflow-visible rounded-full bg-transparent p-0 transition-transform hover:bg-transparent active:scale-95 disabled:opacity-40`}
                       >
-                        <IconPlayerRecordFilled size={14} />
+                        {/* The button's fill morphs red ↔ white on the same
+                            spring as the switch, then settles. */}
+                        <motion.span
+                          aria-hidden
+                          className="absolute inset-0 rounded-full"
+                          initial={false}
+                          animate={
+                            captureMode === 'photo'
+                              ? {
+                                  backgroundColor: '#f5f5f7',
+                                  boxShadow: '0 0 14px rgba(255,255,255,0.35)',
+                                }
+                              : {
+                                  backgroundColor: '#e54d4d',
+                                  boxShadow: '0 0 14px rgba(229,77,77,0.5)',
+                                }
+                          }
+                          transition={modeSpring}
+                        />
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.span
+                            key={captureMode}
+                            className={`relative z-10 flex ${
+                              captureMode === 'photo' ? 'text-[#111113]' : 'text-white'
+                            }`}
+                            initial={{ opacity: 0, scale: 0.5, rotate: -45, filter: 'blur(3px)' }}
+                            animate={{
+                              opacity: 1,
+                              scale: 1,
+                              rotate: 0,
+                              filter: 'blur(0px)',
+                              transition: modeSpring,
+                            }}
+                            exit={{
+                              opacity: 0,
+                              scale: 0.5,
+                              rotate: 45,
+                              filter: 'blur(3px)',
+                              transition: modeFade,
+                            }}
+                          >
+                            {captureMode === 'photo' ? (
+                              <IconCamera size={16} />
+                            ) : (
+                              <IconPlayerRecordFilled size={14} />
+                            )}
+                          </motion.span>
+                        </AnimatePresence>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('record')}</TooltipContent>
+                    <TooltipContent side="top">
+                      {captureMode === 'photo' ? t('takeScreenshot') : t('record')}
+                    </TooltipContent>
                   </Tooltip>
                 </motion.div>
               ) : (

@@ -24,6 +24,9 @@ vi.mock('electron', () => ({
     getPath: () => electronMock.tempDir,
   },
   screen: {
+    // The service watches for displays being unplugged while recording.
+    on: vi.fn(),
+    removeListener: vi.fn(),
     getAllDisplays: () => [],
     getPrimaryDisplay: () => ({
       id: 1,

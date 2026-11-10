@@ -1,0 +1,12 @@
+{
+  "title": "새로운 기능",
+  "subtitleSingle": "Screenforge {{version}}의 변경 사항입니다.",
+  "subtitleRange": "이전 버전 이후 바뀐 모든 내용입니다.",
+  "versionHeading": "버전 {{version}}",
+  "sectionNew": "새 기능",
+  "sectionFixes": "수정 및 개선",
+  "gotIt": "확인",
+  "versionBadge": "v{{version}}",
+  "open": "새로운 기능",
+  "close": "닫기"
+}
