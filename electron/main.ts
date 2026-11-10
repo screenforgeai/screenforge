@@ -17,6 +17,8 @@ import { resetToolbarMousePassthrough, resetToolbarShapeState } from './modules/
 import { registerLibraryChannels } from './modules/library/channel';
 import { registerSettingsChannels } from './modules/settings/channel';
 import { getSettingsSync } from './modules/settings/service';
+import { registerWhatsNewChannels } from './modules/whats-new/channel';
+import { recordInstallStateAtLaunch } from './modules/whats-new/service';
 import { registerPresetsChannels } from './modules/presets/channel';
 import { registerRecordingChannels } from './modules/recording/channel';
 import {
@@ -56,6 +58,9 @@ import { pickAndImportVideo } from './modules/import/service';
 import { getAreaSelectorWindow } from './modules/area-selector/service';
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
 
+// Before telemetry or anything else writes to userData: tells a fresh
+// install apart from an update for the What's new dialog.
+recordInstallStateAtLaunch();
 log.initialize();
 log.info('[app] logger initialized', { logFilePath: getLogFilePath() });
 initTelemetry({ enabled: getSettingsSync().telemetryEnabled });
@@ -432,6 +437,7 @@ app.on('ready', async () => {
   registerRecordingChannels();
   registerLibraryChannels();
   registerSettingsChannels();
+  registerWhatsNewChannels();
   registerPresetsChannels();
   registerAppChannels();
   registerFFmpegSetupChannels();

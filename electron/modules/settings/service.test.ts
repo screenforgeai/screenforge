@@ -81,4 +81,16 @@ describe('settings service', () => {
     expect(telemetryMock.setTelemetryEnabled).toHaveBeenCalledTimes(1);
     expect(telemetryMock.setTelemetryEnabled).toHaveBeenCalledWith(false);
   });
+
+  it('keeps lastSeenVersion across unrelated saves and ignores empty values', async () => {
+    await saveSettings({ lastSeenVersion: '0.8.0' });
+    await saveSettings({ language: 'ja' });
+    await saveSettings({ lastSeenVersion: '' });
+
+    expect(await getSettings()).toMatchObject({ language: 'ja', lastSeenVersion: '0.8.0' });
+  });
+
+  it('leaves lastSeenVersion out until one has been recorded', async () => {
+    expect(await getSettings()).not.toHaveProperty('lastSeenVersion');
+  });
 });
