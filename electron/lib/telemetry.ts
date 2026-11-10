@@ -7,6 +7,9 @@ import log from './logger';
 
 let posthogClient: PostHog | null = null;
 let anonymousId: string | null = null;
+// The "Share usage data" setting. Feedback the user submits is sent either way.
+let usageDataEnabled = true;
+const FEEDBACK_EVENT = 'feedback_submitted';
 
 // PostHog caps event size; keep the tail, where the failure usually is.
 export const FEEDBACK_LOG_MAX_CHARS = 100_000;
@@ -33,7 +36,8 @@ function loadOrCreateAnonymousId(): string {
   return id;
 }
 
-export function initTelemetry(): void {
+export function initTelemetry({ enabled = true }: { enabled?: boolean } = {}): void {
+  usageDataEnabled = enabled;
   const posthogKey = process.env.POSTHOG_API_KEY?.trim();
   const posthogHost = process.env.POSTHOG_HOST?.trim() || 'https://us.i.posthog.com';
 
@@ -54,6 +58,8 @@ export function initTelemetry(): void {
       flushInterval: 5_000,
       // Uncaught exceptions and unhandled rejections in the main process.
       enableExceptionAutocapture: true,
+      // Autocaptured crashes bypass captureException(), so the setting is enforced here too.
+      before_send: (event) => (usageDataEnabled || event?.event === FEEDBACK_EVENT ? event : null),
     });
     log.info('[telemetry] PostHog initialized');
   }
@@ -63,7 +69,18 @@ export function getAnonymousId(): string | null {
   return anonymousId;
 }
 
+export function setTelemetryEnabled(enabled: boolean): void {
+  usageDataEnabled = enabled;
+  log.info(`[telemetry] usage data sharing ${enabled ? 'on' : 'off'}`);
+}
+
 export function trackEvent(event: string, properties?: Record<string, unknown>): void {
+  if (usageDataEnabled) {
+    capture(event, properties);
+  }
+}
+
+function capture(event: string, properties?: Record<string, unknown>): void {
   if (!posthogClient || !anonymousId) {
     return;
   }
@@ -142,7 +159,7 @@ export function captureException(
   error: SerializedError,
   properties?: Record<string, unknown>,
 ): void {
-  if (!posthogClient || !anonymousId) {
+  if (!posthogClient || !anonymousId || !usageDataEnabled) {
     return;
   }
   try {
@@ -178,7 +195,7 @@ export function captureException(
 export function submitFeedback(feedback: FeedbackSubmission): void {
   const logs = feedback.logs ?? '';
   const logsTruncated = logs.length > FEEDBACK_LOG_MAX_CHARS;
-  trackEvent('feedback_submitted', {
+  capture(FEEDBACK_EVENT, {
     ...feedback.context,
     message: feedback.message,
     name: feedback.name || undefined,
@@ -193,7 +210,7 @@ export function submitFeedback(feedback: FeedbackSubmission): void {
 }
 
 export function identifyUser(name?: string, email?: string): void {
-  if (posthogClient && anonymousId) {
+  if (posthogClient && anonymousId && usageDataEnabled) {
     posthogClient.identify({
       distinctId: anonymousId,
       properties: { ...(name && { name }), ...(email && { email }) },

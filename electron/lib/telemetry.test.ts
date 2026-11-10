@@ -225,6 +225,70 @@ describe('telemetry', () => {
     expect(properties.logs.endsWith('newest line')).toBe(true);
   });
 
+  it('stops sending usage events, errors and the profile once sharing is turned off', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, setTelemetryEnabled, trackEvent, captureException, identifyUser } =
+      await loadTelemetryModule();
+    initTelemetry();
+
+    setTelemetryEnabled(false);
+    trackEvent('recording_started');
+    captureException({ name: 'Error', message: 'boom' });
+    identifyUser('Ada', 'ada@example.com');
+
+    expect(posthogMock.capture).not.toHaveBeenCalled();
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
+    expect(posthogMock.identify).not.toHaveBeenCalled();
+
+    setTelemetryEnabled(true);
+    trackEvent('recording_started');
+
+    expect(posthogMock.capture).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'recording_started' }),
+    );
+  });
+
+  it('starts with sharing off when the saved setting says so', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, trackEvent } = await loadTelemetryModule();
+    initTelemetry({ enabled: false });
+
+    trackEvent('app_launched');
+
+    expect(posthogMock.capture).not.toHaveBeenCalled();
+  });
+
+  it('still sends feedback the user submits while sharing is off', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, submitFeedback } = await loadTelemetryModule();
+    initTelemetry({ enabled: false });
+
+    submitFeedback({ message: 'please add this', source: 'feedback_modal', reportType: 'idea' });
+
+    expect(posthogMock.capture).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'feedback_submitted' }),
+    );
+  });
+
+  it('drops autocaptured crashes while sharing is off but keeps submitted feedback', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, setTelemetryEnabled } = await loadTelemetryModule();
+    initTelemetry();
+    const [, options] = posthogMock.PostHog.mock.calls[0] as unknown as [
+      string,
+      { before_send: (event: { event: string } | null) => { event: string } | null },
+    ];
+    const crash = { event: '$exception' };
+    const feedback = { event: 'feedback_submitted' };
+
+    expect(options.before_send(crash)).toBe(crash);
+
+    setTelemetryEnabled(false);
+
+    expect(options.before_send(crash)).toBeNull();
+    expect(options.before_send(feedback)).toBe(feedback);
+  });
+
   it('drops errors and feedback silently in local development', async () => {
     const { initTelemetry, captureException, submitFeedback } = await loadTelemetryModule();
     initTelemetry();
