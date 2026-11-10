@@ -11,6 +11,7 @@ import {
   getDiagnosticLogFilePath,
   readDiagnosticLog,
   prepareRecordingStartPermissions,
+  prepareScreenshotPermissions,
   requestScreenAccess,
   focusWindow,
   getStartupPermissionStatuses,
@@ -33,6 +34,7 @@ export function registerAppChannels(): void {
   handleChannel(CH.app.PREPARE_RECORDING_START_PERMISSIONS, () =>
     prepareRecordingStartPermissions(),
   );
+  handleChannel(CH.app.PREPARE_SCREENSHOT_PERMISSIONS, () => prepareScreenshotPermissions());
   handleChannel(CH.app.GET_STARTUP_PERMISSION_STATUSES, () => getStartupPermissionStatuses());
   handleChannel(CH.app.REQUEST_SCREEN_ACCESS, () => requestScreenAccess());
   handleChannel(CH.app.REQUEST_MEDIA_ACCESS, (permission) => requestMediaAccess(permission));

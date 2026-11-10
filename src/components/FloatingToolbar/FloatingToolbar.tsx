@@ -296,7 +296,7 @@ function getWindowSourceRelevance(source: DesktopSource): number {
 export const FloatingToolbar = () => {
   const { t } = useTranslation('toolbar');
   const [tab, setTab] = useState<SourceTab>('display');
-  // Prototype (#24 UX): one source picker for both videos and screenshots.
+  // One source picker serves both: Video records it, Screenshot grabs a still.
   const [captureMode, setCaptureMode] = useState<'video' | 'photo'>('video');
   const reduceMotion = useReducedMotion();
   const modeSpring = reduceMotion ? INSTANT : MODE_SPRING;
@@ -324,7 +324,6 @@ export const FloatingToolbar = () => {
   const [teleprompterLoading, setTeleprompterLoading] = useState(false);
   const teleprompterLoadingRef = useRef(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [screenshotMenuOpen, setScreenshotMenuOpen] = useState(false);
   const [isAppendMode, setIsAppendMode] = useState(false);
   const [sceneOverlayOpen, setSceneOverlayOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -584,6 +583,20 @@ export const FloatingToolbar = () => {
       return true;
     } catch (err) {
       logToolbarDiagnostic('toolbar.recording.permissions-failed', {
+        message: getErrorMessage(err),
+      });
+      window.screenforge.systemWarning(getErrorMessage(err));
+      return false;
+    }
+  }, []);
+
+  // Screenshots need screen access only: no cursor tracking, so no Accessibility.
+  const ensureScreenshotPermissions = useCallback(async (): Promise<boolean> => {
+    try {
+      await window.screenforge.prepareScreenshotPermissions();
+      return true;
+    } catch (err) {
+      logToolbarDiagnostic('toolbar.screenshot.permissions-failed', {
         message: getErrorMessage(err),
       });
       window.screenforge.systemWarning(getErrorMessage(err));
@@ -922,13 +935,19 @@ export const FloatingToolbar = () => {
   async function takePhoto(request: ScreenshotCaptureRequest) {
     try {
       await window.screenforge.captureScreenshot(request);
-    } catch {
+      trackEvent('screenshot_taken', { kind: request.kind });
+    } catch (err) {
+      window.screenforge.writeDiagnosticLog('toolbar.screenshot.failed', {
+        kind: request.kind,
+        message: getErrorMessage(err),
+      });
+      trackEvent('screenshot_failed', { source: request.kind });
       window.screenforge.systemWarning(t('captureFailed', { ns: 'screenshot' }));
     }
   }
 
   async function handleShutterClick() {
-    if (!(await ensureRecordingStartPermissions())) {
+    if (!(await ensureScreenshotPermissions())) {
       return;
     }
     if (tab === 'window' && selectedSource) {
@@ -943,7 +962,7 @@ export const FloatingToolbar = () => {
 
   async function handleAreaPhotoClick() {
     setTab('area');
-    if (!(await ensureRecordingStartPermissions())) {
+    if (!(await ensureScreenshotPermissions())) {
       return;
     }
     const area = await window.screenforge.openAreaSelector('screenshot');
@@ -1475,12 +1494,7 @@ export const FloatingToolbar = () => {
     cameraDevices[0] ??
     null;
   const overlayActive =
-    isDragging ||
-    windowMenuOpen ||
-    micMenuOpen ||
-    cameraMenuOpen ||
-    moreMenuOpen ||
-    screenshotMenuOpen;
+    isDragging || windowMenuOpen || micMenuOpen || cameraMenuOpen || moreMenuOpen;
   const isPaused = recordState === 'paused';
 
   const setToolbarMouseInteractivity = useCallback((interactive: boolean) => {
@@ -1707,8 +1721,12 @@ export const FloatingToolbar = () => {
                     <Divider />
                   </div>
 
-                  {/* Video | Photo */}
-                  <div className="flex items-center gap-0.5 rounded-full bg-sf-bg p-1">
+                  {/* Video | Screenshot */}
+                  <div
+                    role="group"
+                    aria-label={t('captureMode')}
+                    className="flex items-center gap-0.5 rounded-full bg-sf-bg p-1"
+                  >
                     {(['video', 'photo'] as const).map((mode) => (
                       <Tooltip key={mode}>
                         <TooltipTrigger asChild>
@@ -1716,7 +1734,9 @@ export const FloatingToolbar = () => {
                             variant="ghost"
                             size="icon-sm"
                             aria-pressed={captureMode === mode}
-                            aria-label={mode === 'video' ? 'Video' : 'Screenshot'}
+                            aria-label={
+                              mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')
+                            }
                             onClick={() => setCaptureMode(mode)}
                             className={`${toolbarButtonCls} relative flex cursor-pointer items-center justify-center rounded-full p-2 outline-none hover:bg-transparent ${
                               captureMode === mode
@@ -1742,7 +1762,7 @@ export const FloatingToolbar = () => {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                          {mode === 'video' ? 'Video' : 'Screenshot'}
+                          {mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')}
                         </TooltipContent>
                       </Tooltip>
                     ))}
@@ -1867,7 +1887,7 @@ export const FloatingToolbar = () => {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label="Area"
+                          aria-label={t('area')}
                           onClick={() =>
                             void (captureMode === 'photo'
                               ? handleAreaPhotoClick()
@@ -1878,7 +1898,7 @@ export const FloatingToolbar = () => {
                           <IconCrop size={16} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Area</TooltipContent>
+                      <TooltipContent side="top">{t('area')}</TooltipContent>
                     </Tooltip>
                   </div>
 
@@ -2095,6 +2115,7 @@ export const FloatingToolbar = () => {
                                   <Button
                                     variant="ghost"
                                     size="icon-sm"
+                                    aria-label={t('moreOptions')}
                                     className={`${toolbarButtonCls} cursor-pointer rounded-full text-sf-secondary hover:text-sf-primary ${moreMenuOpen ? 'bg-[#1e1e22] text-sf-primary' : ''}`}
                                   >
                                     <IconMoreVertical size={16} />
@@ -2150,7 +2171,7 @@ export const FloatingToolbar = () => {
                             ? handleShutterClick()
                             : handleRecordClick());
                         }}
-                        aria-label={captureMode === 'photo' ? 'Take screenshot' : t('record')}
+                        aria-label={captureMode === 'photo' ? t('takeScreenshot') : t('record')}
                         disabled={(tab === 'window' && !selectedSource) || tab === 'area'}
                         className={`${toolbarButtonCls} relative flex h-9 w-9 cursor-pointer items-center justify-center overflow-visible rounded-full bg-transparent p-0 transition-transform hover:bg-transparent active:scale-95 disabled:opacity-40`}
                       >
@@ -2205,7 +2226,7 @@ export const FloatingToolbar = () => {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      {captureMode === 'photo' ? 'Take screenshot' : t('record')}
+                      {captureMode === 'photo' ? t('takeScreenshot') : t('record')}
                     </TooltipContent>
                   </Tooltip>
                 </motion.div>

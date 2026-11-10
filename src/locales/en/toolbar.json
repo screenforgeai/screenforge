@@ -39,5 +39,10 @@
   "noMicsFound": "No microphones found",
   "noMicsFound_desc": "Connect or enable a microphone to choose it here.",
   "microphoneN": "Microphone {{n}}",
-  "stopRecording": "Stop recording"
+  "stopRecording": "Stop recording",
+  "captureMode": "Capture mode",
+  "captureModeVideo": "Video",
+  "captureModeScreenshot": "Screenshot",
+  "takeScreenshot": "Take screenshot",
+  "area": "Area"
 }
