@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IconSparkles } from 'src/lib/icons';
+import { IconMegaphone } from 'src/lib/icons';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { selectLatestRelease, type ReleaseNotes } from 'src/lib/whatsNew/changelog';
 import { getBundledReleases } from 'src/lib/whatsNew/releaseNotes';
@@ -35,7 +35,7 @@ export const WhatsNewButton = () => {
             className="flex size-9 items-center justify-center rounded-md text-sf-secondary transition-colors hover:bg-secondary hover:text-sf-primary"
             onClick={() => void handleOpen()}
           >
-            <IconSparkles className="size-4.5" />
+            <IconMegaphone className="size-4.5" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>{t('open')}</TooltipContent>

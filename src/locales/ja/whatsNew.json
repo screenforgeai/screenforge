@@ -7,5 +7,6 @@
   "sectionFixes": "修正と改善",
   "gotIt": "OK",
   "versionBadge": "v{{version}}",
-  "open": "最新情報"
+  "open": "最新情報",
+  "close": "閉じる"
 }

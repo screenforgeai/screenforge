@@ -7,5 +7,6 @@
   "sectionFixes": "Fixes and improvements",
   "gotIt": "Got it",
   "versionBadge": "v{{version}}",
-  "open": "What’s new"
+  "open": "What’s new",
+  "close": "Close"
 }

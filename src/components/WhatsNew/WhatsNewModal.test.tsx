@@ -72,12 +72,19 @@ describe('WhatsNewModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('focuses Got it on open so Enter closes it', async () => {
-    const { onClose } = renderModal([v080]);
-    const button = screen.getByRole('button', { name: 'Got it' });
+  it('takes focus without ringing a button, and Enter closes it', async () => {
+    const { onClose, dialog } = renderModal([v080]);
 
-    await waitFor(() => expect(button).toHaveFocus());
+    await waitFor(() => expect(dialog).toHaveFocus());
     await userEvent.keyboard('{Enter}');
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes from the header close button', async () => {
+    const { onClose } = renderModal([v080]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
