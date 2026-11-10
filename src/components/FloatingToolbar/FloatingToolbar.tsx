@@ -946,7 +946,7 @@ export const FloatingToolbar = () => {
     if (!(await ensureRecordingStartPermissions())) {
       return;
     }
-    const area = await window.screenforge.openAreaSelector();
+    const area = await window.screenforge.openAreaSelector('screenshot');
     if (!area) {
       setTab('display');
       return;
