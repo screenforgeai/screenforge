@@ -319,6 +319,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
         setSelectedId(null);
         break;
       case 'text':
+        // Without this the browser's mousedown that follows moves focus off the
+        // new (auto-focused) text box, which then commits empty and vanishes.
+        e.preventDefault();
         setSelectedId(null);
         setTextEdit({ point, value: '', editingId: null });
         break;
