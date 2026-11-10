@@ -6,6 +6,7 @@ import {
   buildBenchmarkReport,
   buildHarnessLaunch,
   buildSampleMediaArgs,
+  buildTreeKillCommand,
   formatMarkdownRow,
   pickSampleEncoder,
   resolveBenchmarkManifest,
@@ -80,6 +81,20 @@ describe('buildHarnessLaunch', () => {
 
   it('runs pnpm through the shell on Windows, where there is no script(1)', () => {
     expect(buildHarnessLaunch('win32')).toEqual({ command: 'pnpm', args: ['start'], shell: true });
+  });
+});
+
+describe('buildTreeKillCommand', () => {
+  it('kills the whole harness tree with taskkill on Windows, where ps is unavailable', () => {
+    expect(buildTreeKillCommand('win32', 4242)).toEqual({
+      command: 'taskkill',
+      args: ['/pid', '4242', '/T', '/F'],
+    });
+  });
+
+  it('leaves macOS and Linux to the ps-based process-tree helper', () => {
+    expect(buildTreeKillCommand('darwin', 4242)).toBeNull();
+    expect(buildTreeKillCommand('linux', 4242)).toBeNull();
   });
 });
 

@@ -6,6 +6,9 @@ import { RGB_TO_BT709_FILTER } from './capture-args';
 
 const FFMPEG = process.env.SCREENFORGE_FFMPEG_PATH?.trim() || 'ffmpeg';
 const hasFFmpeg = spawnSync(FFMPEG, ['-version']).status === 0;
+if (!hasFFmpeg && process.env.SCREENFORGE_FFMPEG_PATH?.trim()) {
+  console.warn(`SCREENFORGE_FFMPEG_PATH is set but ${FFMPEG} did not run; skipping colour tests.`);
+}
 
 // sRGB colours a screen recording has to keep: the brand orange, primaries, grey.
 const SWATCHES: Array<[number, number, number]> = [

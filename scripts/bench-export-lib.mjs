@@ -158,6 +158,18 @@ export function buildHarnessLaunch(platform) {
   };
 }
 
+/**
+ * The command that kills the harness process tree, or null where the
+ * ps-based process-tree helper works. Windows has no ps, so taskkill /T is
+ * the only way to reach Electron Forge and Electron behind the shell.
+ */
+export function buildTreeKillCommand(platform, pid) {
+  if (platform !== 'win32') {
+    return null;
+  }
+  return { command: 'taskkill', args: ['/pid', String(pid), '/T', '/F'] };
+}
+
 /** One benchmark result row from the harness result file. */
 export function summarizeHarnessResult(
   manifestName,

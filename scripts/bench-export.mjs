@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import ffmpegPaths from '../shared/ffmpeg-paths.js';
 import processTree from '../shared/process-tree.js';
 import {
@@ -9,13 +10,14 @@ import {
   buildBenchmarkReport,
   buildHarnessLaunch,
   buildSampleMediaArgs,
+  buildTreeKillCommand,
   formatMarkdownRow,
   pickSampleEncoder,
   resolveBenchmarkManifest,
   summarizeHarnessResult,
 } from './bench-export-lib.mjs';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MANIFEST_DIR = path.join(ROOT, 'test/fixtures/export/manifests');
 const EXPORT_HARNESS_TIMEOUT_MS = 180_000;
 
@@ -193,7 +195,14 @@ async function waitForFinalHarnessResult(resultPath, timeoutMs) {
 async function stopHarnessProcess(launch) {
   const pid = launch.child.pid;
   if (pid) {
-    await processTree.terminateProcessTree(pid).catch(() => undefined);
+    const treeKill = buildTreeKillCommand(process.platform, pid);
+    if (treeKill) {
+      await runProcess(treeKill.command, treeKill.args, { cwd: ROOT, timeoutMs: 15_000 }).catch(
+        () => undefined,
+      );
+    } else {
+      await processTree.terminateProcessTree(pid).catch(() => undefined);
+    }
   }
 
   await Promise.race([launch.close.catch(() => null), delay(5_000)]);
@@ -201,16 +210,17 @@ async function stopHarnessProcess(launch) {
 
 async function assertPrerequisites() {
   const ffmpegPath = await resolveBenchFFmpegPath();
-  if (process.platform === 'win32') {
-    return;
-  }
-
   await runProcess(ffmpegPath, ['-version'], {
     cwd: ROOT,
     timeoutMs: 15_000,
   }).catch((error) => {
     throw new Error(`FFmpeg is required for bench:export.\n${String(error)}`);
   });
+
+  // Windows launches the harness without script(1), so only the PTY check is skipped.
+  if (process.platform === 'win32') {
+    return;
+  }
 
   await runProcess(
     'script',
