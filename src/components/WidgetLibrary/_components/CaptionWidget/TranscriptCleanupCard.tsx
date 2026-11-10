@@ -107,8 +107,9 @@ export const TranscriptCleanupCard = ({
 
       <p className="text-xs text-sf-muted">{t('cleanupHint')}</p>
 
-      <div className="flex items-center gap-2 border-t border-sf-border pt-3">
-        <span className="flex-1 text-xs text-sf-secondary">
+      {/* Summary on its own line: beside the buttons it wrapped to three lines. */}
+      <div className="flex flex-col gap-2 border-t border-sf-border pt-3">
+        <span className="text-xs text-sf-secondary">
           {hasCuts
             ? t('cleanupSummary', {
                 count: plan.cuts.length,
@@ -116,12 +117,14 @@ export const TranscriptCleanupCard = ({
               })
             : t('cleanupNothing')}
         </span>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          {t('cancel')}
-        </Button>
-        <Button size="sm" disabled={!hasCuts} onClick={onApply}>
-          {t('cleanupApply')}
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            {t('cancel')}
+          </Button>
+          <Button size="sm" disabled={!hasCuts} onClick={onApply}>
+            {t('cleanupApply')}
+          </Button>
+        </div>
       </div>
     </div>
   );
