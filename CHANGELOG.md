@@ -1,5 +1,27 @@
 # screenforge
 
+## 0.8.0
+
+### Minor Changes
+
+- 93db093: Add click sounds: pick Mouse, Trackpad, Soft, Pop or Tick from a new Click sound dropdown in the Cursor panel, with a play button on each option and a volume slider. Clicks play a press and, for Mouse, Trackpad and Soft, a release on mouse-up, in both the preview and exports. Projects that used the old click sound presets open with the closest new sound.
+- 4960c6e: On Linux, Screenforge now checks for a new version when it starts and every 6 hours. When one is out, an Update available button appears in the top bar and opens the Linux download page, so you can install it the same way you installed Screenforge.
+- ff66fe7: Screenshot mode: switch the toolbar from Video to Screenshot and take a screenshot of the whole screen, a window or a selected area with the same source picker you record from, then frame it with the same backgrounds, padding, shadow and style presets as your videos. Annotate it with arrows, boxes, highlights, blur, text and numbered steps, and copy it to the clipboard or save it as a PNG.
+- 5e1b087: Add a Share usage data switch under Settings → Privacy. It is on by default; turning it off stops usage events, error reports and crash reports from being sent, right away and from the next launch on. Feedback you submit yourself is still sent.
+- bf54f79: After an update, Screenforge now opens a What's new dialog the first time you launch it, listing what changed since the version you last used. It doesn't appear on a fresh install, and it shows each version's notes only once. Open it again any time from the megaphone button at the bottom of the sidebar.
+
+### Patch Changes
+
+- 664a8eb: New recordings start with the cursor at 100% size instead of 125%. Projects you already made keep the size they were saved with.
+- 8b47250: A recording that captured nothing (for example, when macOS never sent a frame of the window) now stops with "Nothing was captured" instead of opening as a blank recording that later failed to export with "416 Requested Range Not Satisfiable". Exporting a recording whose video file is empty or missing now says so too, and recording and export errors no longer start with "Error invoking remote method".
+- 2247b55: The update prompt's "View changelog" link opens screenforge.co instead of the old screenforgeai.com address.
+- af776f5: Recording is more reliable on multi-monitor setups. On Windows the cursor now lines up on a monitor whose scale differs from another monitor's. Area recordings always capture the display the area was drawn on, and crop with that display's scale even if the main display changes. If the display being recorded is unplugged, the recording stops, keeps what was captured, and says why. The microphone menu now says when system audio can't be recorded (Linux, and macOS before 13), so it isn't silently missing.
+- An area recording also stops before it starts if the display you drew the area on has changed resolution since, and asks you to select the area again, instead of recording the wrong part of the screen.
+- a6a388f: An area screenshot is always taken from the display you drew it on, even if your main display changes before the capture finishes. If that display has been disconnected or resized in the meantime, you get a warning instead of the wrong picture.
+- 9b88107: Usage data and error reports (when sharing is on) no longer include your user name: file paths in error messages are sent with the home folder shown as `~`.
+- e1f5ac4: Fix clips drifting away from the cursor while dragging or resizing them on the timeline. Each time a clip snapped to another clip's edge or the playhead it kept the snap offset, so after a few edges the clip sat well ahead of or behind the cursor and moved in jumps. Clips still snap to nearby edges, then follow the cursor exactly once you move past.
+- cec9347: Linux (X11) recordings keep their on-screen colours. The capture used FFmpeg's default BT.601 colour conversion without saying so, while the editor and export read it as BT.709, so reds, oranges and blues were shifted in the preview and in exported videos.
+
 ## 0.7.0
 
 ### Minor Changes
