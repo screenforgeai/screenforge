@@ -26,6 +26,7 @@ vi.mock('framer-motion', () => {
     'onDragStart',
     'onDragEnd',
     'onAnimationComplete',
+    'layoutId',
   ];
 
   const passthrough = (tag: string) => {
@@ -46,6 +47,7 @@ vi.mock('framer-motion', () => {
     motion: new Proxy({}, { get: (_target, key) => passthrough(String(key)) }),
     AnimatePresence: ({ children }: { children?: ReactNode }) => children,
     useDragControls: () => ({ start: () => undefined }),
+    useReducedMotion: () => false,
   };
 });
 
