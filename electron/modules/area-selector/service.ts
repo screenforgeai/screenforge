@@ -1,11 +1,12 @@
 import { BrowserWindow, screen } from 'electron';
 import log from '../../lib/logger';
 import { pinWindowToAllWorkspaces } from '../../lib/workspace-pin';
+import type { SelectedArea } from '../../../src/types/index';
 
 let selectorWindow: BrowserWindow | null = null;
-let pendingResolve:
-  | ((area: { x: number; y: number; width: number; height: number } | null) => void)
-  | null = null;
+let pendingResolve: ((area: SelectedArea | null) => void) | null = null;
+/** The display the open selector covers, so a capture can crop that one and no other. */
+let selectorDisplay: SelectedArea['display'] | null = null;
 
 function isAlive(): boolean {
   return selectorWindow !== null && !selectorWindow.isDestroyed();
@@ -15,7 +16,7 @@ export function openAreaSelector(
   preloadPath: string,
   loadURL: (win: BrowserWindow, hash: string) => void,
   purpose: 'record' | 'screenshot' = 'record',
-): Promise<{ x: number; y: number; width: number; height: number } | null> {
+): Promise<SelectedArea | null> {
   if (isAlive()) {
     return Promise.resolve(null);
   }
@@ -35,6 +36,7 @@ export function openAreaSelector(
     );
 
     const { x, y, width, height } = primaryDisplay.bounds;
+    selectorDisplay = { id: primaryDisplay.id, width, height };
 
     const win = new BrowserWindow({
       x,
@@ -100,7 +102,8 @@ export function confirmAreaSelection(area: {
 }): void {
   log.info('[area-selector] confirmed', area);
   if (pendingResolve) {
-    pendingResolve(area);
+    const { x, y, width, height } = area;
+    pendingResolve(selectorDisplay ? { x, y, width, height, display: selectorDisplay } : area);
     pendingResolve = null;
   }
   if (isAlive()) {
