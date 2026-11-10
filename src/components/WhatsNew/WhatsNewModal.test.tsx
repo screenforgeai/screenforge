@@ -72,10 +72,12 @@ describe('WhatsNewModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('takes focus without ringing a button, and Enter closes it', async () => {
-    const { onClose, dialog } = renderModal([v080]);
+  it('focuses the notes rather than a button, and Enter closes it', async () => {
+    const { onClose } = renderModal([v080]);
 
-    await waitFor(() => expect(dialog).toHaveFocus());
+    await waitFor(() =>
+      expect(screen.getByText('Add a What’s new dialog.').closest('[tabindex="-1"]')).toHaveFocus(),
+    );
     await userEvent.keyboard('{Enter}');
 
     expect(onClose).toHaveBeenCalledTimes(1);

@@ -85,7 +85,7 @@ const ReleaseBody = ({ release }: { release: ReleaseNotes }) => {
 export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) => {
   const { t } = useTranslation('whatsNew');
   const reduceMotion = useReducedMotion();
-  const contentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const latest = releases[0];
   const isRange = releases.length > 1;
 
@@ -103,16 +103,16 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
       }}
     >
       <DialogContent
-        ref={contentRef}
         showCloseButton={false}
         className="flex max-h-[min(640px,calc(100vh-4rem))] w-[520px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-lg border-sf-border bg-sf-panel p-0 shadow-none outline-none sm:max-w-[520px]"
         onOpenAutoFocus={(event) => {
-          // Focus the dialog itself (no ring on a button) so Enter can dismiss it.
+          // Focus the notes (no ring on a button) so arrow keys scroll and Enter dismisses.
           event.preventDefault();
-          contentRef.current?.focus();
+          scrollRef.current?.focus();
         }}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') {
+          // Buttons keep their own Enter behaviour.
+          if (event.key === 'Enter' && !(event.target as HTMLElement).closest('button')) {
             event.preventDefault();
             onClose();
           }
@@ -144,7 +144,11 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div
+          ref={scrollRef}
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-5 outline-none"
+        >
           {isRange ? (
             <div className="flex flex-col gap-7">
               {releases.map((release) => (

@@ -9,7 +9,11 @@ import { WhatsNewModal } from './WhatsNewModal';
 const releaseForVersion = (version: string | null): ReleaseNotes[] => {
   const all = getBundledReleases();
   const match = version ? selectLatestRelease(all, version) : null;
-  return match ? [match] : all.slice(0, 1);
+  if (match) {
+    return [match];
+  }
+  const newestWithNotes = all.find((r) => r.newItems.length > 0 || r.fixItems.length > 0);
+  return newestWithNotes ? [newestWithNotes] : [];
 };
 
 /** Sidebar button that reopens the notes for the running version on demand. */
@@ -20,8 +24,11 @@ export const WhatsNewButton = () => {
 
   const handleOpen = async () => {
     const version = await window.screenforge.getAppVersion().catch(() => null);
-    setReleases(releaseForVersion(version));
-    setOpen(true);
+    const releases = releaseForVersion(version);
+    if (releases.length > 0) {
+      setReleases(releases);
+      setOpen(true);
+    }
   };
 
   return (
