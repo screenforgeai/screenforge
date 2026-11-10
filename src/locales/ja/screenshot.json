@@ -33,5 +33,7 @@
   "captureWindow": "ウィンドウ",
   "noWindows": "開いているウィンドウはありません",
   "captureFailed": "スクリーンショットを撮れませんでした。画面収録の権限を確認して、もう一度お試しください。",
-  "annotate": "注釈を付ける"
+  "annotate": "注釈を付ける",
+  "tools": "ツール",
+  "actions": "編集操作"
 }

@@ -33,5 +33,7 @@
   "captureWindow": "Fenster",
   "noWindows": "Keine Fenster geöffnet",
   "captureFailed": "Der Screenshot konnte nicht aufgenommen werden. Prüfe die Berechtigung zur Bildschirmaufnahme und versuche es erneut.",
-  "annotate": "Beschriften"
+  "annotate": "Beschriften",
+  "tools": "Werkzeuge",
+  "actions": "Bearbeitungsaktionen"
 }
