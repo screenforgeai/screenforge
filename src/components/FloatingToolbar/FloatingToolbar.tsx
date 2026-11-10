@@ -1867,6 +1867,7 @@ export const FloatingToolbar = () => {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          aria-label="Area"
                           onClick={() =>
                             void (captureMode === 'photo'
                               ? handleAreaPhotoClick()
