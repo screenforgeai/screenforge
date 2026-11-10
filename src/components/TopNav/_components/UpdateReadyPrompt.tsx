@@ -13,6 +13,10 @@ import {
 } from 'src/lib/ui';
 import type { UpdaterState } from 'src/types';
 
+// Only Linux reaches the 'available' state: the user downloads the new
+// package and installs it the same way they installed Screenforge.
+const LINUX_DOWNLOAD_URL = 'https://screenforge.co/download/linux';
+
 type UpdateReadyPromptProps = {
   state: UpdaterState | null;
   isApplying: boolean;
@@ -49,6 +53,24 @@ export const UpdateReadyPrompt = ({
       >
         <IconUpload />
         <span>{t('updateDownloaded')}</span>
+      </Button>
+    );
+  }
+
+  if (state?.status === 'available') {
+    const availableLabel = state.availableVersion ? `v${state.availableVersion}` : t('newVersion');
+
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-8 gap-1.5 border border-sf-border px-3 hover:border-sf-border-lt"
+        title={t('updateAvailableTitle', { version: availableLabel })}
+        onClick={() => void window.screenforge.openExternalUrl(LINUX_DOWNLOAD_URL)}
+      >
+        <IconUpload />
+        <span>{t('updateAvailable')}</span>
       </Button>
     );
   }
