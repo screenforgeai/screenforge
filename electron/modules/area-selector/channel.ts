@@ -18,5 +18,9 @@ export function registerAreaSelectorChannels(
     cancelAreaSelection();
   });
 
-  handleChannel(CH.areaSelector.OPEN, () => openAreaSelector(preloadPath, loadURL));
+  handleChannel<[unknown], { x: number; y: number; width: number; height: number } | null>(
+    CH.areaSelector.OPEN,
+    (purpose) =>
+      openAreaSelector(preloadPath, loadURL, purpose === 'screenshot' ? 'screenshot' : 'record'),
+  );
 }

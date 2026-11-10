@@ -9,7 +9,7 @@ export const DEFAULT_CURSOR_SETTINGS: ProjectCursorSettings = {
   enabled: true,
   style: 'cursor01',
   clickEffect: 'none',
-  size: 125,
+  size: 100,
   halflife: 0.06,
   motionBlur: true,
   maxTilt: 4,

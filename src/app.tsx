@@ -13,6 +13,8 @@ import { useStore } from './store';
 import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/toast';
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
 import { WhatsNewOnLaunch } from './components/WhatsNew/WhatsNewOnLaunch';
+import { playShutterSound } from './lib/screenshot/shutter-sound';
+import { ScreenshotEditor } from './components/ScreenshotEditor';
 import { trackEvent } from './lib/analytics';
 import i18n from './i18n';
 
@@ -47,6 +49,9 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
     cameraMediaSegments,
     cameraClips,
     camera,
+    screenshotCapture,
+    openScreenshotEditor,
+    closeScreenshotEditor,
   } = useStore(
     useShallow((s) => ({
       setIsProcessing: s.setIsProcessing,
@@ -64,6 +69,9 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
       cameraMediaSegments: s.cameraMediaSegments,
       cameraClips: s.cameraClips,
       camera: s.camera,
+      screenshotCapture: s.screenshotCapture,
+      openScreenshotEditor: s.openScreenshotEditor,
+      closeScreenshotEditor: s.closeScreenshotEditor,
     })),
   );
 
@@ -300,6 +308,16 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   }, [loadRecordingSession, incrementRecordingCount, setActiveWidget, beginNewRecording]);
 
   useEffect(() => {
+    return window.screenforge.onScreenshotCaptured((capture) => {
+      // Same shutter as the preview's camera button. Played here, not in the
+      // toolbar, because the toolbar window is gone by the time a capture lands.
+      playShutterSound();
+      openScreenshotEditor(capture);
+      trackEvent('screenshot_editor_opened', { kind: capture.kind });
+    });
+  }, [openScreenshotEditor]);
+
+  useEffect(() => {
     window.screenforge.getProjects().then(setSavedProjects);
   }, [setSavedProjects]);
 
@@ -325,6 +343,13 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
           <Canvas videoRef={videoRef} canvasRef={previewCanvasRef} />
         </div>
       </main>
+      {screenshotCapture && (
+        <ScreenshotEditor
+          key={screenshotCapture.dataUrl}
+          capture={screenshotCapture}
+          onClose={closeScreenshotEditor}
+        />
+      )}
       <Toaster
         theme="dark"
         richColors={false}

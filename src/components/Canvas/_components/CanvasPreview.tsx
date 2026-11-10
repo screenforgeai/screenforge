@@ -17,26 +17,23 @@ import { CameraOverlayEditor } from './CameraOverlayEditor';
 import { MaskOverlayEditor } from './MaskOverlayEditor';
 import { TextOverlayEditor } from './TextOverlayEditor';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import cameraCaptureSound from 'src/assets/sounds/camera-capture.mp3';
+import { playShutterSound } from 'src/lib/screenshot/shutter-sound';
 
 interface Props {
   videoRef: RefObject<HTMLVideoElement | null>;
   canvasRef: RefObject<HTMLCanvasElement | null>;
 }
 
-function playShutterSound(): void {
-  const audio = new Audio(cameraCaptureSound);
-  void audio.play();
-}
-
 type ScreenshotToastProps = {
   id: string | number;
   thumbnail: string;
   filePath: string;
+  onAnnotate: () => void;
 };
 
-const ScreenshotToast = ({ id, thumbnail, filePath }: ScreenshotToastProps) => {
+const ScreenshotToast = ({ id, thumbnail, filePath, onAnnotate }: ScreenshotToastProps) => {
   const { t } = useTranslation('common');
+  const { t: tScreenshot } = useTranslation('screenshot');
   return (
     <div className="flex items-center gap-3 w-full px-3 py-[10px] rounded-xl select-none">
       {/* Thumbnail — double-bezel housing */}
@@ -49,24 +46,37 @@ const ScreenshotToast = ({ id, thumbnail, filePath }: ScreenshotToastProps) => {
       {/* Text */}
       <div className="flex-1 min-w-0">
         <p
-          className="text-sm font-[500] text-white/[0.88]"
+          className="truncate text-sm font-[500] text-white/[0.88]"
           style={{ WebkitFontSmoothing: 'antialiased' }}
         >
           {t('screenshotSaved')}
         </p>
         <p
-          className="mt-.5 text-xs text-white/[0.32]"
+          className="mt-.5 truncate text-xs text-white/[0.32]"
           style={{ WebkitFontSmoothing: 'antialiased' }}
         >
           ~/Pictures/Screenforge
         </p>
       </div>
 
-      {/* Show in Finder */}
+      {/* Open in the Screenshot editor */}
       <Button
         variant="secondary"
         size="sm"
         className="shrink-0 ml-3"
+        onClick={() => {
+          onAnnotate();
+          toast.dismiss(id);
+        }}
+      >
+        {tScreenshot('annotate')}
+      </Button>
+
+      {/* Show in Finder */}
+      <Button
+        variant="secondary"
+        size="sm"
+        className="shrink-0"
         onClick={() => {
           void window.screenforge.revealExportInFolder(filePath);
           toast.dismiss(id);
@@ -125,6 +135,7 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
       setTimeout(() => setIsFlashing(false), 180);
 
       const dataUrl = canvas.toDataURL('image/png', 1.0);
+      const { width, height } = canvas;
 
       const thumb = document.createElement('canvas');
       const ratio = canvas.width / Math.max(canvas.height, 1);
@@ -136,10 +147,21 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
       try {
         const filePath = await window.screenforge.saveScreenshot(dataUrl);
         trackEvent('screenshot_captured', { source });
-        toast.custom((id) => <ScreenshotToast id={id} thumbnail={thumbUrl} filePath={filePath} />, {
-          duration: 4000,
-          unstyled: true,
-        });
+        const openInEditor = () => {
+          useStore.getState().openScreenshotEditor({ kind: 'frame', dataUrl, width, height });
+          trackEvent('screenshot_editor_opened', { kind: 'frame' });
+        };
+        toast.custom(
+          (id) => (
+            <ScreenshotToast
+              id={id}
+              thumbnail={thumbUrl}
+              filePath={filePath}
+              onAnnotate={openInEditor}
+            />
+          ),
+          { duration: 4000, unstyled: true },
+        );
       } catch {
         trackEvent('screenshot_failed', { source });
         toast.error(t('screenshotFailed'));
@@ -150,9 +172,13 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
 
   useHotkeys('backquote', () => setFocusMode(!useStore.getState().focusMode), {
     enableOnFormTags: true,
+    // Not `enabled`: a false `enabled` callback swallows the key (see
+    // useTimelineGlobalHotkeys), and the Screenshot editor needs its keys.
+    ignoreEventWhen: () => useStore.getState().screenshotCapture !== null,
   });
   useHotkeys('meta+shift+c, ctrl+shift+c', () => void handleCapture('shortcut'), {
     enabled: !!recordingResult,
+    ignoreEventWhen: () => useStore.getState().screenshotCapture !== null,
     preventDefault: true,
   });
   const fallbackSourceWidth = recordingResult?.recordingArea.width ?? 16;

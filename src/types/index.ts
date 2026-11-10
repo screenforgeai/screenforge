@@ -81,6 +81,26 @@ export interface DesktopSource {
   windowTitle?: string;
 }
 
+export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
+
+export interface ScreenshotCaptureRequest {
+  kind: ScreenshotCaptureKind;
+  /** Desktop source id ("screen:…" / "window:…"). Ignored for areas (primary display). */
+  sourceId: string;
+  /** Area selection in primary-display DIPs (from the area selector). */
+  area?: { x: number; y: number; width: number; height: number } | null;
+}
+
+/** A still image handed to the Screenshot editor. */
+export interface ScreenshotCapture {
+  /** Where it came from: a live capture, or the editor's current preview frame. */
+  kind: ScreenshotCaptureKind | 'frame';
+  /** PNG data URL. */
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 export interface WindowFocusTarget {
   appName?: string;
   windowTitle?: string;
@@ -506,6 +526,8 @@ export interface TextClip {
   animationOutDuration: number;
 }
 
+export type AreaSelectorPurpose = 'record' | 'screenshot';
+
 export interface ScreenforgeAPI {
   onPreloadProgress: (cb: (p: PreloadProgress) => void) => () => void;
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void;
@@ -513,6 +535,8 @@ export interface ScreenforgeAPI {
   checkForUpdatesNow: () => Promise<UpdaterState>;
   getAppVersion: () => Promise<string>;
   prepareRecordingStartPermissions: () => Promise<void>;
+  /** Screen access only (no Accessibility), for screenshots. */
+  prepareScreenshotPermissions: () => Promise<void>;
   getStartupPermissionStatuses: () => Promise<StartupPermissionMap>;
   requestScreenAccess: () => Promise<StartupPermissionStatus>;
   requestMediaAccess: (permission: RequestableMediaPermission) => Promise<StartupPermissionStatus>;
@@ -673,6 +697,9 @@ export interface ScreenforgeAPI {
   captureException: (error: SerializedError, properties?: Record<string, unknown>) => void;
   submitFeedback: (feedback: FeedbackSubmission) => void;
   saveScreenshot: (dataUrl: string) => Promise<string>;
+  captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<void>;
+  copyScreenshotToClipboard: (dataUrl: string) => Promise<void>;
+  onScreenshotCaptured: (cb: (capture: ScreenshotCapture) => void) => () => void;
   minimizeToDock: () => void;
   quitApp: () => void;
   toggleTeleprompter: () => void;
@@ -701,7 +728,8 @@ export interface ScreenforgeAPI {
     height: number;
   }) => Promise<void>;
   cancelAreaSelection: () => void;
-  openAreaSelector: () => Promise<{
+  /** `purpose` picks the confirm button: record (default) or take a screenshot. */
+  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<{
     x: number;
     y: number;
     width: number;

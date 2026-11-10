@@ -52,6 +52,7 @@ import { registerSceneOverlayChannels } from './modules/scene-overlay/channel';
 import { registerCameraPreviewChannels } from './modules/camera-preview/channel';
 import { registerAreaSelectorChannels } from './modules/area-selector/channel';
 import { registerImportChannels } from './modules/import/channel';
+import { registerScreenshotChannels } from './modules/screenshot/channel';
 import { pickAndImportVideo } from './modules/import/service';
 import { getAreaSelectorWindow } from './modules/area-selector/service';
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
@@ -459,6 +460,13 @@ app.on('ready', async () => {
   });
   registerUpdaterChannels({
     getMainWindow: () => mainWindow,
+  });
+  registerScreenshotChannels({
+    getMainWindow: () => mainWindow,
+    getToolbarWindow: () => toolbarWindow,
+    setToolbarWindow: (window) => {
+      toolbarWindow = window;
+    },
   });
   registerWindowChannels({
     getMainWindow: () => mainWindow,
