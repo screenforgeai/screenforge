@@ -95,6 +95,21 @@ describe('screenshot service', () => {
     expect(capture).toMatchObject({ kind: 'area', width: 600, height: 400 });
   });
 
+  it('judges an unlabelled portal source against the displays as they are after the picker', async () => {
+    // Before the picker: the secondary is 5:4, so a 16:10 image could only be the primary.
+    const before = [primary, { id: 2, size: { width: 1280, height: 1024 }, scaleFactor: 1 }];
+    // While the picker is open the secondary switches to 16:10 too: now it's ambiguous.
+    const after = [primary, { id: 2, size: { width: 1920, height: 1200 }, scaleFactor: 1 }];
+    electronMock.getAllDisplays.mockReturnValueOnce(before).mockReturnValue(after);
+    electronMock.getSources.mockResolvedValue([
+      { id: 'screen:portal:0', display_id: '', thumbnail: fakeImage(2880, 1800) },
+    ]);
+
+    await expect(
+      captureStill({ kind: 'area', sourceId: '', area: { x: 0, y: 0, width: 10, height: 10 } }),
+    ).rejects.toThrow();
+  });
+
   it('scales an upscaled thumbnail of a smaller display back to native size', async () => {
     // Thumbnail size is 2880×1800 (largest display); a 1920×1080 display comes back fitted to it.
     const thumb = fakeImage(2880, 1620);
