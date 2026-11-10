@@ -15,6 +15,7 @@ export const DirectorAccountPanel = () => {
   const { t } = useTranslation('settings');
   const account = useDirectorAccount();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
 
   if (!account) {
     return (
@@ -73,6 +74,11 @@ export const DirectorAccountPanel = () => {
         {!account.remembered && (
           <p className="text-sm text-sf-secondary">{t('director_notRemembered')}</p>
         )}
+        {signOutFailed && (
+          <p role="alert" className="text-sm text-sf-red">
+            {t('director_signOutFailed')}
+          </p>
+        )}
         <div>
           <Button
             variant="secondary"
@@ -81,7 +87,14 @@ export const DirectorAccountPanel = () => {
             className="gap-1.5"
             onClick={() => {
               setIsSigningOut(true);
-              void window.screenforge.signOutOfDirector().finally(() => setIsSigningOut(false));
+              setSignOutFailed(false);
+              void window.screenforge
+                .signOutOfDirector()
+                .catch((error: unknown) => {
+                  setSignOutFailed(true);
+                  logFailure('settings.director.sign-out-failed')(error);
+                })
+                .finally(() => setIsSigningOut(false));
             }}
           >
             {isSigningOut && <Spinner className="size-3.5" />}

@@ -28,6 +28,9 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
   let account: SignedInAccount | null = null;
   let pending: { promise: Promise<void>; controller: AbortController } | null = null;
   const listeners = new Set<(state: DirectorAccountState) => void>();
+  // Bumped by every sign-out: a sign-in or launch restore that started before
+  // it must not bring the account back.
+  let generation = 0;
 
   const setState = (next: DirectorAccountState) => {
     state = next;
@@ -36,13 +39,22 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
     }
   };
 
-  const signedIn = async (next: SignedInAccount) => {
+  const signedIn = async (next: SignedInAccount, startedAt: number) => {
+    if (startedAt !== generation) {
+      return;
+    }
     account = next;
     const remembered = await deps.store.save(next).catch(() => false);
+    if (startedAt !== generation) {
+      // Signed out while saving: don't leave the new token on disk.
+      await deps.store.clear().catch(() => undefined);
+      return;
+    }
     setState({ status: 'signed-in', user: next.user, workspace: next.workspace, remembered });
   };
 
   const forget = async (error?: 'disconnected') => {
+    generation += 1;
     account = null;
     await deps.store.clear().catch(() => undefined);
     setState(error ? { status: 'signed-out', error } : { status: 'signed-out' });
@@ -58,8 +70,9 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
     },
 
     async init(): Promise<void> {
+      const startedAt = generation;
       const stored = await deps.store.load();
-      if (stored) {
+      if (stored && startedAt === generation && !account) {
         account = stored;
         setState({
           status: 'signed-in',
@@ -79,6 +92,7 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
         return Promise.resolve();
       }
       const controller = new AbortController();
+      const startedAt = generation;
       const promise = runSignIn({
         client: deps.client,
         deviceName: deps.deviceName,
@@ -87,8 +101,11 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
         sleep: deps.sleep,
         signal: controller.signal,
       })
-        .then(signedIn)
+        .then((next) => signedIn(next, startedAt))
         .catch((err: unknown) => {
+          if (startedAt !== generation) {
+            return;
+          }
           const reason = err instanceof SignInError ? err.reason : 'failed';
           setState(
             reason === 'cancelled'
@@ -109,10 +126,25 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
 
     /** Revokes the token in Director when it can; always forgets it here. */
     async signOut(): Promise<void> {
-      if (account) {
-        await deps.client.signOut().catch(() => undefined);
+      generation += 1;
+      pending?.controller.abort();
+      const revoked = account
+        ? await deps.client.signOut().then(
+            () => true,
+            () => false,
+          )
+        : true;
+      try {
+        await deps.store.clear();
+      } catch (err) {
+        // A revoked token on disk is harmless; a live one would sign the user
+        // back in at the next launch, so say sign-out failed instead.
+        if (!revoked) {
+          throw err;
+        }
       }
-      await forget();
+      account = null;
+      setState({ status: 'signed-out' });
     },
 
     /**

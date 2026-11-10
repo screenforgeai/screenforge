@@ -87,6 +87,19 @@ describe('DirectorAccountPanel', () => {
     await waitFor(() => expect(api.signOutOfDirector).toHaveBeenCalled());
   });
 
+  it('says so when sign-out could not finish, and stays signed in', async () => {
+    api.signOutOfDirector.mockRejectedValueOnce(new Error('EPERM'));
+    showing({
+      status: 'signed-in',
+      user: { id: 'u', email: 'mohib@screenforge.co' },
+      workspace: { id: 'w', name: 'Screenforge' },
+      remembered: true,
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /sign out/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't sign out/i);
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeEnabled();
+  });
+
   it("warns when the sign-in can't be remembered", async () => {
     showing({
       status: 'signed-in',
