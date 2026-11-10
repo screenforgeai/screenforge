@@ -106,7 +106,10 @@
       "electron",
       "fs-xattr",
       "macos-alias"
-    ]
+    ],
+    "patchedDependencies": {
+      "@xzdarcy/react-timeline-editor@1.0.0": "patches/@xzdarcy__react-timeline-editor@1.0.0.patch"
+    }
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

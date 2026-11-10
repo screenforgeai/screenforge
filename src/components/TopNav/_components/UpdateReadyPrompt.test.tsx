@@ -99,6 +99,27 @@ describe('UpdateReadyPrompt', () => {
     expect(screen.queryByText(TITLE_RE)).not.toBeInTheDocument();
   });
 
+  it('links to the download page when a newer version must be installed by hand', async () => {
+    const openExternalUrl = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('screenforge', { openExternalUrl });
+
+    render(
+      <UpdateReadyPrompt
+        state={{ currentVersion: '0.0.22', status: 'available', availableVersion: '0.0.23' }}
+        isApplying={false}
+        isChecking={false}
+        onApply={vi.fn()}
+        onCheckNow={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /update available/i }));
+
+    expect(openExternalUrl).toHaveBeenCalledWith('https://screenforge.co/download/linux');
+    expect(screen.queryByText(TITLE_RE)).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
   it('offers an actionable retry when the updater is in error', async () => {
     const onCheckNow = vi.fn().mockResolvedValue(undefined);
 
