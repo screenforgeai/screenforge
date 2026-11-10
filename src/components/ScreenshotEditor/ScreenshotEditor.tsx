@@ -557,8 +557,14 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-sf-bg font-sans text-sf-primary">
       <header className="flex flex-none items-center gap-3 border-b border-sf-border px-3 py-2">
-        <Button variant="ghost" size="icon-sm" aria-label={t('close')} onClick={onClose}>
-          <IconX size={16} />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-md"
+          aria-label={t('close')}
+          onClick={onClose}
+        >
+          <IconX size={20} />
         </Button>
         <span className="text-md font-medium">{t('title')}</span>
         <span className="text-xs tabular-nums text-sf-muted">
@@ -575,13 +581,14 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
-                      size="icon-sm"
+                      size="icon"
+                      className="rounded-md"
                       aria-label={label}
                       aria-pressed={tool === id}
                       active={tool === id}
                       onClick={() => setTool(id)}
                     >
-                      <Icon size={16} />
+                      <Icon size={20} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
@@ -613,30 +620,33 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           <div className="flex items-center gap-0.5">
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="rounded-md"
               aria-label={t('undo')}
               disabled={annotations.past.length === 0}
               onClick={() => dispatch({ type: 'undo' })}
             >
-              <IconArrowBackUp size={16} />
+              <IconArrowBackUp size={20} />
             </Button>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="rounded-md"
               aria-label={t('redo')}
               disabled={annotations.future.length === 0}
               onClick={() => dispatch({ type: 'redo' })}
             >
-              <IconArrowForwardUp size={16} />
+              <IconArrowForwardUp size={20} />
             </Button>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
+              className="rounded-md"
               aria-label={t('deleteShape')}
               disabled={!selectedId}
               onClick={deleteSelected}
             >
-              <IconTrash size={16} />
+              <IconTrash size={20} />
             </Button>
           </div>
         </div>
