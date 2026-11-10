@@ -1,7 +1,7 @@
 /**
  * Pure helpers for still captures (no Electron imports, unit-tested).
  */
-import type { ScreenshotCaptureRequest } from '../../../src/types/index';
+import type { ScreenshotCaptureRequest, SelectedArea } from '../../../src/types/index';
 
 export interface Size {
   width: number;
@@ -49,7 +49,8 @@ export function getCaptureThumbnailSize(displays: readonly DisplayLike[]): Size 
 }
 
 export interface CaptureDisplays {
-  primary: DisplayLike;
+  /** The display an area was drawn on (the selector covers the primary display). */
+  target: DisplayLike;
   all: readonly DisplayLike[];
 }
 
@@ -63,16 +64,16 @@ function sameAspect(a: Size, b: Size): boolean {
 }
 
 /**
- * Whether a lone screen source that isn't labelled as the primary display is
- * still certainly the primary. The area was drawn on the primary, so cropping
- * any other monitor with it gives the wrong image; when in doubt, it isn't.
+ * Whether a lone screen source that isn't labelled as the area's display is
+ * still certainly that display. Cropping any other monitor with the area gives
+ * the wrong image; when in doubt, it isn't.
  */
-function isCertainlyPrimary<T extends SourceLike>(
+function isCertainlyTarget<T extends SourceLike>(
   source: T,
   displays: CaptureDisplays,
   sizeOf: ((source: T) => Size) | undefined,
 ): boolean {
-  const others = displays.all.filter((d) => d.id !== displays.primary.id);
+  const others = displays.all.filter((d) => d.id !== displays.target.id);
   if (others.some((d) => String(d.id) === source.display_id)) {
     return false;
   }
@@ -82,17 +83,39 @@ function isCertainlyPrimary<T extends SourceLike>(
   // Unlabelled (the Linux portal hands back whichever monitor the user picked):
   // only the image's shape can tell, and only if no other display shares it.
   const size = sizeOf?.(source);
-  if (!size || !sameAspect(size, getDisplayPixelSize(displays.primary))) {
+  if (!size || !sameAspect(size, getDisplayPixelSize(displays.target))) {
     return false;
   }
   return !others.some((d) => sameAspect(size, getDisplayPixelSize(d)));
+}
+
+/**
+ * The display an area belongs to: the one the selector covered, if it's still
+ * there at the same size. Null when it's gone or was resized, since the area's
+ * coordinates no longer describe it. An area without a display (older callers)
+ * belongs to the primary.
+ */
+export function resolveAreaDisplay<D extends DisplayLike>(
+  area: SelectedArea,
+  displays: readonly D[],
+  primary: D,
+): D | null {
+  if (!area.display) {
+    return primary;
+  }
+  const { id, width, height } = area.display;
+  const display = displays.find((d) => d.id === id);
+  if (!display || display.size.width !== width || display.size.height !== height) {
+    return null;
+  }
+  return display;
 }
 
 export function pickSourceForCapture<T extends SourceLike>(
   sources: readonly T[],
   request: ScreenshotCaptureRequest,
   displays: CaptureDisplays,
-  /** The source's image size, used to recognise an unlabelled primary display. */
+  /** The source's image size, used to recognise an unlabelled target display. */
   sizeOf?: (source: T) => Size,
 ): T | null {
   const screens = sources.filter((source) => source.id.startsWith('screen:'));
@@ -102,13 +125,12 @@ export function pickSourceForCapture<T extends SourceLike>(
   const onlyScreen = screens.length === 1 ? screens[0] : null;
 
   if (request.kind === 'area') {
-    // The area selector window always covers the primary display, so the
-    // area only fits an image of the primary display.
-    const primary = screens.find((source) => source.display_id === String(displays.primary.id));
-    if (primary) {
-      return primary;
+    // The area only fits an image of the display it was drawn on.
+    const target = screens.find((source) => source.display_id === String(displays.target.id));
+    if (target) {
+      return target;
     }
-    return onlyScreen && isCertainlyPrimary(onlyScreen, displays, sizeOf) ? onlyScreen : null;
+    return onlyScreen && isCertainlyTarget(onlyScreen, displays, sizeOf) ? onlyScreen : null;
   }
 
   const exact = sources.find((source) => source.id === request.sourceId);

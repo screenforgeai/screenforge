@@ -185,6 +185,13 @@ const primaryMonitor: FakeDisplay = {
   scaleFactor: 2,
 };
 
+/** What the area selector reports about the display an area was drawn on. */
+const selectedOn = (display: FakeDisplay) => ({
+  id: display.id,
+  width: display.bounds.width,
+  height: display.bounds.height,
+});
+
 const originalPlatform = process.platform;
 const SESSION_ENV_KEYS = ['XDG_SESSION_TYPE', 'WAYLAND_DISPLAY', 'DISPLAY'];
 const savedEnv: Record<string, string | undefined> = {};
@@ -261,7 +268,7 @@ describe('recording service: multiple monitors', () => {
 
       // Selected on the right monitor; the left one became primary before Record.
       electronMock.state.primary = leftMonitor;
-      await startRecording('screen:0', { ...area, displayId: primaryMonitor.id });
+      await startRecording('screen:0', { ...area, display: selectedOn(primaryMonitor) });
 
       const args = captureProcs[0].args;
       expect(argAfter(args, '-video_size')).toBe('2560x1440');
@@ -276,8 +283,20 @@ describe('recording service: multiple monitors', () => {
       electronMock.state.displays = [leftMonitor];
       electronMock.state.primary = leftMonitor;
       await expect(
-        startRecording('screen:0', { ...area, displayId: primaryMonitor.id }),
+        startRecording('screen:0', { ...area, display: selectedOn(primaryMonitor) }),
       ).rejects.toThrow(/no longer connected/i);
+      expect(captureProcs).toHaveLength(0);
+    });
+
+    it('refuses to record when the display the area was selected on has been resized', async () => {
+      const { startRecording } = await import('./service');
+
+      await expect(
+        startRecording('screen:0', {
+          ...area,
+          display: { ...selectedOn(primaryMonitor), width: 1920, height: 1080 },
+        }),
+      ).rejects.toThrow(/select the area again/i);
       expect(captureProcs).toHaveLength(0);
     });
 

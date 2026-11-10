@@ -43,10 +43,10 @@ describe('pickSourceForCapture', () => {
   const area = { x: 0, y: 0, width: 10, height: 10 };
   // Primary 1440x900 @2x (16:10), secondary 1920x1080 (16:9).
   const twoDisplays = {
-    primary: display(1, 1440, 900, 2),
+    target: display(1, 1440, 900, 2),
     all: [display(1, 1440, 900, 2), display(2, 1920, 1080)],
   };
-  const oneDisplay = { primary: display(1, 1440, 900, 2), all: [display(1, 1440, 900, 2)] };
+  const oneDisplay = { target: display(1, 1440, 900, 2), all: [display(1, 1440, 900, 2)] };
   const sized =
     (sizes: Record<string, { width: number; height: number }>) => (source: { id: string }) =>
       sizes[source.id] ?? { width: 0, height: 0 };
@@ -113,7 +113,7 @@ describe('pickSourceForCapture', () => {
     ).toBeNull();
     // Two 16:10 displays: no way to tell which one it is.
     const twins = {
-      primary: display(1, 1440, 900, 2),
+      target: display(1, 1440, 900, 2),
       all: [display(1, 1440, 900, 2), display(2, 1680, 1050)],
     };
     expect(
@@ -129,7 +129,7 @@ describe('pickSourceForCapture', () => {
   });
 
   it('refuses to guess between several screens when none matches', () => {
-    const others = { primary: display(99, 1440, 900), all: [display(99, 1440, 900)] };
+    const others = { target: display(99, 1440, 900), all: [display(99, 1440, 900)] };
     expect(
       pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:wayland' }, others),
     ).toBeNull();
