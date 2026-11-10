@@ -425,8 +425,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     annotations: annotations.shapes.length,
   });
 
+  // Mid-gesture, the preview shows a shape the annotations don't hold yet:
+  // exporting then could leave out a blur the user can already see.
+  const canExport = !!image && !busy && !drag;
+
   const handleCopy = async () => {
-    if (busy) {
+    if (!canExport) {
       return;
     }
     setBusy(true);
@@ -446,7 +450,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   };
 
   const handleSave = async () => {
-    if (busy) {
+    if (!canExport) {
       return;
     }
     setBusy(true);
@@ -609,11 +613,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           </div>
         </div>
 
-        <Button variant="secondary" size="sm" disabled={!image || busy} onClick={handleCopy}>
+        <Button variant="secondary" size="sm" disabled={!canExport} onClick={handleCopy}>
           <IconCopy size={14} />
           {t('copy')}
         </Button>
-        <Button size="sm" disabled={!image || busy} onClick={handleSave}>
+        <Button size="sm" disabled={!canExport} onClick={handleSave}>
           <IconDownload size={14} />
           {t('save')}
         </Button>
