@@ -48,10 +48,52 @@ export function getCaptureThumbnailSize(displays: readonly DisplayLike[]): Size 
   );
 }
 
+export interface CaptureDisplays {
+  primary: DisplayLike;
+  all: readonly DisplayLike[];
+}
+
+const ASPECT_TOLERANCE = 0.01;
+
+function sameAspect(a: Size, b: Size): boolean {
+  if (a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0) {
+    return false;
+  }
+  return Math.abs(a.width / a.height - b.width / b.height) <= ASPECT_TOLERANCE;
+}
+
+/**
+ * Whether a lone screen source that isn't labelled as the primary display is
+ * still certainly the primary. The area was drawn on the primary, so cropping
+ * any other monitor with it gives the wrong image; when in doubt, it isn't.
+ */
+function isCertainlyPrimary<T extends SourceLike>(
+  source: T,
+  displays: CaptureDisplays,
+  sizeOf: ((source: T) => Size) | undefined,
+): boolean {
+  const others = displays.all.filter((d) => d.id !== displays.primary.id);
+  if (others.some((d) => String(d.id) === source.display_id)) {
+    return false;
+  }
+  if (others.length === 0) {
+    return true;
+  }
+  // Unlabelled (the Linux portal hands back whichever monitor the user picked):
+  // only the image's shape can tell, and only if no other display shares it.
+  const size = sizeOf?.(source);
+  if (!size || !sameAspect(size, getDisplayPixelSize(displays.primary))) {
+    return false;
+  }
+  return !others.some((d) => sameAspect(size, getDisplayPixelSize(d)));
+}
+
 export function pickSourceForCapture<T extends SourceLike>(
   sources: readonly T[],
   request: ScreenshotCaptureRequest,
-  primaryDisplayId: number,
+  displays: CaptureDisplays,
+  /** The source's image size, used to recognise an unlabelled primary display. */
+  sizeOf?: (source: T) => Size,
 ): T | null {
   const screens = sources.filter((source) => source.id.startsWith('screen:'));
   // When ids don't match (a re-plugged display, the synthetic Wayland portal
@@ -60,8 +102,13 @@ export function pickSourceForCapture<T extends SourceLike>(
   const onlyScreen = screens.length === 1 ? screens[0] : null;
 
   if (request.kind === 'area') {
-    // The area selector window always covers the primary display.
-    return screens.find((source) => source.display_id === String(primaryDisplayId)) ?? onlyScreen;
+    // The area selector window always covers the primary display, so the
+    // area only fits an image of the primary display.
+    const primary = screens.find((source) => source.display_id === String(displays.primary.id));
+    if (primary) {
+      return primary;
+    }
+    return onlyScreen && isCertainlyPrimary(onlyScreen, displays, sizeOf) ? onlyScreen : null;
   }
 
   const exact = sources.find((source) => source.id === request.sourceId);

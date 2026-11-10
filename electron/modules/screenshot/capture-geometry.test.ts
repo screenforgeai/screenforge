@@ -40,55 +40,106 @@ describe('pickSourceForCapture', () => {
     { id: 'screen:2:0', display_id: '2' },
     { id: 'window:42:0', display_id: '' },
   ];
+  const area = { x: 0, y: 0, width: 10, height: 10 };
+  // Primary 1440x900 @2x (16:10), secondary 1920x1080 (16:9).
+  const twoDisplays = {
+    primary: display(1, 1440, 900, 2),
+    all: [display(1, 1440, 900, 2), display(2, 1920, 1080)],
+  };
+  const oneDisplay = { primary: display(1, 1440, 900, 2), all: [display(1, 1440, 900, 2)] };
+  const sized =
+    (sizes: Record<string, { width: number; height: number }>) => (source: { id: string }) =>
+      sizes[source.id] ?? { width: 0, height: 0 };
 
   it('returns the exact source for a display or window', () => {
-    expect(pickSourceForCapture(sources, { kind: 'window', sourceId: 'window:42:0' }, 1)?.id).toBe(
-      'window:42:0',
-    );
-    expect(pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:2:0' }, 1)?.id).toBe(
-      'screen:2:0',
-    );
+    expect(
+      pickSourceForCapture(sources, { kind: 'window', sourceId: 'window:42:0' }, twoDisplays)?.id,
+    ).toBe('window:42:0');
+    expect(
+      pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:2:0' }, twoDisplays)?.id,
+    ).toBe('screen:2:0');
   });
 
   it('uses the primary display for an area (the selector covers the primary display)', () => {
     expect(
-      pickSourceForCapture(
-        sources,
-        { kind: 'area', sourceId: 'screen:2:0', area: { x: 0, y: 0, width: 10, height: 10 } },
-        1,
-      )?.id,
+      pickSourceForCapture(sources, { kind: 'area', sourceId: 'screen:2:0', area }, twoDisplays)
+        ?.id,
     ).toBe('screen:1:0');
   });
 
-  it('falls back to the only screen when a display id is stale (e.g. the Wayland portal)', () => {
+  it('falls back to the only screen for a display capture (e.g. the Wayland portal)', () => {
     const portal = [{ id: 'screen:portal:0', display_id: '' }];
     expect(
-      pickSourceForCapture(portal, { kind: 'display', sourceId: 'screen:wayland' }, 99)?.id,
+      pickSourceForCapture(portal, { kind: 'display', sourceId: 'screen:wayland' }, twoDisplays)
+        ?.id,
     ).toBe('screen:portal:0');
+  });
+
+  it('takes the only screen for an area when there is only one display', () => {
+    const portal = [{ id: 'screen:portal:0', display_id: '' }];
+    expect(pickSourceForCapture(portal, { kind: 'area', sourceId: '', area }, oneDisplay)?.id).toBe(
+      'screen:portal:0',
+    );
+  });
+
+  it('never crops another monitor with the primary display area', () => {
+    // The portal handed back the secondary display: the area was drawn on the primary.
+    const secondaryOnly = [{ id: 'screen:2:0', display_id: '2' }];
+    expect(
+      pickSourceForCapture(secondaryOnly, { kind: 'area', sourceId: '', area }, twoDisplays),
+    ).toBeNull();
+  });
+
+  it('takes an unlabelled lone screen for an area only when no other display shares its shape', () => {
+    const portal = [{ id: 'screen:portal:0', display_id: '' }];
+    const request = { kind: 'area' as const, sourceId: '', area };
+    // 16:10 image: only the primary is 16:10, so it's the primary.
     expect(
       pickSourceForCapture(
         portal,
-        { kind: 'area', sourceId: '', area: { x: 0, y: 0, width: 10, height: 10 } },
-        99,
+        request,
+        twoDisplays,
+        sized({ 'screen:portal:0': { width: 2880, height: 1800 } }),
       )?.id,
     ).toBe('screen:portal:0');
+    // 16:9 image: that's the secondary.
+    expect(
+      pickSourceForCapture(
+        portal,
+        request,
+        twoDisplays,
+        sized({ 'screen:portal:0': { width: 2880, height: 1620 } }),
+      ),
+    ).toBeNull();
+    // Two 16:10 displays: no way to tell which one it is.
+    const twins = {
+      primary: display(1, 1440, 900, 2),
+      all: [display(1, 1440, 900, 2), display(2, 1680, 1050)],
+    };
+    expect(
+      pickSourceForCapture(
+        portal,
+        request,
+        twins,
+        sized({ 'screen:portal:0': { width: 2880, height: 1800 } }),
+      ),
+    ).toBeNull();
+    // Without the image size, don't guess.
+    expect(pickSourceForCapture(portal, request, twoDisplays)).toBeNull();
   });
 
   it('refuses to guess between several screens when none matches', () => {
+    const others = { primary: display(99, 1440, 900), all: [display(99, 1440, 900)] };
     expect(
-      pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:wayland' }, 99),
+      pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:wayland' }, others),
     ).toBeNull();
-    expect(
-      pickSourceForCapture(
-        sources,
-        { kind: 'area', sourceId: '', area: { x: 0, y: 0, width: 10, height: 10 } },
-        99,
-      ),
-    ).toBeNull();
+    expect(pickSourceForCapture(sources, { kind: 'area', sourceId: '', area }, others)).toBeNull();
   });
 
   it('returns null for a window that is gone', () => {
-    expect(pickSourceForCapture(sources, { kind: 'window', sourceId: 'window:7:0' }, 1)).toBeNull();
+    expect(
+      pickSourceForCapture(sources, { kind: 'window', sourceId: 'window:7:0' }, twoDisplays),
+    ).toBeNull();
   });
 });
 

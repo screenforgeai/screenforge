@@ -22,7 +22,9 @@ export async function captureStill(request: ScreenshotCaptureRequest): Promise<S
     fetchWindowIcons: false,
   });
 
-  const source = pickSourceForCapture(sources, request, primary.id);
+  const source = pickSourceForCapture(sources, request, { primary, all: displays }, (s) =>
+    s.thumbnail.getSize(),
+  );
   if (!source || source.thumbnail.isEmpty()) {
     throw new Error(`No image available for ${request.kind} capture (${request.sourceId})`);
   }
