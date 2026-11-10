@@ -14,13 +14,16 @@ import {
  * at native resolution avoids starting a capture stream for a single frame.
  */
 export async function captureStill(request: ScreenshotCaptureRequest): Promise<ScreenshotCapture> {
-  const displays = screen.getAllDisplays();
-  const primary = screen.getPrimaryDisplay();
   const sources = await desktopCapturer.getSources({
     types: request.kind === 'window' ? ['window'] : ['screen'],
-    thumbnailSize: getCaptureThumbnailSize(displays),
+    thumbnailSize: getCaptureThumbnailSize(screen.getAllDisplays()),
     fetchWindowIcons: false,
   });
+  // Read the displays after getSources: on Linux it waits on the portal picker,
+  // and a display can be added or change resolution while that's open. The
+  // source is matched (and cropped) against the displays as they are now.
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
 
   const source = pickSourceForCapture(sources, request, { primary, all: displays }, (s) =>
     s.thumbnail.getSize(),
