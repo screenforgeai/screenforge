@@ -37,6 +37,18 @@ describe('WhatsNewOnLaunch', () => {
     expect(consume).toHaveBeenCalledTimes(1);
   });
 
+  it('holds the notes while deferred and opens them once released', async () => {
+    consume.mockResolvedValue({ show: true, sinceVersion: '0.7.1', currentVersion: '0.8.0' });
+
+    const { rerender } = render(<WhatsNewOnLaunch deferred />);
+    await waitFor(() => expect(consume).toHaveBeenCalled());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    rerender(<WhatsNewOnLaunch deferred={false} />);
+
+    expect(await screen.findByText('Eight')).toBeInTheDocument();
+  });
+
   it('stays closed when the main process says not to show', async () => {
     consume.mockResolvedValue({ show: false, sinceVersion: '0.8.0', currentVersion: '0.8.0' });
 

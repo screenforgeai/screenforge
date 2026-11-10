@@ -76,6 +76,7 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   );
 
   const [ffmpegMissing, setFfmpegMissing] = useState(false);
+  const [ffmpegChecked, setFfmpegChecked] = useState(false);
 
   useEffect(() => {
     trackEvent('app_opened');
@@ -91,12 +92,16 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   }, []);
 
   useEffect(() => {
-    window.screenforge.checkFFmpegStatus().then(({ available }) => {
-      if (!available) {
-        setFfmpegMissing(true);
-        trackEvent('ffmpeg_missing_shown');
-      }
-    });
+    window.screenforge
+      .checkFFmpegStatus()
+      .then(({ available }) => {
+        if (!available) {
+          setFfmpegMissing(true);
+          trackEvent('ffmpeg_missing_shown');
+        }
+      })
+      // Lets What's new open only once FFmpeg setup can no longer pop over it.
+      .finally(() => setFfmpegChecked(true));
   }, []);
 
   useEffect(() => {
@@ -365,7 +370,7 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
         }}
       />
       <FFmpegSetupModal open={ffmpegMissing} onReady={() => setFfmpegMissing(false)} />
-      <WhatsNewOnLaunch deferred={ffmpegMissing} />
+      <WhatsNewOnLaunch deferred={!ffmpegChecked || ffmpegMissing} />
     </>
   );
 };
