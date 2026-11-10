@@ -319,6 +319,29 @@ describe('FloatingToolbar recording widget', () => {
       expect(screenforge.recordingFailed).not.toHaveBeenCalled();
     });
 
+    // The stop error crosses IPC, where Electron prefixes "Error invoking remote method".
+    it('shows a failed stop in plain words and reports it', async () => {
+      const message = 'Nothing was captured. Try again.';
+      screenforge.stopRecording.mockRejectedValue(
+        new Error(`Error invoking remote method 'recording:stop': Error: ${message}`),
+      );
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+
+      await waitFor(() => expect(screenforge.recordingFailed).toHaveBeenCalledWith(message));
+      expect(screenforge.recordingFinished).not.toHaveBeenCalled();
+      expect(screenforge.trackEvent).toHaveBeenCalledWith(
+        'recording_failed',
+        expect.objectContaining({ error: message }),
+      );
+      expect(screenforge.trackEvent).not.toHaveBeenCalledWith(
+        'recording_completed',
+        expect.anything(),
+      );
+    });
+
     it('stops and explains why when the recorded display is disconnected', async () => {
       await clickRecordAndFinishCountdown();
       await waitForRecordingState();

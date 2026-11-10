@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PostHog } from 'posthog-node';
 import type { FeedbackSubmission, SerializedError } from '../../src/types/index';
+import { unwrapIpcErrorMessage } from '../../src/lib/ipcError';
 import log from './logger';
+import { redactUserPaths, redactUserPathsDeep } from './redact-paths';
 
 let posthogClient: PostHog | null = null;
 let anonymousId: string | null = null;
@@ -58,8 +60,10 @@ export function initTelemetry({ enabled = true }: { enabled?: boolean } = {}): v
       flushInterval: 5_000,
       // Uncaught exceptions and unhandled rejections in the main process.
       enableExceptionAutocapture: true,
-      // Autocaptured crashes bypass captureException(), so the setting is enforced here too.
-      before_send: (event) => (usageDataEnabled || event?.event === FEEDBACK_EVENT ? event : null),
+      // Autocaptured crashes bypass captureException(), so the setting and the
+      // path redaction are enforced here too.
+      before_send: (event) =>
+        usageDataEnabled || event?.event === FEEDBACK_EVENT ? redactUserPathsDeep(event) : null,
     });
     log.info('[telemetry] PostHog initialized');
   }
@@ -89,7 +93,8 @@ function capture(event: string, properties?: Record<string, unknown>): void {
       distinctId: anonymousId,
       event,
       properties: {
-        ...properties,
+        // Error text often carries file paths, and so the user's name.
+        ...redactUserPathsDeep(properties),
         ...commonProperties(),
       },
     });
@@ -155,14 +160,46 @@ function adoptChunkIds(chunkIds: SerializedError['chunkIds']): void {
   }
 }
 
+// Chromium's ResizeObserver warnings reach window 'error' listeners, but
+// nothing is broken when they fire.
+const IGNORED_ERROR_MESSAGES = [
+  'ResizeObserver loop completed with undelivered notifications.',
+  'ResizeObserver loop limit exceeded',
+];
+
+/**
+ * A failed ipcRenderer.invoke arrives wrapped in Electron's "Error invoking
+ * remote method" text with a stack of IPC plumbing, so every cause would share
+ * one PostHog issue. Report the cause instead, without that stack.
+ */
+function unwrapIpcError(error: SerializedError): { error: SerializedError; channel?: string } {
+  const unwrapped = unwrapIpcErrorMessage(error.message);
+  if (!unwrapped) {
+    return { error };
+  }
+  return {
+    error: {
+      ...error,
+      name: unwrapped.name ?? 'Error',
+      message: unwrapped.message,
+      stack: undefined,
+    },
+    channel: unwrapped.channel,
+  };
+}
+
 export function captureException(
-  error: SerializedError,
+  reported: SerializedError,
   properties?: Record<string, unknown>,
 ): void {
   if (!posthogClient || !anonymousId || !usageDataEnabled) {
     return;
   }
+  if (IGNORED_ERROR_MESSAGES.includes(reported.message)) {
+    return;
+  }
   try {
+    const { error, channel } = unwrapIpcError(reported);
     // A tuple, so a ': ' inside the name or message can't make two errors collide.
     const key = JSON.stringify([error.name || 'Error', error.message]);
     const now = Date.now();
@@ -176,14 +213,19 @@ export function captureException(
     }
     recentExceptions.set(key, { sentAt: now, suppressed: 0 });
 
-    const restored = new Error(error.message);
+    // Paths in the message and stack would carry the user's name.
+    const restored = new Error(redactUserPaths(error.message));
     restored.name = error.name || 'Error';
-    if (error.stack) {
-      restored.stack = error.stack;
-    }
+    // Without the renderer's stack, keep a frameless one: this process's own
+    // frames (IpcMainImpl...) are the same for every error and would group
+    // unrelated errors into one issue.
+    restored.stack = error.stack
+      ? redactUserPaths(error.stack)
+      : `${restored.name}: ${restored.message}`;
     adoptChunkIds(error.chunkIds);
     posthogClient.captureException(restored, anonymousId, {
-      ...properties,
+      ...redactUserPathsDeep(properties),
+      ...(channel && { ipc_channel: channel }),
       ...(recent?.suppressed ? { suppressed_repeats: recent.suppressed } : {}),
       ...commonProperties(),
     });

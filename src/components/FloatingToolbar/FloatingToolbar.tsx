@@ -21,6 +21,7 @@ import {
   IconCamera,
 } from 'src/lib/icons';
 import { trackEvent } from 'src/lib/analytics';
+import { readableErrorMessage } from 'src/lib/ipcError';
 import {
   Button,
   DropdownMenu,
@@ -138,11 +139,7 @@ function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): 
 }
 
 function getErrorMessage(err: unknown): string {
-  if (err instanceof Error && err.message) {
-    return err.message;
-  }
-
-  return 'Could not finish the recording. Please try again.';
+  return readableErrorMessage(err, 'Could not finish the recording. Please try again.');
 }
 
 function logToolbarDiagnostic(scope: string, payload?: unknown): void {
@@ -1245,10 +1242,16 @@ export const FloatingToolbar = () => {
       });
     } catch (err) {
       console.error('[recording] stop pipeline failed:', err);
-      logToolbarDiagnostic('toolbar.recording.stop-failed', {
-        message: getErrorMessage(err),
+      const message = getErrorMessage(err);
+      logToolbarDiagnostic('toolbar.recording.stop-failed', { message });
+      trackEvent('recording_failed', {
+        error: message,
+        elapsed_seconds: elapsed,
+        has_mic: micEnabled,
+        has_camera: cameraEnabled,
+        is_append: isAppendMode,
       });
-      window.screenforge.recordingFailed(getErrorMessage(err));
+      window.screenforge.recordingFailed(message);
     } finally {
       await window.screenforge.clearAppendMode().catch(() => undefined);
       setIsAppendMode(false);

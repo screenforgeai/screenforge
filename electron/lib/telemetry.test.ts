@@ -95,6 +95,28 @@ describe('telemetry', () => {
     );
   });
 
+  it('strips the user name from autocaptured crashes too', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry } = await loadTelemetryModule();
+    initTelemetry();
+
+    const [, options] = posthogMock.PostHog.mock.calls[0] as unknown as [
+      string,
+      { before_send: (event: unknown) => unknown },
+    ];
+    const sent = options.before_send({
+      event: '$exception',
+      properties: {
+        $exception_list: [{ value: "EACCES: open '/Users/jane/x.mp4'", type: 'Error' }],
+      },
+    });
+
+    expect(sent).toEqual({
+      event: '$exception',
+      properties: { $exception_list: [{ value: "EACCES: open '~/x.mp4'", type: 'Error' }] },
+    });
+  });
+
   it('reports a renderer error to PostHog with its original stack', async () => {
     electronMock.app.isPackaged = true;
     const { initTelemetry, captureException, getAnonymousId } = await loadTelemetryModule();
@@ -114,6 +136,96 @@ describe('telemetry', () => {
     expect(properties).toEqual(
       expect.objectContaining({ source: 'renderer', operation: 'export', app_version: '0.0.22' }),
     );
+  });
+
+  it("reports a failed IPC call under its real cause, not Electron's wrapper", async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+    const wrapped = (cause: string) => ({
+      name: 'Error',
+      message: `Error invoking remote method 'export:run-capture': ${cause}`,
+      // The renderer-side stack is Electron's IPC plumbing, the same for every cause.
+      stack: `Error: Error invoking remote method 'export:run-capture': ${cause}\n    at node:electron/js2c/renderer_init:2:9921`,
+    });
+
+    captureException(wrapped('Error: Input has an unsupported or unrecognizable format.'), {
+      error_type: 'export_failed',
+    });
+    captureException(wrapped('TypeError: WebGL is required'));
+
+    expect(posthogMock.captureException).toHaveBeenCalledTimes(2);
+    const [first, , firstProperties] = posthogMock.captureException.mock.calls[0];
+    expect(first).toMatchObject({
+      name: 'Error',
+      message: 'Input has an unsupported or unrecognizable format.',
+    });
+    // No frames, so PostHog groups each cause by its type and message.
+    expect((first as Error).stack).toBe(
+      'Error: Input has an unsupported or unrecognizable format.',
+    );
+    expect(firstProperties).toEqual(
+      expect.objectContaining({ error_type: 'export_failed', ipc_channel: 'export:run-capture' }),
+    );
+    const [second] = posthogMock.captureException.mock.calls[1];
+    expect(second).toMatchObject({ name: 'TypeError', message: 'WebGL is required' });
+  });
+
+  it("never gives a stackless renderer error the main process's own stack", async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    captureException({ name: 'Error', message: 'rejected with a string' });
+
+    const [error] = posthogMock.captureException.mock.calls[0];
+    expect((error as Error).stack).toBe('Error: rejected with a string');
+  });
+
+  it.each([
+    'ResizeObserver loop completed with undelivered notifications.',
+    'ResizeObserver loop limit exceeded',
+  ])('ignores the harmless browser warning "%s"', async (message) => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    captureException({ name: 'Error', message }, { kind: 'error' });
+
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
+  });
+
+  it('never sends the user name in a file path, in events or errors', async () => {
+    electronMock.app.isPackaged = true;
+    const { initTelemetry, trackEvent, captureException } = await loadTelemetryModule();
+    initTelemetry();
+
+    trackEvent('recording_failed', {
+      error: 'Native recording did not finalize a readable MP4: /Users/jane/Library/x.mp4',
+    });
+    captureException(
+      {
+        name: 'Error',
+        message: "ENOENT: no such file, open 'C:\\Users\\Jane\\Videos\\out.mp4'",
+        stack: 'Error: ENOENT\n    at /home/jane/app/main.js:1:1',
+      },
+      { error_type: 'export_failed', message: 'failed writing /Users/jane/out.mp4' },
+    );
+
+    const [{ properties }] = posthogMock.capture.mock.calls.at(-1) as [
+      { properties: Record<string, unknown> },
+    ];
+    expect(properties.error).toBe(
+      'Native recording did not finalize a readable MP4: ~/Library/x.mp4',
+    );
+    const [error, , exceptionProperties] = posthogMock.captureException.mock.calls[0];
+    expect((error as Error).message).toBe("ENOENT: no such file, open '~\\Videos\\out.mp4'");
+    expect((error as Error).stack).toContain('at ~/app/main.js:1:1');
+    expect(exceptionProperties).toEqual(
+      expect.objectContaining({ message: 'failed writing ~/out.mp4' }),
+    );
+    expect(JSON.stringify(posthogMock.capture.mock.calls)).not.toMatch(/jane/i);
+    expect(JSON.stringify(posthogMock.captureException.mock.calls)).not.toMatch(/jane/i);
   });
 
   it('sends a repeating error once a minute, counting the repeats it held back', async () => {
@@ -281,12 +393,13 @@ describe('telemetry', () => {
     const crash = { event: '$exception' };
     const feedback = { event: 'feedback_submitted' };
 
-    expect(options.before_send(crash)).toBe(crash);
+    // Kept (as a redacted copy) while sharing is on.
+    expect(options.before_send(crash)).toEqual(crash);
 
     setTelemetryEnabled(false);
 
     expect(options.before_send(crash)).toBeNull();
-    expect(options.before_send(feedback)).toBe(feedback);
+    expect(options.before_send(feedback)).toEqual(feedback);
   });
 
   it('drops errors and feedback silently in local development', async () => {

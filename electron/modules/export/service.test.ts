@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExportSettings } from '../../../src/types';
+import type { CaptureWindowParams, ExportSettings } from '../../../src/types';
 
 const electronMock = vi.hoisted(() => ({
   app: {
@@ -186,5 +186,76 @@ describe('export service', () => {
     await expect(exportPromise).rejects.toThrow('Export cancelled');
     expect(cancel).toHaveBeenCalled();
     expect(ffmpegJobsMock.startExportJob).not.toHaveBeenCalled();
+  });
+
+  describe('before rendering starts', () => {
+    // A created capture window means the sources passed the check.
+    const WINDOW_CREATED = 'capture window created';
+
+    async function writeSource(name: string, contents: string): Promise<string> {
+      await fs.mkdir(tempRoot, { recursive: true });
+      const filePath = path.join(tempRoot, name);
+      await fs.writeFile(filePath, contents);
+      return filePath;
+    }
+
+    function captureParams(
+      filePath: string,
+      { cameraPath, cameraEnabled = false }: { cameraPath?: string; cameraEnabled?: boolean } = {},
+    ): CaptureWindowParams {
+      return {
+        recording: { filePath, cameraPath },
+        storeSnapshot: { camera: { enabled: cameraEnabled } },
+      } as unknown as CaptureWindowParams;
+    }
+
+    beforeEach(() => {
+      electronMock.BrowserWindow.mockImplementation(() => {
+        throw new Error(WINDOW_CREATED);
+      });
+    });
+
+    it('fails with a clear message when the recording file is empty', async () => {
+      // The screenforge:// protocol answers 416 to every range request on a
+      // 0-byte file, which surfaced as a cryptic fetch error mid-export.
+      const filePath = await writeSource('empty.mp4', '');
+      const { runCaptureInWindow } = await import('./service');
+
+      await expect(runCaptureInWindow(captureParams(filePath), '/preload.js')).rejects.toThrow(
+        "This recording is empty or damaged, so it can't be exported.",
+      );
+      expect(electronMock.BrowserWindow).not.toHaveBeenCalled();
+    });
+
+    it('fails with a clear message when the recording file is gone', async () => {
+      const { runCaptureInWindow } = await import('./service');
+
+      await expect(
+        runCaptureInWindow(captureParams(path.join(tempRoot, 'missing.mp4')), '/preload.js'),
+      ).rejects.toThrow("This recording's video file can't be found, so it can't be exported.");
+      expect(electronMock.BrowserWindow).not.toHaveBeenCalled();
+    });
+
+    it('fails when the camera video it would draw is empty', async () => {
+      const filePath = await writeSource('screen.mp4', 'video');
+      const cameraPath = await writeSource('camera.mp4', '');
+      const { runCaptureInWindow } = await import('./service');
+
+      await expect(
+        runCaptureInWindow(captureParams(filePath, { cameraPath, cameraEnabled: true }), '/p.js'),
+      ).rejects.toThrow(
+        "This recording's camera video is missing or damaged. Turn off the camera to export without it.",
+      );
+    });
+
+    it('ignores a broken camera video when the camera is turned off', async () => {
+      const filePath = await writeSource('screen.mp4', 'video');
+      const cameraPath = await writeSource('camera.mp4', '');
+      const { runCaptureInWindow } = await import('./service');
+
+      await expect(
+        runCaptureInWindow(captureParams(filePath, { cameraPath, cameraEnabled: false }), '/p.js'),
+      ).rejects.toThrow(WINDOW_CREATED);
+    });
   });
 });

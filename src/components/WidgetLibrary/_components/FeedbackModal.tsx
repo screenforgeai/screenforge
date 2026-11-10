@@ -170,11 +170,8 @@ export const FeedbackModal = ({
       } else {
         onClose();
       }
-      trackEvent('feedback_submitted', {
-        report_type: reportType,
-        active_widget: activeWidget,
-        share_logs: reportType === 'bug' && shareLogs,
-      });
+      // No trackEvent here: the main process records submitFeedback() as
+      // feedback_submitted, with logs_attached in place of share_logs.
     } catch (error) {
       const message = getErrorMessage(error) || t('errorSendFailed');
       setErrorText(message);
