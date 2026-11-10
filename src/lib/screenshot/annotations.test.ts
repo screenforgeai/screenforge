@@ -7,6 +7,7 @@ import {
   createStepShape,
   createTextShape,
   distanceToSegment,
+  findGrabbableShapeAt,
   findShapeAt,
   getAnnotationScale,
   getArrowHead,
@@ -258,6 +259,39 @@ describe('findShapeAt', () => {
   });
 });
 
+describe('findGrabbableShapeAt', () => {
+  it('grabs any shape anywhere with the Select tool', () => {
+    expect(findGrabbableShapeAt([box('b')], { x: 50, y: 30 }, 4, 'select')).toBe('b');
+  });
+
+  it('grabs a box by its edge with a drawing tool, so a new box can start inside it', () => {
+    expect(findGrabbableShapeAt([box('b')], { x: 11, y: 30 }, 4, 'box')).toBe('b');
+    expect(findGrabbableShapeAt([box('b')], { x: 50, y: 30 }, 4, 'box')).toBeNull();
+  });
+
+  it('grabs highlight and blur regions by their edge with a drawing tool', () => {
+    const blur: AnnotationShape = {
+      id: 'z',
+      type: 'blur',
+      color: '#000',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    };
+    expect(findGrabbableShapeAt([blur], { x: 50, y: 50 }, 4, 'step')).toBeNull();
+    expect(findGrabbableShapeAt([blur], { x: 99, y: 50 }, 4, 'step')).toBe('z');
+  });
+
+  it('grabs arrows, steps and text anywhere on them with any tool', () => {
+    expect(findGrabbableShapeAt([arrow('a')], { x: 50, y: 3 }, 4, 'box')).toBe('a');
+    const step = createStepShape({ x: 100, y: 100 }, 's', style);
+    expect(findGrabbableShapeAt([step], { x: 100, y: 100 }, 0, 'arrow')).toBe('s');
+    const text = must(createTextShape({ x: 0, y: 0 }, 'Hello', 't', style));
+    expect(findGrabbableShapeAt([text], { x: 10, y: 10 }, 0, 'text')).toBe('t');
+  });
+});
+
 describe('translateShape', () => {
   it('moves both arrow endpoints', () => {
     expect(translateShape(arrow('a'), 5, -5)).toMatchObject({ x1: 5, y1: -5, x2: 105, y2: -5 });
@@ -368,6 +402,43 @@ describe('annotationsReducer', () => {
     expect(annotationsReducer(state, { type: 'redo' })).toBe(state);
     expect(annotationsReducer(state, { type: 'remove', id: 'missing' })).toBe(state);
     expect(annotationsReducer(state, { type: 'update', shape: box('missing') })).toBe(state);
+  });
+
+  it('undoes and redoes style changes with the shapes', () => {
+    let state = createInitialAnnotationsState({ padding: 1 });
+    state = annotationsReducer(state, { type: 'add', shape: box('a') });
+    state = annotationsReducer(state, { type: 'setStyle', style: { padding: 2 } });
+    state = annotationsReducer(state, { type: 'undo' });
+    expect(state.style).toEqual({ padding: 1 });
+    expect(state.shapes.map((s) => s.id)).toEqual(['a']);
+    state = annotationsReducer(state, { type: 'undo' });
+    expect(state.shapes).toEqual([]);
+    state = annotationsReducer(state, { type: 'redo' });
+    state = annotationsReducer(state, { type: 'redo' });
+    expect(state.style).toEqual({ padding: 2 });
+  });
+
+  it('folds a slider drag into one undo step', () => {
+    let state = createInitialAnnotationsState({ padding: 0 });
+    for (const padding of [1, 2, 3]) {
+      state = annotationsReducer(state, { type: 'setStyle', style: { padding }, group: 'drag-1' });
+    }
+    expect(state.past).toHaveLength(1);
+    state = annotationsReducer(state, { type: 'setStyle', style: { padding: 9 }, group: 'drag-2' });
+    expect(state.past).toHaveLength(2);
+    state = annotationsReducer(state, { type: 'undo' });
+    expect(state.style).toEqual({ padding: 3 });
+    state = annotationsReducer(state, { type: 'undo' });
+    expect(state.style).toEqual({ padding: 0 });
+  });
+
+  it('starts a new undo step after an undo, even within the same group', () => {
+    let state = createInitialAnnotationsState({ padding: 0 });
+    state = annotationsReducer(state, { type: 'setStyle', style: { padding: 1 }, group: 'g' });
+    state = annotationsReducer(state, { type: 'undo' });
+    state = annotationsReducer(state, { type: 'setStyle', style: { padding: 5 }, group: 'g' });
+    expect(state.past).toHaveLength(1);
+    expect(state.past[0].style).toEqual({ padding: 0 });
   });
 
   it('caps history', () => {

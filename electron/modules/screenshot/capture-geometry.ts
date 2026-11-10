@@ -54,12 +54,14 @@ export function pickSourceForCapture<T extends SourceLike>(
   primaryDisplayId: number,
 ): T | null {
   const screens = sources.filter((source) => source.id.startsWith('screen:'));
+  // When ids don't match (a re-plugged display, the synthetic Wayland portal
+  // source), only a lone screen is a safe guess: with several, a guess could
+  // capture the wrong monitor, so fail and let the user pick again.
+  const onlyScreen = screens.length === 1 ? screens[0] : null;
 
   if (request.kind === 'area') {
     // The area selector window always covers the primary display.
-    return (
-      screens.find((source) => source.display_id === String(primaryDisplayId)) ?? screens[0] ?? null
-    );
+    return screens.find((source) => source.display_id === String(primaryDisplayId)) ?? onlyScreen;
   }
 
   const exact = sources.find((source) => source.id === request.sourceId);
@@ -67,8 +69,7 @@ export function pickSourceForCapture<T extends SourceLike>(
     return exact;
   }
   if (request.kind === 'display') {
-    // Stale ids (display re-plugged) or the synthetic Wayland source.
-    return screens[0] ?? null;
+    return onlyScreen;
   }
   return null;
 }

@@ -60,10 +60,31 @@ describe('pickSourceForCapture', () => {
     ).toBe('screen:1:0');
   });
 
-  it('falls back to the first screen when a display id is stale (e.g. Wayland)', () => {
+  it('falls back to the only screen when a display id is stale (e.g. the Wayland portal)', () => {
+    const portal = [{ id: 'screen:portal:0', display_id: '' }];
     expect(
-      pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:wayland' }, 99)?.id,
-    ).toBe('screen:1:0');
+      pickSourceForCapture(portal, { kind: 'display', sourceId: 'screen:wayland' }, 99)?.id,
+    ).toBe('screen:portal:0');
+    expect(
+      pickSourceForCapture(
+        portal,
+        { kind: 'area', sourceId: '', area: { x: 0, y: 0, width: 10, height: 10 } },
+        99,
+      )?.id,
+    ).toBe('screen:portal:0');
+  });
+
+  it('refuses to guess between several screens when none matches', () => {
+    expect(
+      pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:wayland' }, 99),
+    ).toBeNull();
+    expect(
+      pickSourceForCapture(
+        sources,
+        { kind: 'area', sourceId: '', area: { x: 0, y: 0, width: 10, height: 10 } },
+        99,
+      ),
+    ).toBeNull();
   });
 
   it('returns null for a window that is gone', () => {

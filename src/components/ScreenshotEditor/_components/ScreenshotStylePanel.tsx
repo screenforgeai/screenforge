@@ -30,17 +30,32 @@ const BACKGROUND_TYPES: Exclude<BackgroundType, 'blur'>[] = ['wallpaper', 'gradi
 type Props = {
   style: ScreenshotStyle;
   presets: StylePreset[];
-  onChange: (style: ScreenshotStyle) => void;
+  /** `group`: changes sharing one (a slider drag, one colour pick) undo as a single step. */
+  onChange: (style: ScreenshotStyle, group?: string) => void;
 };
+
+let groupCounter = 0;
+const nextGroup = (name: string) => `${name}-${++groupCounter}`;
 
 export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
   const { t } = useTranslation('screenshot');
   const { t: tFrame } = useTranslation('frame');
   const solidInputRef = useRef<HTMLInputElement>(null);
+  const groupRef = useRef<string | undefined>(undefined);
   const { background } = style;
 
-  const patchBackground = (patch: Partial<BackgroundSettings>) =>
-    onChange({ ...style, background: { ...background, ...patch } });
+  const patchBackground = (patch: Partial<BackgroundSettings>, group?: string) =>
+    onChange({ ...style, background: { ...background, ...patch } }, group);
+
+  /** Props that fold one slider drag into one undo step. */
+  const dragGroup = (name: string) => ({
+    onPointerDown: () => {
+      groupRef.current = nextGroup(name);
+    },
+    onValueCommit: () => {
+      groupRef.current = undefined;
+    },
+  });
 
   const backgroundLabel = (type: Exclude<BackgroundType, 'blur'>) =>
     type === 'gradient' ? t('gradient') : tFrame(type);
@@ -187,7 +202,10 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => solidInputRef.current?.click()}
+                  onClick={() => {
+                    groupRef.current = nextGroup('solid-color');
+                    solidInputRef.current?.click();
+                  }}
                   className="h-10 w-10 rounded-md border border-sf-border p-0 shadow-none hover:border-sf-border-lt hover:bg-transparent"
                   style={{ background: background.solidColor }}
                   title={tFrame('pickColor')}
@@ -197,7 +215,9 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
                   ref={solidInputRef}
                   type="color"
                   value={background.solidColor}
-                  onChange={(event) => patchBackground({ solidColor: event.target.value })}
+                  onChange={(event) =>
+                    patchBackground({ solidColor: event.target.value }, groupRef.current)
+                  }
                   className="sr-only"
                 />
               </div>
@@ -212,7 +232,10 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
               inlineLabel={tFrame('padding')}
               valueLabel={`${Math.round(background.padding * 100)}%`}
               value={[Math.round(background.padding * 100)]}
-              onValueChange={([value]) => patchBackground({ padding: value / 100 })}
+              {...dragGroup('padding')}
+              onValueChange={([value]) =>
+                patchBackground({ padding: value / 100 }, groupRef.current)
+              }
             />
             <Slider
               min={0}
@@ -221,7 +244,10 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
               inlineLabel={tFrame('cornerRadius')}
               valueLabel={`${background.cornerRadius}px`}
               value={[background.cornerRadius]}
-              onValueChange={([value]) => patchBackground({ cornerRadius: value })}
+              {...dragGroup('cornerRadius')}
+              onValueChange={([value]) =>
+                patchBackground({ cornerRadius: value }, groupRef.current)
+              }
             />
             <Slider
               min={0}
@@ -230,7 +256,8 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
               inlineLabel={tFrame('shadow')}
               valueLabel={`${background.shadowBlur}px`}
               value={[background.shadowBlur]}
-              onValueChange={([value]) => patchBackground({ shadowBlur: value })}
+              {...dragGroup('shadowBlur')}
+              onValueChange={([value]) => patchBackground({ shadowBlur: value }, groupRef.current)}
             />
             <Slider
               min={0}
@@ -239,7 +266,10 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
               inlineLabel={tFrame('opacity')}
               valueLabel={`${Math.round(background.shadowOpacity * 100)}%`}
               value={[Math.round(background.shadowOpacity * 100)]}
-              onValueChange={([value]) => patchBackground({ shadowOpacity: value / 100 })}
+              {...dragGroup('shadowOpacity')}
+              onValueChange={([value]) =>
+                patchBackground({ shadowOpacity: value / 100 }, groupRef.current)
+              }
             />
           </div>
         </>

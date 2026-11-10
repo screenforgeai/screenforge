@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScreenshotCapture, StylePreset } from 'src/types';
@@ -131,6 +131,42 @@ describe('ScreenshotEditor', () => {
     );
   });
 
+  it('does not export while a blur is still being drawn, only once it is placed', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ScreenshotEditor capture={capture} onClose={vi.fn()} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: canvas.width,
+      height: canvas.height,
+      right: canvas.width,
+      bottom: canvas.height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+    await user.click(screen.getByRole('button', { name: /^blur$/i }));
+
+    const at = (x: number, y: number) => ({ button: 0, pointerId: 1, clientX: x, clientY: y });
+    fireEvent.pointerDown(canvas, at(canvas.width * 0.3, canvas.height * 0.3));
+    fireEvent.pointerMove(canvas, at(canvas.width * 0.6, canvas.height * 0.6));
+    // The preview already shows the blur; an export now would not have it.
+    await user.keyboard('{Control>}c{/Control}');
+    await user.keyboard('{Meta>}c{/Meta}');
+    expect(screen.getByRole('button', { name: /^copy$/i })).toBeDisabled();
+    expect(window.screenforge.copyScreenshotToClipboard).not.toHaveBeenCalled();
+
+    fireEvent.pointerUp(canvas, at(canvas.width * 0.6, canvas.height * 0.6));
+    await user.click(screen.getByRole('button', { name: /^copy$/i }));
+    await waitFor(() => expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalled());
+  });
+
   it('saves the rendered PNG', async () => {
     const user = userEvent.setup();
     await renderEditor();
@@ -143,6 +179,19 @@ describe('ScreenshotEditor', () => {
     const { onClose } = await renderEditor();
     await user.click(screen.getByRole('button', { name: /close screenshot/i }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('undoes and redoes a style change from the keyboard', async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    const frame = screen.getByRole('switch', { name: /frame/i });
+    expect(frame).toHaveAttribute('aria-checked', 'true');
+    await user.click(frame);
+    expect(frame).toHaveAttribute('aria-checked', 'false');
+    await user.keyboard('{Control>}z{/Control}');
+    expect(frame).toHaveAttribute('aria-checked', 'true');
+    await user.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+    expect(frame).toHaveAttribute('aria-checked', 'false');
   });
 
   it('loads saved style presets', async () => {

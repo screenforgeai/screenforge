@@ -326,6 +326,49 @@ export function findShapeAt(
   return null;
 }
 
+/** Box, highlight and blur cover an area; the rest are marks you point at. */
+const isAreaShape = (shape: AnnotationShape): shape is BoxShape | HighlightShape | BlurShape =>
+  shape.type === 'box' || shape.type === 'highlight' || shape.type === 'blur';
+
+function onRectEdge(p: Point, rect: Rect, reach: number): boolean {
+  const inner = {
+    x: rect.x + reach,
+    y: rect.y + reach,
+    width: rect.width - reach * 2,
+    height: rect.height - reach * 2,
+  };
+  return (
+    insideRect(p, rect, reach) && !(inner.width > 0 && inner.height > 0 && insideRect(p, inner, 0))
+  );
+}
+
+/**
+ * The shape a press with `tool` picks up to move, or null to let the tool draw.
+ *
+ * Any tool can move what's already there, so the Select tool is never a detour.
+ * The exception keeps drawing possible: with a drawing tool, area shapes are
+ * only picked up by their edge, so a new box or badge can still go inside one.
+ */
+export function findGrabbableShapeAt(
+  shapes: readonly AnnotationShape[],
+  p: Point,
+  tolerance: number,
+  tool: AnnotationTool,
+): string | null {
+  const ordered = getRenderOrder(shapes);
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const shape = ordered[i];
+    const hit =
+      tool !== 'select' && isAreaShape(shape)
+        ? onRectEdge(p, shape, tolerance + (shape.type === 'box' ? shape.strokeWidth / 2 : 0))
+        : hitTestShape(shape, p, tolerance);
+    if (hit) {
+      return shape.id;
+    }
+  }
+  return null;
+}
+
 export function translateShape<T extends AnnotationShape>(shape: T, dx: number, dy: number): T {
   if (shape.type === 'arrow') {
     return {
@@ -391,38 +434,64 @@ export interface TextEdit {
 
 export const ANNOTATION_HISTORY_LIMIT = 100;
 
-export interface AnnotationsState {
+/**
+ * What one undo step restores. `style` is whatever the editor styles the
+ * screenshot with (frame, background…), so its changes undo with the shapes.
+ */
+export interface AnnotationsSnapshot<S = null> {
   shapes: AnnotationShape[];
-  past: AnnotationShape[][];
-  future: AnnotationShape[][];
+  style: S;
 }
 
-export type AnnotationsAction =
+export interface AnnotationsState<S = null> extends AnnotationsSnapshot<S> {
+  past: AnnotationsSnapshot<S>[];
+  future: AnnotationsSnapshot<S>[];
+  /** Group of the newest undo step, while edits can still fold into it. */
+  group: string | null;
+}
+
+export type AnnotationsAction<S = null> =
   | { type: 'add'; shape: AnnotationShape }
   | { type: 'update'; shape: AnnotationShape }
   | { type: 'remove'; id: string }
+  /** `group`: consecutive changes with the same group (one slider drag) undo as one. */
+  | { type: 'setStyle'; style: S; group?: string }
   | { type: 'undo' }
   | { type: 'redo' };
 
-export function createInitialAnnotationsState(): AnnotationsState {
-  return { shapes: [], past: [], future: [] };
+export function createInitialAnnotationsState<S = null>(style: S = null as S): AnnotationsState<S> {
+  return { shapes: [], style, past: [], future: [], group: null };
 }
 
-function commit(state: AnnotationsState, shapes: AnnotationShape[]): AnnotationsState {
+const snapshot = <S>(state: AnnotationsState<S>): AnnotationsSnapshot<S> => ({
+  shapes: state.shapes,
+  style: state.style,
+});
+
+function commit<S>(
+  state: AnnotationsState<S>,
+  next: Partial<AnnotationsSnapshot<S>>,
+  group: string | null = null,
+): AnnotationsState<S> {
+  if (group !== null && state.group === group) {
+    return { ...state, ...next, future: [] };
+  }
   return {
-    shapes,
-    past: [...state.past, state.shapes].slice(-ANNOTATION_HISTORY_LIMIT),
+    ...state,
+    ...next,
+    past: [...state.past, snapshot(state)].slice(-ANNOTATION_HISTORY_LIMIT),
     future: [],
+    group,
   };
 }
 
-export function annotationsReducer(
-  state: AnnotationsState,
-  action: AnnotationsAction,
-): AnnotationsState {
+export function annotationsReducer<S = null>(
+  state: AnnotationsState<S>,
+  action: AnnotationsAction<S>,
+): AnnotationsState<S> {
   switch (action.type) {
     case 'add':
-      return commit(state, [...state.shapes, action.shape]);
+      return commit(state, { shapes: [...state.shapes, action.shape] });
     case 'update': {
       const index = state.shapes.findIndex((s) => s.id === action.shape.id);
       if (index === -1) {
@@ -430,26 +499,29 @@ export function annotationsReducer(
       }
       const shapes = [...state.shapes];
       shapes[index] = action.shape;
-      return commit(state, shapes);
+      return commit(state, { shapes });
     }
     case 'remove': {
       if (!state.shapes.some((s) => s.id === action.id)) {
         return state;
       }
-      return commit(
-        state,
-        state.shapes.filter((s) => s.id !== action.id),
-      );
+      return commit(state, { shapes: state.shapes.filter((s) => s.id !== action.id) });
     }
+    case 'setStyle':
+      if (action.style === state.style) {
+        return state;
+      }
+      return commit(state, { style: action.style }, action.group ?? null);
     case 'undo': {
       const previous = state.past[state.past.length - 1];
       if (!previous) {
         return state;
       }
       return {
-        shapes: previous,
+        ...previous,
         past: state.past.slice(0, -1),
-        future: [state.shapes, ...state.future],
+        future: [snapshot(state), ...state.future],
+        group: null,
       };
     }
     case 'redo': {
@@ -457,7 +529,7 @@ export function annotationsReducer(
       if (!next) {
         return state;
       }
-      return { shapes: next, past: [...state.past, state.shapes], future: rest };
+      return { ...next, past: [...state.past, snapshot(state)], future: rest, group: null };
     }
   }
 }
@@ -468,7 +540,7 @@ export function resolveTextEdit(
   edit: TextEdit,
   newId: string,
   style: ShapeStyle,
-): AnnotationsAction | null {
+): AnnotationsAction<never> | null {
   if (edit.editingId === null) {
     const shape = createTextShape(edit.point, edit.value, newId, style);
     return shape ? { type: 'add', shape } : null;

@@ -30,8 +30,10 @@ function blurFocusedButtonOrAction(): void {
 }
 
 // The Screenshot editor overlays the timeline; its keys (Delete, Cmd+Z, T…)
-// must not also edit the video underneath.
-const isTimelineFocusable = () => useStore.getState().screenshotCapture === null;
+// must not also edit the video underneath. This goes through `ignoreEventWhen`,
+// not `enabled`: react-hotkeys-hook stops the event outright when an `enabled`
+// callback returns false, so the editor's own hotkeys would never see it.
+const isScreenshotEditorOpen = () => useStore.getState().screenshotCapture !== null;
 
 export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
   const callbacksRef = useRef<TimelineHotkeys>(callbacks);
@@ -46,7 +48,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onTogglePlay();
     },
-    { preventDefault: true, enableOnFormTags: false, enabled: isTimelineFocusable },
+    { preventDefault: true, enableOnFormTags: false, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
@@ -56,7 +58,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onSelectAll();
     },
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
@@ -66,7 +68,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onSplitAtPlayhead();
     },
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
@@ -76,7 +78,7 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onRedo();
     },
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
@@ -86,14 +88,14 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onUndo();
     },
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
   useHotkeys(
     'escape',
     () => callbacksRef.current.onClearSelection(),
-    { enabled: isTimelineFocusable },
+    { ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
@@ -103,35 +105,35 @@ export function useTimelineGlobalHotkeys(callbacks: TimelineHotkeys): void {
       blurFocusedButtonOrAction();
       callbacksRef.current.onDeleteSelected();
     },
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
   useHotkeys(
     'z',
     () => callbacksRef.current.onAddZoom(),
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
   useHotkeys(
     'shift+z',
     () => callbacksRef.current.onAddCinematicZoom(),
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
   useHotkeys(
     't',
     () => callbacksRef.current.onAddText(),
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 
   useHotkeys(
     'm',
     () => callbacksRef.current.onAddMask(),
-    { preventDefault: true, enabled: isTimelineFocusable },
+    { preventDefault: true, ignoreEventWhen: isScreenshotEditorOpen },
     [],
   );
 }
