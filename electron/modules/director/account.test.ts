@@ -128,6 +128,61 @@ describe('Director account', () => {
     expect(account.getState()).toEqual({ status: 'signed-out' });
   });
 
+  it('signs out here when Director revoked the token, even if the saved copy stays', async () => {
+    const { account, store } = setup({ stored: ACCOUNT });
+    await account.init();
+    store.clear.mockRejectedValue(new Error('EPERM'));
+    await account.signOut();
+    expect(account.getState()).toEqual({ status: 'signed-out' });
+    expect(account.getToken()).toBeNull();
+  });
+
+  it('does not claim to sign out when the token is neither revoked nor deleted', async () => {
+    const { account, store, client } = setup({ stored: ACCOUNT });
+    await account.init();
+    client.signOut.mockRejectedValue(new DirectorApiError(0, 'NETWORK_ERROR', 'offline'));
+    store.clear.mockRejectedValue(new Error('EPERM'));
+    await expect(account.signOut()).rejects.toThrow();
+    expect(account.getState()).toMatchObject({ status: 'signed-in' });
+    expect(account.getToken()).toBe('sfd_token');
+  });
+
+  it('cancels a waiting sign-in on sign-out, so a later approval is not kept', async () => {
+    const { account, client, store } = setup();
+    let approve: () => void = () => undefined;
+    client.pollLoginCode.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          approve = () => resolve({ status: 'approved', ...ACCOUNT });
+        }),
+    );
+    const signingIn = account.signIn();
+    await vi.waitFor(() => expect(client.pollLoginCode).toHaveBeenCalled());
+    await account.signOut();
+    approve();
+    await signingIn;
+    expect(store.save).not.toHaveBeenCalled();
+    expect(account.getToken()).toBeNull();
+    expect(account.getState()).toEqual({ status: 'signed-out' });
+  });
+
+  it('does not restore a saved sign-in that a sign-out overtook at launch', async () => {
+    const { account, store } = setup();
+    let finishLoad: (value: SignedInAccount | null) => void = () => undefined;
+    store.load.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishLoad = resolve;
+        }),
+    );
+    const starting = account.init();
+    await account.signOut();
+    finishLoad(ACCOUNT);
+    await starting;
+    expect(account.getToken()).toBeNull();
+    expect(account.getState()).toEqual({ status: 'signed-out' });
+  });
+
   it('forgets a token Director no longer accepts (disconnected in Director)', async () => {
     const { account, store } = setup({ stored: ACCOUNT });
     await account.init();

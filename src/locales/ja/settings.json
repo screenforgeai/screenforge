@@ -30,6 +30,7 @@
   "director_signedInBody": "共有リンク、ブランドキット、Director の録画が使えます。いつでもサインアウトできます。プロジェクトはこのコンピュータに残ります。",
   "director_notRemembered": "このコンピュータには Screenforge が使えるキーチェーンがないため、終了後にもう一度サインインが必要です。",
   "director_signOut": "サインアウト",
+  "director_signOutFailed": "サインアウトできませんでした。Director に接続できず、保存されたサインイン情報も削除できませんでした。接続を確認してもう一度お試しください。",
   "director_error_expired": "サインインのリンクの有効期限が切れました。もう一度お試しください。",
   "director_error_failed": "Director にサインインできませんでした。接続を確認して、もう一度お試しください。",
   "director_error_disconnected": "このアプリは Director から切断されました。再接続するにはもう一度サインインしてください。"

@@ -30,6 +30,7 @@
   "director_signedInBody": "Les liens de partage, le kit de marque et les enregistrements Director sont activés. Vous pouvez vous déconnecter à tout moment ; vos projets restent sur cet ordinateur.",
   "director_notRemembered": "Cet ordinateur n'a pas de trousseau que Screenforge peut utiliser : vous devrez vous reconnecter après avoir quitté l'app.",
   "director_signOut": "Se déconnecter",
+  "director_signOutFailed": "Impossible de se déconnecter : Director est injoignable et la connexion enregistrée n'a pas pu être supprimée. Vérifiez votre connexion et réessayez.",
   "director_error_expired": "Le lien de connexion a expiré. Réessayez.",
   "director_error_failed": "Impossible de se connecter à Director. Vérifiez votre connexion et réessayez.",
   "director_error_disconnected": "Cette app a été déconnectée de Director. Reconnectez-vous pour la relier à nouveau."

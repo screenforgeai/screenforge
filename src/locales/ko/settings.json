@@ -30,6 +30,7 @@
   "director_signedInBody": "공유 링크, 브랜드 키트, Director 녹화본을 사용할 수 있습니다. 언제든 로그아웃할 수 있으며, 프로젝트는 이 컴퓨터에 그대로 남습니다.",
   "director_notRemembered": "이 컴퓨터에는 Screenforge가 사용할 수 있는 키체인이 없어 앱을 종료하면 다시 로그인해야 합니다.",
   "director_signOut": "로그아웃",
+  "director_signOutFailed": "로그아웃하지 못했습니다. Director에 연결할 수 없고 저장된 로그인 정보도 삭제하지 못했습니다. 연결을 확인한 후 다시 시도하세요.",
   "director_error_expired": "로그인 링크가 만료되었습니다. 다시 시도하세요.",
   "director_error_failed": "Director에 로그인하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
   "director_error_disconnected": "이 앱은 Director와의 연결이 끊겼습니다. 다시 연결하려면 다시 로그인하세요."
