@@ -41,7 +41,7 @@ type ReleasesResponse = {
   data?: {
     availability?: {
       platforms?: {
-        linux?: { version?: string } | null;
+        linux?: { version?: unknown } | null;
       };
     };
   };
@@ -237,16 +237,13 @@ class LinuxUpdaterAdapter implements ActiveUpdaterAdapter {
     log.info('[updater] checking for updates');
     listeners.onChecking();
 
-    const response = await fetch(this.releasesUrl, {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(LINUX_RELEASES_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      throw new Error(`Could not check for updates (HTTP ${response.status}).`);
+    let latestVersion: string | undefined;
+    try {
+      latestVersion = await this.fetchLatestVersion();
+    } catch (error) {
+      log.warn('[updater] Linux release check failed', error);
+      throw error;
     }
-
-    const body = (await response.json()) as ReleasesResponse;
-    const latestVersion = body.data?.availability?.platforms?.linux?.version?.trim();
 
     if (latestVersion && isNewerVersion(latestVersion, this.currentVersion)) {
       log.info('[updater] newer Linux release published', { latestVersion });
@@ -260,6 +257,20 @@ class LinuxUpdaterAdapter implements ActiveUpdaterAdapter {
 
   quitAndInstall(): void {
     throw new Error('Linux updates are installed from the download page.');
+  }
+
+  private async fetchLatestVersion(): Promise<string | undefined> {
+    const response = await fetch(this.releasesUrl, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(LINUX_RELEASES_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      throw new Error(`Could not check for updates (HTTP ${response.status}).`);
+    }
+
+    const body = (await response.json()) as ReleasesResponse;
+    const version = body.data?.availability?.platforms?.linux?.version;
+    return typeof version === 'string' ? version.trim() : undefined;
   }
 }
 

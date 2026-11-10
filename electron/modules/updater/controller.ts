@@ -169,13 +169,7 @@ export class UpdaterController {
         this.setState(readyState);
       },
       onError: (error) => {
-        this.setState({
-          currentVersion: this.currentVersion,
-          status: 'error',
-          availableVersion: this.state.availableVersion,
-          releaseNotes: this.state.releaseNotes,
-          errorMessage: error.message,
-        });
+        this.reportCheckFailure(error.message);
       },
     });
 
@@ -246,16 +240,26 @@ export class UpdaterController {
       await this.adapter.checkForUpdates();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.setState({
-        currentVersion: this.currentVersion,
-        status: 'error',
-        availableVersion: this.state.availableVersion,
-        releaseNotes: this.state.releaseNotes,
-        errorMessage: message,
-      });
+      this.reportCheckFailure(message);
     } finally {
       this.checkInFlight = false;
     }
+  }
+
+  private reportCheckFailure(message: string): void {
+    // A failed re-check keeps a known newer version on screen; the next
+    // scheduled check tries again.
+    if (this.state.status === 'available') {
+      return;
+    }
+
+    this.setState({
+      currentVersion: this.currentVersion,
+      status: 'error',
+      availableVersion: this.state.availableVersion,
+      releaseNotes: this.state.releaseNotes,
+      errorMessage: message,
+    });
   }
 
   private setState(nextState: UpdaterState): void {

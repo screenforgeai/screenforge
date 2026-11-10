@@ -162,6 +162,21 @@ describe('updater service', () => {
       expect(listeners.onUpdateNotAvailable).toHaveBeenCalledOnce();
     });
 
+    it('treats a Linux release without a string version as no update', async () => {
+      stubReleases({
+        ok: true,
+        body: {
+          status: 'success',
+          data: { availability: { platforms: { linux: { version: 7 } } } },
+        },
+      });
+      const { adapter, listeners } = await startLinuxAdapter();
+
+      await adapter.checkForUpdates();
+
+      expect(listeners.onUpdateNotAvailable).toHaveBeenCalledOnce();
+    });
+
     it('fails the check when the releases endpoint errors', async () => {
       stubReleases({ ok: false, status: 503 });
       const { adapter } = await startLinuxAdapter();

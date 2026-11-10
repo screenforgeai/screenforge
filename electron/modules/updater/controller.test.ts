@@ -246,6 +246,36 @@ describe('UpdaterController', () => {
     });
   });
 
+  it('keeps a known newer version on screen when a re-check fails', async () => {
+    const checkForUpdates = vi.fn().mockResolvedValue(undefined);
+    const { adapter, getListeners } = createActiveAdapter(checkForUpdates);
+    const controller = new UpdaterController({
+      currentVersion: '0.0.22',
+      adapter,
+      isAppBusy: () => false,
+      checkIntervalMs: 60_000,
+    });
+
+    controller.start();
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    getListeners().onManualUpdateAvailable({ version: '0.0.23' });
+
+    getListeners().onError(new Error('feed unavailable'));
+    expect(controller.getState()).toMatchObject({
+      status: 'available',
+      availableVersion: '0.0.23',
+    });
+
+    checkForUpdates.mockRejectedValueOnce(new Error('fetch failed'));
+    await controller.checkForUpdatesNow();
+    expect(controller.getState()).toMatchObject({
+      status: 'available',
+      availableVersion: '0.0.23',
+    });
+  });
+
   it('invokes quitAndInstall when restart is requested for a ready update', async () => {
     const { adapter, getListeners } = createActiveAdapter();
     const controller = new UpdaterController({
