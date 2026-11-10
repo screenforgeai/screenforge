@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { trackEvent } from 'src/lib/analytics';
+import { readableErrorMessage } from 'src/lib/ipcError';
 import { IconPencil } from 'src/lib/icons';
 import { cn } from 'src/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
@@ -190,7 +191,7 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
         setMilestoneKofiOpen(true);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Export failed';
+      const message = readableErrorMessage(error, 'Export failed');
       if (message.toLowerCase().includes('cancel')) {
         toast(t('toast_exportRunning'));
       } else {

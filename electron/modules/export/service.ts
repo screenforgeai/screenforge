@@ -147,6 +147,37 @@ async function loadCaptureWorkerURL(win: BrowserWindow): Promise<void> {
   });
 }
 
+async function sourceFileSize(filePath: string): Promise<number | null> {
+  try {
+    const stats = await fs.stat(filePath);
+    return stats.isFile() ? stats.size : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The capture window reads its videos over screenforge://, which answers 416
+ * to any range request on an empty file. Catch a missing or empty source here,
+ * where we can say what's wrong, instead of as a fetch error mid-render.
+ */
+async function assertCaptureSourcesUsable(params: CaptureWindowParams): Promise<void> {
+  const screenSize = await sourceFileSize(params.recording.filePath);
+  if (screenSize === null) {
+    throw new Error("This recording's video file can't be found, so it can't be exported.");
+  }
+  if (screenSize === 0) {
+    throw new Error("This recording is empty or damaged, so it can't be exported.");
+  }
+
+  const { cameraPath } = params.recording;
+  if (cameraPath && params.storeSnapshot.camera.enabled && !(await sourceFileSize(cameraPath))) {
+    throw new Error(
+      "This recording's camera video is missing or damaged. Turn off the camera to export without it.",
+    );
+  }
+}
+
 /**
  * Create a hidden BrowserWindow that runs captureTimeline() in isolation so the
  * main window's JS event loop is never blocked during export compositing.
@@ -155,6 +186,8 @@ export async function runCaptureInWindow(
   params: CaptureWindowParams,
   preloadPath: string,
 ): Promise<CaptureWindowResult> {
+  await assertCaptureSourcesUsable(params);
+
   // Destroy any previous capture window (shouldn't happen, but be defensive)
   captureWindow?.destroy();
 

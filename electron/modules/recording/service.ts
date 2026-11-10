@@ -170,6 +170,8 @@ const STOP_SIGINT_DELAY_MS = process.platform === 'win32' ? 12000 : 2000;
 const FFMPEG_CAPTURE_FRAME_MS = 1000 / 60;
 const STOP_SIGTERM_DELAY_MS = process.platform === 'win32' ? 18000 : 8000;
 const STOP_SIGKILL_DELAY_MS = process.platform === 'win32' ? 25000 : 12000;
+const NOTHING_CAPTURED_MESSAGE =
+  "Nothing was captured. Make sure what you're recording stays visible on screen, then try again.";
 
 type UiohookModule = typeof import('uiohook-napi');
 type UiohookInstance = UiohookModule['uIOhook'];
@@ -960,9 +962,17 @@ async function stopNativeCapture(): Promise<string> {
       settled = true;
       clearStopTimers();
 
-      const hasOutput = await fileExistsAndHasData(outPath);
+      // The helper exits 0 even when it wrote nothing (on macOS, when
+      // ScreenCaptureKit never delivers a frame). An empty file would open as a
+      // blank recording and only fail at export, so fail here instead.
+      if (!(await fileExistsAndHasData(outPath))) {
+        log.error('[native:capture] no video was written', 'code=', code, 'signal=', signal);
+        reject(new Error(NOTHING_CAPTURED_MESSAGE));
+        return;
+      }
+
       const canUseAbnormalOutput =
-        hasOutput && (process.platform !== 'win32' || (await canReadVideoFrame(outPath)));
+        process.platform !== 'win32' || (await canReadVideoFrame(outPath));
       if (code === 0 || canUseAbnormalOutput) {
         if (code !== 0) {
           log.warn(
@@ -981,7 +991,7 @@ async function stopNativeCapture(): Promise<string> {
 
       // On Windows the IMFSinkWriter may have been interrupted before writing the moov
       // atom, leaving the MP4 unreadable. Attempt to recover whatever frames were written.
-      if (process.platform === 'win32' && hasOutput) {
+      if (process.platform === 'win32') {
         const recoveredPath = await tryRecoverIncompleteCapture(outPath);
         if (recoveredPath) {
           resolve(recoveredPath);
