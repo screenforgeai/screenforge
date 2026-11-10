@@ -16,7 +16,7 @@ export const DEFAULT_CURSOR_SETTINGS: ProjectCursorSettings = {
   hideWhenIdle: false,
   idleHideSeconds: 5,
   clickSound: 'none',
-  clickSoundVolume: 0.3,
+  clickSoundVolume: 0.5,
   continuousTracking: true,
 };
 

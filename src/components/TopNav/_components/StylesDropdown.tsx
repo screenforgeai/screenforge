@@ -17,6 +17,7 @@ import {
 import { useStore } from '../../../store';
 import { applyStylePresetZoom } from '../../../lib/effects/zoom/style';
 import type { CaptionAppearance, StylePreset } from '../../../types';
+import { normalizeCursorClickSound } from '../../../lib/effects/cursor/audio';
 
 export const StylesDropdown = () => {
   const [open, setOpen] = useState(false);
@@ -94,7 +95,7 @@ export const StylesDropdown = () => {
       cursorMaxTilt: preset.cursor.maxTilt,
       cursorHideWhenIdle: preset.cursor.hideWhenIdle,
       cursorIdleHideSeconds: preset.cursor.idleHideSeconds,
-      cursorClickSound: preset.cursor.clickSound,
+      cursorClickSound: normalizeCursorClickSound(preset.cursor.clickSound),
       cursorClickSoundVolume: preset.cursor.clickSoundVolume,
       cursorContinuousTracking: preset.cursor.continuousTracking,
       camera: {

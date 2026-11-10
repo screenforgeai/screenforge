@@ -119,27 +119,32 @@ const SelectLabel = React.forwardRef<
 ));
 SelectLabel.displayName = SelectPrimitive.Label.displayName;
 
-const SelectItem = React.forwardRef<
-  React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item
-    ref={ref}
-    className={cn(
-      'cursor-pointer relative flex w-full select-none items-center rounded-md px-3 py-2 pl-9 text-md tracking-[-0.01em] text-sf-primary outline-none data-disabled:pointer-events-none data-disabled:opacity-50 data-[highlighted]:bg-[#1a1a20] data-[highlighted]:text-sf-primary data-[state=checked]:bg-[#17171c] data-[state=checked]:font-medium data-[state=checked]:text-sf-primary',
-      className,
-    )}
-    {...props}
-  >
-    <span className="absolute left-3 flex h-4 w-4 items-center justify-center text-primary">
-      <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
-      </SelectPrimitive.ItemIndicator>
-    </span>
+type SelectItemProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+  /** Rendered at the end of the row, outside the item text shown in the trigger (e.g. a preview button). */
+  endAdornment?: React.ReactNode;
+};
 
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-  </SelectPrimitive.Item>
-));
+const SelectItem = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Item>, SelectItemProps>(
+  ({ className, children, endAdornment, ...props }, ref) => (
+    <SelectPrimitive.Item
+      ref={ref}
+      className={cn(
+        'cursor-pointer relative flex w-full select-none items-center rounded-md px-3 py-2 pl-9 text-md tracking-[-0.01em] text-sf-primary outline-none data-disabled:pointer-events-none data-disabled:opacity-50 data-[highlighted]:bg-[#1a1a20] data-[highlighted]:text-sf-primary data-[state=checked]:bg-[#17171c] data-[state=checked]:font-medium data-[state=checked]:text-sf-primary',
+        className,
+      )}
+      {...props}
+    >
+      <span className="absolute left-3 flex h-4 w-4 items-center justify-center text-primary">
+        <SelectPrimitive.ItemIndicator>
+          <Check className="h-4 w-4" />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      {endAdornment ? <span className="ml-auto flex items-center pl-2">{endAdornment}</span> : null}
+    </SelectPrimitive.Item>
+  ),
+);
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
 const SelectSeparator = React.forwardRef<
