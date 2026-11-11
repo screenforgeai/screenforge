@@ -153,6 +153,11 @@ function createScreenforgeMock(backend: CaptureBackend) {
     onSceneOverlayClosed: vi.fn(noopUnsubscribe),
     onStopRequested: vi.fn(noopUnsubscribe),
     onRecordingSourceLost: vi.fn(noopUnsubscribe),
+    onVideoModeRequested: vi.fn(noopUnsubscribe),
+    setToolbarRecording: vi.fn(),
+    getCaptureShortcuts: vi
+      .fn()
+      .mockResolvedValue({ screenshot: 'Alt+Shift+S', record: 'Alt+Shift+R' }),
     getSystemAudioSupport: vi.fn().mockResolvedValue({ supported: true }),
     prepareRecordingStartPermissions: vi.fn().mockResolvedValue(undefined),
     prepareScreenshotPermissions: vi.fn().mockResolvedValue(undefined),
@@ -303,6 +308,64 @@ describe('FloatingToolbar recording widget', () => {
       expect(getDisplayMedia).not.toHaveBeenCalled();
       expect(FakeMediaRecorder.instances).toHaveLength(0);
       expect(screenforge.hideToolbar).toHaveBeenCalled();
+    });
+
+    const lastReportedBusy = () => screenforge.setToolbarRecording.mock.calls.at(-1)?.[0];
+
+    const clickRecord = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      await waitFor(
+        () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+          expect(screenforge.prepareRecordingStartPermissions).toHaveBeenCalled();
+        },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+    };
+
+    it('counts as busy while the permission check before the countdown runs', async () => {
+      screenforge.prepareRecordingStartPermissions.mockImplementation(
+        () => new Promise<void>(() => undefined),
+      );
+      await clickRecord();
+      await waitFor(() => expect(lastReportedBusy()).toBe(true));
+    });
+
+    it('goes back to idle when recording permissions are refused', async () => {
+      screenforge.prepareRecordingStartPermissions.mockRejectedValue(new Error('No access'));
+      await clickRecord();
+      await waitFor(() => expect(lastReportedBusy()).toBe(false));
+      expect(screenforge.setToolbarRecording).toHaveBeenCalledWith(true);
+    });
+
+    it('counts as busy during the countdown, before recording starts', async () => {
+      await clickRecord();
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+      expect(lastReportedBusy()).toBe(true);
+    });
+
+    it('stays busy after Stop until the recording reaches the editor', async () => {
+      let finishStop: (value: unknown) => void = () => undefined;
+      const stopResult = await screenforge.stopRecording();
+      screenforge.stopRecording.mockClear();
+      screenforge.stopRecording.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishStop = resolve;
+          }),
+      );
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+      await waitFor(() => expect(screenforge.stopRecording).toHaveBeenCalled());
+      expect(lastReportedBusy()).toBe(true);
+
+      finishStop(stopResult);
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      await waitFor(() => expect(lastReportedBusy()).toBe(false));
     });
 
     it('stops recording and reports the result to the editor', async () => {
@@ -521,6 +584,23 @@ describe('FloatingToolbar recording widget', () => {
       expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Take screenshot' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+    });
+
+    it('switches back to Video when the record shortcut is pressed', async () => {
+      await switchToScreenshot();
+      const onVideoMode = screenforge.onVideoModeRequested.mock.calls.at(-1)?.[0] as
+        | (() => void)
+        | undefined;
+      act(() => onVideoMode?.());
+      expect(screen.getByRole('button', { name: 'Video' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
+    });
+
+    it('names the global shortcut in the Screenshot tooltip', async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureShortcuts).toHaveBeenCalled());
+      fireEvent.focus(screen.getByRole('button', { name: 'Screenshot' }));
+      expect(await screen.findAllByText('Alt+Shift+S')).not.toHaveLength(0);
     });
 
     it('captures the display, asking only for screen access', async () => {

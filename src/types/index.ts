@@ -1,3 +1,5 @@
+import type { CaptureShortcutAction } from '../lib/captureShortcuts';
+
 export interface PreloadProgress {
   task: string;
   completed: number;
@@ -551,6 +553,9 @@ export interface TextClip {
 
 export type AreaSelectorPurpose = 'record' | 'screenshot';
 
+/** Global capture shortcuts that registered, as accelerators; one another app holds is missing. */
+export type RegisteredCaptureShortcuts = Partial<Record<CaptureShortcutAction, string>>;
+
 export interface ScreenforgeAPI {
   onPreloadProgress: (cb: (p: PreloadProgress) => void) => () => void;
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void;
@@ -755,6 +760,11 @@ export interface ScreenforgeAPI {
   cancelAreaSelection: () => void;
   /** `purpose` picks the confirm button: record (default) or take a screenshot. */
   openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
+  getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;
+  /** The record shortcut asks an open toolbar to switch back to Video. */
+  onVideoModeRequested: (cb: () => void) => () => void;
+  /** Tells main the toolbar is counting down or recording (true) or idle (false). */
+  setToolbarRecording: (active: boolean) => void;
 }
 
 declare global {

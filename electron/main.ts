@@ -10,7 +10,12 @@ import log, { getLogFilePath } from './lib/logger';
 import { installNavigationGuards } from './lib/navigation-guard';
 import { pinWindowToAllWorkspaces } from './lib/workspace-pin';
 import { registerAppChannels } from './modules/app/channel';
-import { runPreloadTasks, requestAccessibilityAccess } from './modules/app/service';
+import {
+  prepareScreenshotPermissions,
+  requestAccessibilityAccess,
+  runPreloadTasks,
+  showSystemWarning,
+} from './modules/app/service';
 import { initTelemetry, shutdownTelemetry, trackEvent } from './lib/telemetry';
 import { registerWindowChannels } from './modules/app/window-controller';
 import { resetToolbarMousePassthrough, resetToolbarShapeState } from './modules/app/toolbar-mouse';
@@ -55,7 +60,16 @@ import { registerAreaSelectorChannels } from './modules/area-selector/channel';
 import { registerImportChannels } from './modules/import/channel';
 import { registerScreenshotChannels } from './modules/screenshot/channel';
 import { pickAndImportVideo } from './modules/import/service';
-import { getAreaSelectorWindow } from './modules/area-selector/service';
+import { getAreaSelectorWindow, openAreaSelector } from './modules/area-selector/service';
+import { isAreaScreenshotInFlight, takeAreaScreenshot } from './modules/screenshot/flow';
+import { isWaylandSession } from './lib/linux-capture';
+import { registerCaptureShortcutChannels } from './modules/capture-shortcuts/channel';
+import {
+  isToolbarRecording,
+  registerCaptureShortcuts,
+  setToolbarRecording,
+  unregisterCaptureShortcuts,
+} from './modules/capture-shortcuts/service';
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
 
 // Before telemetry or anything else writes to userData: tells a fresh
@@ -86,10 +100,12 @@ if (process.platform === 'win32') {
 }
 
 // Linux: enable Chromium's PipeWire capturer so screen recording works on
-// Wayland sessions (capture goes through xdg-desktop-portal). Harmless no-op
-// on X11 sessions and on Electron versions where this is already default-on.
+// Wayland sessions (capture goes through xdg-desktop-portal), and the
+// GlobalShortcuts portal so the capture shortcuts register there. Harmless
+// no-ops on X11 sessions and on Electron versions where these are default-on.
+// One switch: a second enable-features would replace the first.
 if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer');
+  app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer,GlobalShortcutsPortal');
 }
 
 // Must be called before app.ready
@@ -338,6 +354,9 @@ function createToolbarWindow(): BrowserWindow {
   // Give the toolbar a stable title so the native SCK helper can exclude it by name.
   win.setTitle('ScreenforgeToolbar');
 
+  // A toolbar closed mid-countdown can't report going idle itself.
+  win.on('closed', () => setToolbarRecording(false));
+
   win.once('ready-to-show', () => {
     // Apply content protection after content is rendered — on Windows, calling
     // setContentProtection before the window is ready can conflict with transparent
@@ -469,6 +488,7 @@ app.on('ready', async () => {
       toolbarWindow = window;
     },
   });
+  registerCaptureShortcutChannels();
   registerWindowChannels({
     getMainWindow: () => mainWindow,
     getToolbarWindow: () => toolbarWindow,
@@ -516,20 +536,68 @@ app.on('ready', async () => {
 
   mainWindow.show();
   mainWindow.focus();
-  initAppTray(
-    mainWindow,
-    TRAY_ICON_PATH,
-    () => {
-      mainWindow?.hide();
-      if (!toolbarWindow) {
-        toolbarWindow = createToolbarWindow();
-      } else {
-        resetToolbarMousePassthrough(toolbarWindow);
-        toolbarWindow.show();
-        toolbarWindow.focus();
+
+  const openToolbar = () => {
+    // The toolbar would land in the still, or outlive the capture that closes it.
+    if (isAreaScreenshotInFlight()) {
+      return;
+    }
+    mainWindow?.hide();
+    if (!toolbarWindow) {
+      toolbarWindow = createToolbarWindow();
+    } else {
+      resetToolbarMousePassthrough(toolbarWindow);
+      toolbarWindow.show();
+      toolbarWindow.focus();
+    }
+  };
+  const takeScreenshot = () => {
+    void takeAreaScreenshot({
+      getMainWindow: () => mainWindow,
+      getToolbarWindow: () => toolbarWindow,
+      setToolbarWindow: (window) => {
+        toolbarWindow = window;
+      },
+      isBusy: () => isRecordingBusy() || isToolbarRecording(),
+      preparePermissions: prepareScreenshotPermissions,
+      selectArea: () => openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot'),
+      warn: showSystemWarning,
+    }).then((result) => {
+      if (result === 'taken') {
+        trackEvent('screenshot_taken', { kind: 'area', trigger: 'shortcut' });
+      } else if (result === 'failed') {
+        trackEvent('screenshot_failed', { source: 'area', trigger: 'shortcut' });
       }
+    });
+  };
+  const captureShortcuts = registerCaptureShortcuts(
+    {
+      screenshot: takeScreenshot,
+      record: () => {
+        if (
+          isRecordingBusy() ||
+          isToolbarRecording() ||
+          getAreaSelectorWindow() ||
+          isAreaScreenshotInFlight()
+        ) {
+          return;
+        }
+        const hadToolbar = toolbarWindow !== null;
+        openToolbar();
+        if (hadToolbar) {
+          toolbarWindow?.webContents.send(CH.captureShortcuts.VIDEO_MODE_REQUESTED);
+        }
+      },
     },
-    () => {
+    undefined,
+    // Wayland can't confirm a bind, so its shortcuts aren't shown in the UI.
+    { canConfirm: !(process.platform === 'linux' && isWaylandSession()) },
+  );
+
+  initAppTray(mainWindow, TRAY_ICON_PATH, {
+    onNewRecording: openToolbar,
+    onTakeScreenshot: takeScreenshot,
+    onImportVideo: () => {
       mainWindow?.show();
       mainWindow?.focus();
       app.dock?.show();
@@ -541,7 +609,8 @@ app.on('ready', async () => {
         mainWindow?.webContents.send(CH.import.TRIGGER, result);
       });
     },
-  );
+    accelerators: captureShortcuts,
+  });
 
   setToolbarWindowTitle('ScreenforgeToolbar');
 
@@ -584,6 +653,7 @@ app.on('before-quit', (event) => {
   shutdownTelemetry()
     .catch((err) => log.warn('[app] telemetry shutdown error:', err))
     .finally(() => {
+      unregisterCaptureShortcuts();
       destroyAppTray();
       app.exit(0);
     });

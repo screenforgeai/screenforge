@@ -16,6 +16,7 @@ import { areaSelectorBridge } from './modules/area-selector/bridge';
 import { importBridge } from './modules/import/bridge';
 import { whatsNewBridge } from './modules/whats-new/bridge';
 import { screenshotBridge } from './modules/screenshot/bridge';
+import { captureShortcutsBridge } from './modules/capture-shortcuts/bridge';
 
 contextBridge.exposeInMainWorld('screenforge', {
   ...sourcesBridge,
@@ -35,5 +36,6 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...importBridge,
   ...whatsNewBridge,
   ...screenshotBridge,
+  ...captureShortcutsBridge,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 });

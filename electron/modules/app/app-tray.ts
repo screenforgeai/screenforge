@@ -1,10 +1,18 @@
 import { app, BrowserWindow, Menu, nativeImage, Tray } from 'electron';
 import log from '../../lib/logger';
+import type { RegisteredCaptureShortcuts } from '../../../src/types/index';
+
+export type AppTrayActions = {
+  onNewRecording: () => void;
+  onTakeScreenshot: () => void;
+  onImportVideo: () => void;
+  /** Live global capture shortcuts, shown beside their menu items. */
+  accelerators: RegisteredCaptureShortcuts;
+};
 
 let appTray: Tray | null = null;
 let mainWindowRef: BrowserWindow | null = null;
-let onNewRecordingRef: (() => void) | null = null;
-let onImportVideoRef: (() => void) | null = null;
+let actionsRef: AppTrayActions | null = null;
 let recordingTimer: ReturnType<typeof setInterval> | null = null;
 let recordingStart = 0;
 let trayIconPath = '';
@@ -31,10 +39,30 @@ function showMainWindow(): void {
   app.dock?.show();
 }
 
+/**
+ * Shows a global shortcut beside its menu item. registerAccelerator: false
+ * keeps the menu from claiming the key itself: the global shortcut owns it.
+ */
+function shortcutLabel(
+  accelerator: string | undefined,
+): Partial<Electron.MenuItemConstructorOptions> {
+  return accelerator ? { accelerator, registerAccelerator: false } : {};
+}
+
 function buildIdleMenu(): Electron.Menu {
+  const accelerators = actionsRef?.accelerators ?? {};
   return Menu.buildFromTemplate([
-    { label: 'New Recording', click: () => onNewRecordingRef?.() },
-    { label: 'Import Video', click: () => onImportVideoRef?.() },
+    {
+      label: 'New Recording',
+      click: () => actionsRef?.onNewRecording(),
+      ...shortcutLabel(accelerators.record),
+    },
+    {
+      label: 'Take Screenshot',
+      click: () => actionsRef?.onTakeScreenshot(),
+      ...shortcutLabel(accelerators.screenshot),
+    },
+    { label: 'Import Video', click: () => actionsRef?.onImportVideo() },
     { label: 'Open Screenforge', click: showMainWindow },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
@@ -46,6 +74,7 @@ function buildRecordingMenu(onStop: () => void): Electron.Menu {
     { label: 'Stop Recording (F9)', click: onStop },
     { type: 'separator' },
     { label: 'New Recording', enabled: false },
+    { label: 'Take Screenshot', enabled: false },
     { label: 'Open Screenforge', enabled: false },
     { type: 'separator' },
     { label: 'Quit Screenforge', click: () => app.quit() },
@@ -134,16 +163,14 @@ function createFallbackIcon(): Electron.NativeImage {
 export function initAppTray(
   mainWindow: BrowserWindow,
   iconPath: string,
-  onNewRecording: () => void,
-  onImportVideo: () => void,
+  actions: AppTrayActions,
 ): void {
   if (appTray) {
     return;
   }
 
   mainWindowRef = mainWindow;
-  onNewRecordingRef = onNewRecording;
-  onImportVideoRef = onImportVideo;
+  actionsRef = actions;
   trayIconPath = iconPath;
 
   try {
@@ -167,8 +194,7 @@ export function destroyAppTray(): void {
   appTray?.destroy();
   appTray = null;
   mainWindowRef = null;
-  onNewRecordingRef = null;
-  onImportVideoRef = null;
+  actionsRef = null;
   idleIcon = null;
   recordingIcon = null;
 }
