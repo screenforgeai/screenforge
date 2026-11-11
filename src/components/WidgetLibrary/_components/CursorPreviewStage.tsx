@@ -152,11 +152,7 @@ export const CursorPreviewStage = ({
           ctx.drawImage(img, rx, ry, rec.width, rec.height);
         }
         ctx.restore();
-        ctx.beginPath();
-        ctx.arc(cursor.x, cursor.y, radius, 0, Math.PI * 2);
-        ctx.lineWidth = 2.5 * scale;
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
+        // The glass (rim, shine, shadow) is drawn by drawCursorEffects below.
       }
 
       drawCursorEffects(ctx, {

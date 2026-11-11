@@ -5,6 +5,7 @@ import {
   CURSOR_STYLE_IDS,
   DEFAULT_CURSOR_COLOR,
   getCursorStyleExtent,
+  getPointerAxis,
   isAnimatedCursorStyle,
   isNameTagCursorStyle,
   normalizeCursorColor,
@@ -88,5 +89,16 @@ describe('cursor extents', () => {
     expect(long.right).toBeGreaterThan(short.right);
     // Without a name there is no tag to make room for.
     expect(getCursorStyleExtent(style, 'default', '').right).toBeLessThan(short.right);
+  });
+});
+
+describe('pointer angle', () => {
+  it('aims the dart pointers along the macOS arrow, so tilting while moving looks right', () => {
+    const mac = getPointerAxis('cursor01');
+    // The macOS arrow leans about 23° left of straight up (its body points down-right ~66°).
+    expect((mac * 180) / Math.PI).toBeCloseTo(66.6, 0);
+    for (const style of ['wedge', 'collaborator', 'rounded'] as const) {
+      expect(Math.abs(getPointerAxis(style) - mac), style).toBeLessThan((1 * Math.PI) / 180);
+    }
   });
 });
