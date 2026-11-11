@@ -82,6 +82,7 @@ describe('WhatsNewModal', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Show 2 more' }));
 
     expect(within(dialog).getByText('Fix number 6.')).toBeInTheDocument();
+    expect(within(dialog).getByText('Fix number 6.').closest('[tabindex="0"]')).toHaveFocus();
     expect(within(dialog).queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
   });
 

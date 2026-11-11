@@ -96,7 +96,13 @@ const Feature = ({ item }: { item: ReleaseNoteItem }) => {
   );
 };
 
-const Fixes = ({ items }: { items: ReleaseNoteItem[] }) => {
+type FixesProps = {
+  items: ReleaseNoteItem[];
+  /** Called after "Show more" unmounts, so focus can go back to the notes. */
+  onExpanded: () => void;
+};
+
+const Fixes = ({ items, onExpanded }: FixesProps) => {
   const { t } = useTranslation('whatsNew');
   const [expanded, setExpanded] = useState(false);
   const hidden = items.length - VISIBLE_FIXES;
@@ -120,7 +126,10 @@ const Fixes = ({ items }: { items: ReleaseNoteItem[] }) => {
         <button
           type="button"
           className="mt-3 cursor-pointer text-[13px] text-sf-secondary transition-colors hover:text-sf-primary"
-          onClick={() => setExpanded(true)}
+          onClick={() => {
+            setExpanded(true);
+            onExpanded();
+          }}
         >
           {t('showMore', { count: hidden })}
         </button>
@@ -129,7 +138,12 @@ const Fixes = ({ items }: { items: ReleaseNoteItem[] }) => {
   );
 };
 
-const ReleaseContent = ({ release }: { release: ReleaseNotes }) => (
+type ReleaseContentProps = {
+  release: ReleaseNotes;
+  onFixesExpanded: () => void;
+};
+
+const ReleaseContent = ({ release, onFixesExpanded }: ReleaseContentProps) => (
   <div className="flex flex-col gap-8">
     {release.newItems.length > 0 && (
       <div className="flex flex-col gap-6">
@@ -140,7 +154,7 @@ const ReleaseContent = ({ release }: { release: ReleaseNotes }) => (
     )}
     {release.fixItems.length > 0 && (
       <div className={release.newItems.length > 0 ? 'border-t border-sf-border/60 pt-7' : ''}>
-        <Fixes items={release.fixItems} />
+        <Fixes items={release.fixItems} onExpanded={onFixesExpanded} />
       </div>
     )}
   </div>
@@ -152,6 +166,9 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
   const scrollRef = useRef<HTMLDivElement>(null);
   const latest = releases[0];
   const isRange = releases.length > 1;
+
+  // "Show more" removes itself; keep keyboard focus on the notes, not the dialog.
+  const focusNotes = () => scrollRef.current?.focus({ preventScroll: true });
 
   if (!latest) {
     return null;
@@ -220,12 +237,12 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
                 <h3 className="mb-5">
                   <VersionPill>{t('versionHeading', { version: release.version })}</VersionPill>
                 </h3>
-                <ReleaseContent release={release} />
+                <ReleaseContent release={release} onFixesExpanded={focusNotes} />
               </section>
             ))
           ) : (
             <div className="pt-1">
-              <ReleaseContent release={latest} />
+              <ReleaseContent release={latest} onFixesExpanded={focusNotes} />
             </div>
           )}
         </div>
