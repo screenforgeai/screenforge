@@ -322,6 +322,35 @@ async function assertMovingOutput(
   expect(new Set(hashes).size).toBeGreaterThanOrEqual(minDistinctFrameHashes);
 }
 
+/**
+ * Every pixel on the output's outer edge stays at most `maxLuma`: none of the
+ * bright line just outside the crop reached the picture.
+ */
+async function assertCropEdges(
+  outputPath: string,
+  width: number,
+  height: number,
+  duration: number,
+  maxLuma: number,
+): Promise<void> {
+  expect(width).toBeGreaterThan(0);
+  expect(height).toBeGreaterThan(0);
+  const gray = ['-f', 'rawvideo', '-pix_fmt', 'gray'];
+  for (const time of [0.05, Math.max(duration / 2, 0.05), Math.max(duration - 0.1, 0.05)]) {
+    const luma = await sampleFrame(outputPath, time, gray);
+    expect(luma.length).toBe(width * height);
+    const edges = {
+      top: Array.from({ length: width }, (_, x) => luma[x]),
+      bottom: Array.from({ length: width }, (_, x) => luma[(height - 1) * width + x]),
+      left: Array.from({ length: height }, (_, y) => luma[y * width]),
+      right: Array.from({ length: height }, (_, y) => luma[y * width + width - 1]),
+    };
+    for (const [edge, values] of Object.entries(edges)) {
+      expect(Math.max(...values), `${edge} edge at ${time}s`).toBeLessThanOrEqual(maxLuma);
+    }
+  }
+}
+
 beforeAll(async () => {
   ffmpegPath = await resolveTestFFmpegPath();
 
@@ -355,6 +384,7 @@ describe.sequential('export integration', () => {
     'mp4-motion-multiclip.json',
     'mp4-duration-overrun.json',
     'mp4-aspect-4x3.json',
+    'mp4-area-crop.json',
     'gif-smoke.json',
   ];
 
@@ -395,6 +425,16 @@ describe.sequential('export integration', () => {
 
     if (manifest.expected.maxElapsedMs != null) {
       expect(result.elapsedMs).toBeLessThanOrEqual(manifest.expected.maxElapsedMs);
+    }
+
+    if (manifest.expected.cropEdgeMaxLuma != null) {
+      await assertCropEdges(
+        result.outputPath as string,
+        outputInfo.width ?? 0,
+        outputInfo.height ?? 0,
+        outputInfo.duration ?? result.duration ?? 0.5,
+        manifest.expected.cropEdgeMaxLuma,
+      );
     }
   }, EXPORT_HARNESS_TIMEOUT_MS);
 

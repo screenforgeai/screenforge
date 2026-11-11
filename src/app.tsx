@@ -16,6 +16,7 @@ import { WhatsNewOnLaunch } from './components/WhatsNew/WhatsNewOnLaunch';
 import { playShutterSound } from './lib/screenshot/shutter-sound';
 import { ScreenshotEditor } from './components/ScreenshotEditor';
 import { trackEvent } from './lib/analytics';
+import { getAppendPlacement } from './lib/recording/appendPlacement';
 import i18n from './i18n';
 
 type AppShellProps = {
@@ -128,8 +129,18 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
             timelineStart: appendTimelineStartPreview,
             timelineEnd: appendTimelineStartPreview + result.duration,
           });
+          const placement = await getAppendPlacement(
+            recordingResult.filePath,
+            useStore.getState().frame,
+            result.areaCrop,
+            window.screenforge.probeExportSource,
+          );
           const [mergedPath, mergedCameraPath] = await Promise.all([
-            window.screenforge.concatRecordings(recordingResult.filePath, result.filePath),
+            window.screenforge.concatRecordings(
+              recordingResult.filePath,
+              result.filePath,
+              placement,
+            ),
             recordingResult.cameraPath && result.cameraPath
               ? window.screenforge.concatRecordings(recordingResult.cameraPath, result.cameraPath)
               : Promise.resolve(result.cameraPath ?? recordingResult.cameraPath ?? undefined),

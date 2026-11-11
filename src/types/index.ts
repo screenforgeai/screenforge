@@ -180,6 +180,29 @@ export interface RecordingBoundsSample extends RecordingArea {
   scaleFactor?: number;
 }
 
+/**
+ * The area selected for an area recording, in the recorded video's pixels.
+ * The video holds the whole display; the editor opens it cropped to this.
+ */
+export interface AreaCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Size of the video these pixels are in. */
+  sourceWidth: number;
+  sourceHeight: number;
+}
+
+/**
+ * How `concatRecordings` fits an appended clip, in pixels: `secondCrop` is the
+ * appended area recording's area, `target` the project's crop in the first clip.
+ */
+export interface ConcatRecordingsOptions {
+  secondCrop?: RecordingArea;
+  target?: RecordingArea;
+}
+
 export interface RecordingResult {
   filePath: string;
   mouseData: CursorEvent[];
@@ -187,6 +210,7 @@ export interface RecordingResult {
   startTime: number; // Date.now() when recording began — anchor for event timestamps
   recordingArea: RecordingArea; // logical-pixel bounds of the captured area at recording start
   captureBoundsTimeline?: RecordingBoundsSample[];
+  areaCrop?: AreaCrop;
   hasEmbeddedAudio?: boolean;
   audioPath?: string;
   cameraPath?: string;
@@ -606,6 +630,7 @@ export interface ScreenforgeAPI {
     captureBoundsTimeline?: RecordingBoundsSample[];
     hasEmbeddedAudio: boolean;
     filePath: string;
+    areaCrop?: AreaCrop;
   }>;
   pauseRecording: () => void;
   resumeRecording: () => void;
@@ -626,7 +651,11 @@ export interface ScreenforgeAPI {
   activateAppendMode: () => void;
   getAppendMode: () => Promise<boolean>;
   clearAppendMode: () => Promise<void>;
-  concatRecordings: (firstPath: string, secondPath: string) => Promise<string>;
+  concatRecordings: (
+    firstPath: string,
+    secondPath: string,
+    options?: ConcatRecordingsOptions,
+  ) => Promise<string>;
   reencodeRecording: (filePath: string) => Promise<string>;
   saveProject: (project: SavedProject) => Promise<SavedProject>;
   getProjects: () => Promise<SavedProject[]>;

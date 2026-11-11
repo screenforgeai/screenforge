@@ -1,9 +1,14 @@
 import { createScreenforgeFileUrl } from 'src/lib/screenforge-url';
-import { useRef, useCallback, useEffect } from 'react';
+import type { CropRect } from 'src/lib/effects/frame';
+import { useRef, useCallback, useEffect, useState } from 'react';
+
+const MAX_HEIGHT_PX = 220;
 
 interface Props {
   videoPath: string;
   videoTime: number;
+  /** The frame's crop: the picker shows the same picture the zoom targets. */
+  crop: CropRect;
   cx: number;
   cy: number;
   scale: number;
@@ -15,10 +20,13 @@ interface Props {
 /**
  * A small video thumbnail with a draggable crosshair.
  * The semi-transparent rectangle shows the area that will be zoomed into.
+ * It shows only the cropped picture, at its shape, so positions on it are the
+ * zoom's own positions.
  */
 export const ZoomPositionPicker = ({
   videoPath,
   videoTime,
+  crop,
   cx,
   cy,
   scale,
@@ -29,6 +37,10 @@ export const ZoomPositionPicker = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(null);
+  const aspectRatio = videoSize
+    ? (crop.width * videoSize.width) / (crop.height * videoSize.height)
+    : 16 / 9;
 
   // Seek hidden video to current playhead time
   useEffect(() => {
@@ -100,17 +112,35 @@ export const ZoomPositionPicker = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-full rounded overflow-hidden cursor-crosshair select-none"
-      style={{ aspectRatio: '16/9', background: '#111' }}
+      className="relative mx-auto rounded overflow-hidden cursor-crosshair select-none"
+      style={{
+        aspectRatio: `${aspectRatio}`,
+        // Full width, but no taller than MAX_HEIGHT_PX for a tall, narrow crop.
+        width: `min(100%, ${MAX_HEIGHT_PX * aspectRatio}px)`,
+        background: '#111',
+      }}
+      data-aspect-ratio={aspectRatio}
       onMouseDown={handleMouseDown}
     >
-      {/* Hidden video for frame thumbnail */}
+      {/* Hidden video for frame thumbnail, scaled and shifted so the crop fills the picker */}
       <video
         ref={videoRef}
         src={createScreenforgeFileUrl(videoPath)}
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+        className="absolute max-w-none object-fill pointer-events-none"
+        style={{
+          width: `${100 / crop.width}%`,
+          height: `${100 / crop.height}%`,
+          left: `${(-crop.x / crop.width) * 100}%`,
+          top: `${(-crop.y / crop.height) * 100}%`,
+        }}
         muted
         preload="metadata"
+        onLoadedMetadata={(e) => {
+          const { videoWidth, videoHeight } = e.currentTarget;
+          if (videoWidth > 0 && videoHeight > 0) {
+            setVideoSize({ width: videoWidth, height: videoHeight });
+          }
+        }}
       />
 
       {/* Viewport rectangle */}

@@ -1,0 +1,68 @@
+{
+  "id": "mp4-area-crop",
+  "description": "An area recording keeps the whole display and the editor crops it: the export shows exactly the area, with nothing from the white line just outside it bleeding into the edges.",
+  "recording": {
+    "filePath": "../media/area-crop-edges.mp4",
+    "mouseData": [],
+    "duration": 3,
+    "startTime": 1700000000000,
+    "recordingArea": {
+      "x": 0,
+      "y": 0,
+      "width": 640,
+      "height": 360
+    },
+    "areaCrop": {
+      "x": 161,
+      "y": 91,
+      "width": 319,
+      "height": 179,
+      "sourceWidth": 640,
+      "sourceHeight": 360
+    }
+  },
+  "mediaSegments": [
+    {
+      "id": "screen-area",
+      "timelineStart": 0,
+      "timelineEnd": 3,
+      "sourceStart": 0,
+      "sourceEnd": 3,
+      "videoEnabled": true,
+      "audioEnabled": false
+    }
+  ],
+  "frame": {
+    "aspectRatioId": "original",
+    "cropRect": {
+      "x": 0.2515625,
+      "y": 0.25277777777777777,
+      "width": 0.4984375,
+      "height": 0.49722222222222223
+    },
+    "background": {
+      "type": "solid",
+      "solidColor": "#000000",
+      "padding": 0,
+      "cornerRadius": 0,
+      "shadowBlur": 0,
+      "shadowOpacity": 0
+    }
+  },
+  "export": {
+    "quality": "balanced",
+    "format": "mp4",
+    "resolution": "720p",
+    "fps": 30,
+    "includeAudio": false,
+    "audioBitrateKbps": 128,
+    "outputFileName": "mp4-area-crop.mp4"
+  },
+  "expected": {
+    "audio": false,
+    "moving": true,
+    "durationToleranceSeconds": 0.35,
+    "minDistinctFrameHashes": 2,
+    "cropEdgeMaxLuma": 48
+  }
+}

@@ -7,6 +7,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import type {
+  AreaCrop,
   CursorEvent,
   CursorType,
   RecordingArea,
@@ -46,8 +47,13 @@ import {
   buildSegmentConcatList,
   buildWaylandTranscodeArgs,
   buildX11GrabArgs,
+  buildAppendClipFilter,
   clampCaptureBounds,
+  computeAreaCropPixels,
   fitH264FrameSize,
+  matchesDisplayShape,
+  matchesDisplaySize,
+  toPixelBounds,
   type CaptureBounds,
   type CaptureSegment,
 } from './capture-args';
@@ -1175,46 +1181,6 @@ export function clearActiveCropArea(): void {
   activeCropDisplay = null;
 }
 
-/**
- * Crops a recording to `area` (logical pixels, scaled by `scaleFactor`) and
- * re-encodes it, scaled down when the crop is too large for H.264.
- */
-export async function cropRecording(
-  filePath: string,
-  area: { x: number; y: number; width: number; height: number },
-  scaleFactor: number,
-): Promise<string> {
-  const outPath = createTempPath('screenforge-cropped', 'mp4');
-  const px = Math.round(area.x * scaleFactor);
-  const py = Math.round(area.y * scaleFactor);
-  const pw = Math.round(area.width * scaleFactor);
-  const ph = Math.round(area.height * scaleFactor);
-
-  const w = pw % 2 === 0 ? pw : pw - 1;
-  const h = ph % 2 === 0 ? ph : ph - 1;
-
-  const fit = fitH264FrameSize(w, h);
-
-  log.info('[recording] cropRecording:', { px, py, w, h, scaleFactor, encodeSize: fit });
-
-  const args = [
-    '-y',
-    '-i',
-    filePath,
-    '-vf',
-    `crop=${w}:${h}:${px}:${py}` + (fit.scaled ? `,scale=${fit.width}:${fit.height}` : ''),
-    ...buildH264EncodeArgs('20000k'),
-    '-c:a',
-    'copy',
-    '-movflags',
-    '+faststart',
-    outPath,
-  ];
-
-  await runFFmpeg(args, outPath).promise;
-  return outPath;
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function saveRecording(buffer: ArrayBuffer): Promise<string> {
@@ -1337,8 +1303,16 @@ export function clearAppendMode(): void {
 /**
  * Joins two clips into one H.264/AAC file at the first clip's size, capped to
  * what the encoder accepts, and returns its temp path.
+ *
+ * `secondCrop` cuts an appended area recording to its area. `target` is the
+ * project's crop in the first clip's pixels: the second clip is fitted into
+ * it, so it fills the cropped picture the editor shows.
  */
-export async function concatRecordings(firstPath: string, secondPath: string): Promise<string> {
+export async function concatRecordings(
+  firstPath: string,
+  secondPath: string,
+  options: { secondCrop?: CaptureBounds; target?: CaptureBounds } = {},
+): Promise<string> {
   const outPath = createTempPath('screenforge-concat', 'mp4');
 
   // Probe dimensions for output sizing. We always re-encode rather than stream-copying
@@ -1353,14 +1327,25 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
 
   // The first clip sets the size, capped to what the H.264 encoder accepts;
   // when it's capped, the first clip is scaled down too.
-  const fit = fitH264FrameSize(firstInfo.width ?? 1280, firstInfo.height ?? 800);
+  const firstWidth = firstInfo.width ?? 1280;
+  const firstHeight = firstInfo.height ?? 800;
+  const fit = fitH264FrameSize(firstWidth, firstHeight);
   const { width: w, height: h } = fit;
-  const scaleFilter = [
-    `scale=${w}:${h}:force_original_aspect_ratio=decrease`,
-    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`,
-    'setsar=1',
-    'format=yuv420p',
-  ].join(',');
+  const scaleFilter = buildAppendClipFilter({ width: w, height: h });
+  // The target is in the first clip's pixels; follow it when the join is scaled.
+  const requestedTarget = toPixelBounds(options.target);
+  const target = requestedTarget && {
+    x: Math.round((requestedTarget.x * w) / firstWidth),
+    y: Math.round((requestedTarget.y * h) / firstHeight),
+    width: Math.round((requestedTarget.width * w) / firstWidth),
+    height: Math.round((requestedTarget.height * h) / firstHeight),
+  };
+  const secondFilter = buildAppendClipFilter({
+    width: w,
+    height: h,
+    sourceCrop: toPixelBounds(options.secondCrop),
+    target: toPixelBounds(target),
+  });
 
   const [firstHasAudio, secondHasAudio] = await Promise.all([
     hasAudioStream(firstPath),
@@ -1370,7 +1355,7 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
 
   const filterParts = [
     fit.scaled ? `[0:v]${scaleFilter}[v0]` : `[0:v]format=yuv420p,setsar=1[v0]`,
-    `[1:v]${scaleFilter}[v1]`,
+    `[1:v]${secondFilter}[v1]`,
   ];
 
   if (withAudio) {
@@ -1697,6 +1682,7 @@ export async function stopRecording(rendererCapture?: {
   captureBoundsTimeline?: RecordingBoundsSample[];
   hasEmbeddedAudio: boolean;
   filePath: string;
+  areaCrop?: AreaCrop;
 }> {
   log.info('[recording] stop requested');
   unwatchDisplaysDuringRecording();
@@ -1707,6 +1693,9 @@ export async function stopRecording(rendererCapture?: {
   const wallStopTimeActive = computeActiveStopTime(recordingStartTime, wallStopTime, pauseSpans);
   const wallDurationMs = computeActiveDurationMs(recordingStartTime, wallStopTime, pauseSpans);
   let filePath: string;
+  // On Wayland the screen-share picker chose the monitor, so the video isn't
+  // necessarily the display the area was drawn on.
+  const fromScreenSharePicker = rendererCaptureActive;
 
   if (rendererCaptureActive) {
     rendererCaptureActive = false;
@@ -1740,25 +1729,58 @@ export async function stopRecording(rendererCapture?: {
     filePath = await stopFFmpegCapture();
   }
 
-  // Apply crop if an active crop area was set before recording started
-  const cropAreaToApply = activeCropArea;
-  const cropDisplay = activeCropDisplay ?? screen.getPrimaryDisplay();
+  // An area recording keeps the whole display. Re-encoding it down to the area
+  // here took about half the recording's length (minutes for long takes), so
+  // the editor crops it instead: measure the area's exact pixels in the video.
+  const selectedArea = activeCropArea;
+  const areaDisplay = activeCropDisplay ?? screen.getPrimaryDisplay();
   clearActiveCropArea();
 
-  if (cropAreaToApply) {
-    try {
-      const scaleFactor = cropDisplay.scaleFactor ?? 1;
-      log.info('[recording] applying crop area', { cropAreaToApply, scaleFactor });
-      filePath = await cropRecording(filePath, cropAreaToApply, scaleFactor);
-      // The crop is relative to its display; cursor events are global.
-      recordingArea = {
-        x: cropDisplay.bounds.x + cropAreaToApply.x,
-        y: cropDisplay.bounds.y + cropAreaToApply.y,
-        width: cropAreaToApply.width,
-        height: cropAreaToApply.height,
+  let areaCrop: AreaCrop | undefined;
+  if (selectedArea) {
+    const scaleFactor = areaDisplay.scaleFactor ?? 1;
+    const probed = await probeExportSource(filePath);
+    const stream =
+      rendererCapture?.width && rendererCapture?.height
+        ? { width: rendererCapture.width, height: rendererCapture.height }
+        : null;
+    // A native or X11 capture records the area's own display, so its size can
+    // be assumed when the probe fails; a picker stream's can't.
+    const video =
+      probed.width && probed.height
+        ? { width: probed.width, height: probed.height }
+        : fromScreenSharePicker
+          ? stream
+          : {
+              width: Math.round(areaDisplay.bounds.width * scaleFactor),
+              height: Math.round(areaDisplay.bounds.height * scaleFactor),
+            };
+    // The picker gives no monitor id, so a picker stream must be the area
+    // display at its exact pixel size; a capture of that display only needs
+    // its shape (it may be scaled down). Identical monitors still can't be
+    // told apart from a picker stream.
+    const isAreaDisplay =
+      video !== null &&
+      (fromScreenSharePicker
+        ? matchesDisplaySize(video, areaDisplay.bounds, scaleFactor)
+        : matchesDisplayShape(video, areaDisplay.bounds));
+    if (video && isAreaDisplay) {
+      areaCrop = {
+        ...computeAreaCropPixels(selectedArea, areaDisplay.bounds, video),
+        sourceWidth: video.width,
+        sourceHeight: video.height,
       };
-    } catch (err) {
-      log.error('[recording] cropRecording failed, using uncropped output:', err);
+      log.info('[recording] area crop', { selectedArea, scaleFactor, video, areaCrop });
+    } else {
+      // Not a video of the display the area was drawn on: open it uncropped
+      // rather than crop the wrong picture.
+      log.warn('[recording] video does not match the area display, not cropping', {
+        selectedArea,
+        display: areaDisplay.bounds,
+        scaleFactor,
+        video,
+        fromScreenSharePicker,
+      });
     }
   }
 
@@ -1862,6 +1884,7 @@ export async function stopRecording(rendererCapture?: {
     captureBoundsTimeline,
     hasEmbeddedAudio,
     filePath,
+    areaCrop,
   };
 }
 
