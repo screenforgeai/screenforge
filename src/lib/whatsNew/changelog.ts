@@ -182,3 +182,39 @@ export const selectLatestRelease = (
   newestFirst(releases).find(
     (release) => hasChanges(release) && compareVersions(release.version, currentVersion) <= 0,
   ) ?? null;
+
+const TITLE_MAX_WORDS = 6;
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * The entry's own short title, when it opens with "Label: …" (a leading "Add"
+ * is dropped, so "Add click sounds: …" is titled "Click sounds"). Null otherwise.
+ */
+export const splitTitle = (text: string): { title: string; body: string } | null => {
+  const colon = text.indexOf(': ');
+  if (colon <= 0) {
+    return null;
+  }
+  const label = text.slice(0, colon).trim();
+  if (label.split(/\s+/).length > TITLE_MAX_WORDS || /[.!?,(]/.test(label)) {
+    return null;
+  }
+  return {
+    title: capitalize(label.replace(/^Adds?\s+(an?\s+)?/i, '')),
+    body: capitalize(text.slice(colon + 2).trim()),
+  };
+};
+
+/**
+ * Splits off the first sentence, which carries the point of the entry. A
+ * sentence ends at . ! or ? followed by a space and a capital letter, so
+ * "0.8.0", "e.g. on" and "Settings → Privacy" stay whole.
+ */
+export const splitFirstSentence = (text: string): { lead: string; rest: string } => {
+  const end = /[.!?](?=\s+[A-Z])/.exec(text);
+  if (!end) {
+    return { lead: text, rest: '' };
+  }
+  return { lead: text.slice(0, end.index + 1).trim(), rest: text.slice(end.index + 1).trim() };
+};

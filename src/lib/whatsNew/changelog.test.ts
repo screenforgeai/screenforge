@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, parseChangelog, selectLatestRelease, selectReleases } from './changelog';
+import {
+  compareVersions,
+  parseChangelog,
+  selectLatestRelease,
+  selectReleases,
+  splitFirstSentence,
+  splitTitle,
+} from './changelog';
 
 const SAMPLE = `# screenforge
 
@@ -174,5 +181,44 @@ describe('selectLatestRelease', () => {
 
   it('returns null when nothing is old enough', () => {
     expect(selectLatestRelease(releases, '0.1.0')).toBeNull();
+  });
+});
+
+describe('splitTitle', () => {
+  it('uses a short label before a colon as the title, dropping a leading "Add"', () => {
+    expect(splitTitle('Screenshot mode: switch the toolbar to Screenshot.')).toEqual({
+      title: 'Screenshot mode',
+      body: 'Switch the toolbar to Screenshot.',
+    });
+    expect(splitTitle('Add click sounds: pick Mouse or Pop.')).toEqual({
+      title: 'Click sounds',
+      body: 'Pick Mouse or Pop.',
+    });
+  });
+
+  it('has no title without a short label', () => {
+    expect(splitTitle('On Linux, Screenforge now checks for updates.')).toBeNull();
+    expect(
+      splitTitle('Exporting a recording whose file is empty now says so: no more 416 errors.'),
+    ).toBeNull();
+    expect(splitTitle('Usage data (when sharing is on) drops your name: paths use ~.')).toBeNull();
+  });
+});
+
+describe('splitFirstSentence', () => {
+  it('splits off the first sentence', () => {
+    expect(
+      splitFirstSentence('New recordings start at 100% size. Older projects keep their size.'),
+    ).toEqual({
+      lead: 'New recordings start at 100% size.',
+      rest: 'Older projects keep their size.',
+    });
+  });
+
+  it('does not split on dots inside versions or abbreviations', () => {
+    expect(splitFirstSentence('Fix exports on 0.8.0 builds, e.g. on Windows.')).toEqual({
+      lead: 'Fix exports on 0.8.0 builds, e.g. on Windows.',
+      rest: '',
+    });
   });
 });

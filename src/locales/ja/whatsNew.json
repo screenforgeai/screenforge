@@ -3,10 +3,11 @@
   "subtitleSingle": "Screenforge {{version}} の変更点です。",
   "subtitleRange": "前回のバージョンからのすべての変更点です。",
   "versionHeading": "バージョン {{version}}",
-  "sectionNew": "新機能",
   "sectionFixes": "修正と改善",
   "gotIt": "OK",
   "versionBadge": "v{{version}}",
   "open": "最新情報",
-  "close": "閉じる"
+  "close": "閉じる",
+  "fullChangelog": "すべての変更履歴",
+  "showMore": "さらに {{count}} 件を表示"
 }
