@@ -1,6 +1,6 @@
 import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
-import type { SelectedArea } from '../../../src/types/index';
+import type { ConcatRecordingsOptions, SelectedArea } from '../../../src/types/index';
 import {
   saveRecording,
   saveAudioCapture,
@@ -40,6 +40,7 @@ export function registerRecordingChannels(): void {
         captureBoundsTimeline,
         hasEmbeddedAudio,
         filePath,
+        areaCrop,
       } = await stopRecording(rendererCapture);
       return {
         mouseData: events,
@@ -50,6 +51,7 @@ export function registerRecordingChannels(): void {
         captureBoundsTimeline,
         hasEmbeddedAudio,
         filePath,
+        areaCrop,
       };
     },
   );
@@ -78,8 +80,9 @@ export function registerRecordingChannels(): void {
   listenChannel(CH.recording.ACTIVATE_APPEND_MODE, () => activateAppendMode());
   handleChannel(CH.recording.GET_APPEND_MODE, () => getAppendMode());
   handleChannel(CH.recording.CLEAR_APPEND_MODE, () => clearAppendMode());
-  handleChannel<[string, string], string>(CH.recording.CONCAT, (firstPath, secondPath) =>
-    concatRecordings(firstPath, secondPath),
+  handleChannel<[string, string, ConcatRecordingsOptions | undefined], string>(
+    CH.recording.CONCAT,
+    (firstPath, secondPath, options) => concatRecordings(firstPath, secondPath, options),
   );
   handleChannel<[string], string>(CH.recording.REENCODE, (filePath) => reencodeRecording(filePath));
 

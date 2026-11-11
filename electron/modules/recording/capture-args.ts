@@ -197,6 +197,125 @@ export function fitH264FrameSize(
 }
 
 /**
+ * The exact video pixels of an area selected on a display. The area is in the
+ * display's logical pixels; the video is the whole display at whatever size it
+ * was captured (2x on Retina, 1.25x at 125% scaling, smaller for a 5K screen
+ * capped to what the encoder takes). Edges are rounded rather than sizes, so a
+ * 600 px selection at 1.25x is 750 px wherever it starts. Odd sizes stay odd:
+ * the editor crops this rect, and only export rounds to even.
+ */
+export function computeAreaCropPixels(
+  area: CaptureBounds,
+  display: { width: number; height: number },
+  video: { width: number; height: number },
+): CaptureBounds {
+  const scaleX = video.width / display.width;
+  const scaleY = video.height / display.height;
+  const edge = (value: number, scale: number, max: number) =>
+    Math.min(max, Math.max(0, Math.round(value * scale)));
+
+  const left = edge(area.x, scaleX, video.width);
+  const top = edge(area.y, scaleY, video.height);
+  const right = edge(area.x + area.width, scaleX, video.width);
+  const bottom = edge(area.y + area.height, scaleY, video.height);
+
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/**
+ * Whether a video has the shape of a display, allowing for a pixel or two of
+ * encoder rounding. A video of some other display (on Wayland the screen-share
+ * picker may stream a different monitor) must not get this display's crop.
+ */
+export function matchesDisplayShape(
+  video: { width: number; height: number },
+  display: { width: number; height: number },
+): boolean {
+  const videoAspect = video.width / video.height;
+  const displayAspect = display.width / display.height;
+  return Math.abs(videoAspect - displayAspect) / displayAspect <= 0.01;
+}
+
+/**
+ * Whether a video is a display at its own pixel size (its logical size times
+ * scaleFactor), within a couple of pixels of rounding. Stricter than
+ * matchesDisplayShape: it also tells apart same-shaped displays of different
+ * resolutions, e.g. a 1080p and a 1440p monitor.
+ */
+export function matchesDisplaySize(
+  video: { width: number; height: number },
+  display: { width: number; height: number },
+  scaleFactor: number,
+): boolean {
+  return (
+    Math.abs(video.width - display.width * scaleFactor) <= 2 &&
+    Math.abs(video.height - display.height * scaleFactor) <= 2
+  );
+}
+
+/**
+ * A rect of whole, non-negative pixels, or undefined. Crop rects arrive over
+ * IPC and end up in an FFmpeg filter string, so only numbers may get through.
+ */
+export function toPixelBounds(value: unknown): CaptureBounds | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const rect = value as Record<string, unknown>;
+  const [x, y, width, height] = [rect.x, rect.y, rect.width, rect.height].map((v) =>
+    typeof v === 'number' || (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN,
+  );
+  if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0) {
+    return undefined;
+  }
+  const bounds = {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+  return bounds.width > 0 && bounds.height > 0 ? bounds : undefined;
+}
+
+/**
+ * The filter that fits an appended clip into a width x height join. A clip
+ * recorded from an area is first cut to that area (`exact` keeps odd offsets
+ * exact). With a `target` — the project's crop, in the join's pixels — the clip
+ * is fitted into that rect and placed where it is, so it fills the cropped
+ * picture the way it would have filled a pre-cropped file.
+ */
+export function buildAppendClipFilter(options: {
+  width: number;
+  height: number;
+  sourceCrop?: CaptureBounds;
+  target?: CaptureBounds;
+}): string {
+  const { width, height, sourceCrop, target } = options;
+  const crop = sourceCrop
+    ? [`crop=${sourceCrop.width}:${sourceCrop.height}:${sourceCrop.x}:${sourceCrop.y}:exact=1`]
+    : [];
+  const fitInto = (w: number, h: number) => [
+    `scale=${w}:${h}:force_original_aspect_ratio=decrease`,
+    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`,
+  ];
+
+  const isFullTarget =
+    !target ||
+    (target.x === 0 && target.y === 0 && target.width === width && target.height === height);
+  const place = isFullTarget
+    ? fitInto(width, height)
+    : [
+        // 4:4:4 while placing, so odd offsets and sizes aren't rounded to the
+        // 4:2:0 chroma grid; the join converts back below.
+        'format=yuv444p',
+        ...fitInto(target.width, target.height),
+        `pad=${width}:${height}:${target.x}:${target.y}`,
+      ];
+
+  return [...crop, ...place, 'setsar=1', 'format=yuv420p'].join(',');
+}
+
+/**
  * Wayland (Linux): transcodes the renderer-captured portal webm (VP9/VP8 from
  * MediaRecorder) into the H.264 MP4 the rest of the pipeline expects.
  * The portal stream carries no audio — mic is a separate track merged later.

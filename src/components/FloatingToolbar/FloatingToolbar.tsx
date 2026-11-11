@@ -1215,6 +1215,7 @@ export const FloatingToolbar = () => {
         hasEmbeddedAudio: sourceHasEmbeddedAudio,
         startTime,
         durationMs,
+        areaCrop,
       } = videoResult.value;
       // Use the probed media duration as the authoritative timeline length.
       // durationMs = effectiveDurationMs from stopRecording(), which uses ffprobe on the
@@ -1281,6 +1282,7 @@ export const FloatingToolbar = () => {
         startTime,
         recordingArea,
         captureBoundsTimeline,
+        areaCrop,
         hasEmbeddedAudio,
         audioPath: timelineAudioPath ?? undefined,
         cameraPath: cameraPath ?? undefined,

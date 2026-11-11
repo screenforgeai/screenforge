@@ -49,6 +49,12 @@ export interface ExportFixtureManifest {
     minDistinctFrameHashes: number;
     outputDurationSeconds?: number;
     maxElapsedMs?: number;
+    /**
+     * For a cropped recording: the brightest any pixel on the output's outer
+     * edge may be. The fixture puts a bright line just outside the crop, so a
+     * crop that bleeds or is off by a pixel shows up as a bright edge.
+     */
+    cropEdgeMaxLuma?: number;
   };
 }
 

@@ -126,6 +126,18 @@ function toNormalizedRect(rect: PixelRect, sourceWidth: number, sourceHeight: nu
   };
 }
 
+/**
+ * The crop for an exact pixel rect of a sourceWidth x sourceHeight video.
+ * getFrameGeometry turns it back into exactly those pixels.
+ */
+export function cropRectFromPixels(
+  rect: PixelRect,
+  sourceWidth: number,
+  sourceHeight: number,
+): CropRect {
+  return toNormalizedRect(rect, sourceWidth, sourceHeight);
+}
+
 export function cloneFrameSettings(frame: FrameSettings): FrameSettings {
   return {
     aspectRatioId: frame.aspectRatioId,

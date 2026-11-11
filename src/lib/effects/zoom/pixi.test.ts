@@ -263,6 +263,30 @@ describe('resolveCinematicTiltFocusTarget', () => {
     expect(stillLocked).toEqual({ nx: 0.22, ny: 0.62 });
   });
 
+  it('locks the focus again when the crop changes, since it is a position in the crop', () => {
+    const cache = new Map<string, { nx: number; ny: number }>();
+    const lock = (crop: { x: number; y: number; width: number; height: number }, ny: number) =>
+      resolveCinematicTiltFocusTarget(
+        { nx: 0.5, ny: 0.5 },
+        {
+          tiltMode: 'static',
+          clipId: 'zoom-cinematic',
+          clipStart: 4,
+          mode: 'auto',
+          crop,
+          cache,
+          resolveStartFocus: () => ({ nx: 0.5, ny }),
+        },
+      );
+
+    const full = { x: 0, y: 0, width: 1, height: 1 };
+    const area = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+    expect(lock(full, 0.3)).toEqual({ nx: 0.5, ny: 0.3 });
+    expect(lock(area, 0.7)).toEqual({ nx: 0.5, ny: 0.7 });
+    // Back to a crop seen before: its own locked focus, not the other crop's.
+    expect(lock(full, 0.9)).toEqual({ nx: 0.5, ny: 0.3 });
+  });
+
   it('returns current focus for follow mode without caching', () => {
     const cache = new Map<string, { nx: number; ny: number }>();
 

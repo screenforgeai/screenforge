@@ -6,7 +6,9 @@ import {
   createVoidSubscription,
 } from '../../lib/ipc-renderer';
 import type {
+  AreaCrop,
   CaptureBackend,
+  ConcatRecordingsOptions,
   CursorEvent,
   RecordingArea,
   RecordingBoundsSample,
@@ -32,6 +34,7 @@ export const recordingBridge = {
       captureBoundsTimeline?: RecordingBoundsSample[];
       hasEmbeddedAudio: boolean;
       filePath: string;
+      areaCrop?: AreaCrop;
     }
   >(CH.recording.STOP),
   getCaptureBackend: createInvokeBridge<[], CaptureBackend>(CH.recording.GET_BACKEND),
@@ -62,6 +65,8 @@ export const recordingBridge = {
   activateAppendMode: createSendBridge<[]>(CH.recording.ACTIVATE_APPEND_MODE),
   getAppendMode: createInvokeBridge<[], boolean>(CH.recording.GET_APPEND_MODE),
   clearAppendMode: createInvokeBridge<[], void>(CH.recording.CLEAR_APPEND_MODE),
-  concatRecordings: createInvokeBridge<[string, string], string>(CH.recording.CONCAT),
+  concatRecordings: createInvokeBridge<[string, string, ConcatRecordingsOptions?], string>(
+    CH.recording.CONCAT,
+  ),
   reencodeRecording: createInvokeBridge<[string], string>(CH.recording.REENCODE),
 };
