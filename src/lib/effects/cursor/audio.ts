@@ -1,11 +1,14 @@
 import type { CursorClickSound } from '../../../store';
-// Recorded mouse clicks. Builds inline them as data URLs, so the packaged app and
-// the hidden export window need no file access; the dev server serves them by URL.
+// Recorded mouse clicks. The renderer build embeds them as data URLs
+// (assetsInlineLimit in electron.vite.config.mts): the packaged app loads its
+// windows from file://, where fetch() can't read them. The dev server serves them by URL.
 // Sources and licenses: src/assets/sounds/clicks/README.md.
-import mousePressUrl from 'src/assets/sounds/clicks/mouse-press.wav?inline';
-import mouseReleaseUrl from 'src/assets/sounds/clicks/mouse-release.wav?inline';
-import mouse2PressUrl from 'src/assets/sounds/clicks/mouse-2-press.wav?inline';
-import mouse2ReleaseUrl from 'src/assets/sounds/clicks/mouse-2-release.wav?inline';
+import mousePressUrl from 'src/assets/sounds/clicks/mouse-press.wav';
+import mouseReleaseUrl from 'src/assets/sounds/clicks/mouse-release.wav';
+import mouse2PressUrl from 'src/assets/sounds/clicks/mouse-2-press.wav';
+import mouse2ReleaseUrl from 'src/assets/sounds/clicks/mouse-2-release.wav';
+
+export { CLICK_SOUND_OPTIONS, normalizeCursorClickSound } from './clickSoundOptions';
 
 type AudioContextLike = AudioContext | OfflineAudioContext;
 
@@ -77,22 +80,6 @@ export type ClickSoundHit = {
   index: number;
 };
 
-export const CLICK_SOUND_OPTIONS: readonly CursorClickSound[] = [
-  'none',
-  'mouse',
-  'mouse-2',
-  'trackpad',
-  'soft',
-];
-
-/** Sounds removed in favour of the current set, mapped to their closest replacement. */
-const LEGACY_CLICK_SOUNDS: Record<string, CursorClickSound> = {
-  'magic-mouse': 'trackpad',
-  'mx-master': 'mouse',
-  pop: 'soft',
-  tick: 'soft',
-};
-
 const CLICK_SOUND_PROFILES: Record<
   Exclude<CursorClickSound, 'none'>,
   SynthClickSound | RecordedClickSound
@@ -138,16 +125,6 @@ const RECORDING_CACHE = new Map<string, AudioBuffer>();
 const RECORDING_LOADS = new Map<string, Promise<AudioBuffer>>();
 let previewAudioContext: AudioContext | null = null;
 let previewClickIndex = 0;
-
-export function normalizeCursorClickSound(value: unknown): CursorClickSound {
-  if (typeof value !== 'string') {
-    return 'none';
-  }
-  if ((CLICK_SOUND_OPTIONS as readonly string[]).includes(value)) {
-    return value as CursorClickSound;
-  }
-  return LEGACY_CLICK_SOUNDS[value] ?? 'none';
-}
 
 /**
  * Turns click (mouse-down) events into sound hits: one press per click, plus a

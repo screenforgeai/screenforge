@@ -2,16 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 // Vite builds inline these recordings as data URLs; Vitest only returns their path.
 // Stand in data URLs of different lengths so press and release can be told apart.
-vi.mock('src/assets/sounds/clicks/mouse-press.wav?inline', () => ({
+vi.mock('src/assets/sounds/clicks/mouse-press.wav', () => ({
   default: `data:audio/wav;base64,${btoa('p'.repeat(30))}`,
 }));
-vi.mock('src/assets/sounds/clicks/mouse-release.wav?inline', () => ({
+vi.mock('src/assets/sounds/clicks/mouse-release.wav', () => ({
   default: `data:audio/wav;base64,${btoa('r'.repeat(21))}`,
 }));
-vi.mock('src/assets/sounds/clicks/mouse-2-press.wav?inline', () => ({
+vi.mock('src/assets/sounds/clicks/mouse-2-press.wav', () => ({
   default: `data:audio/wav;base64,${btoa('q'.repeat(33))}`,
 }));
-vi.mock('src/assets/sounds/clicks/mouse-2-release.wav?inline', () => ({
+vi.mock('src/assets/sounds/clicks/mouse-2-release.wav', () => ({
   default: `data:audio/wav;base64,${btoa('s'.repeat(24))}`,
 }));
 import {
@@ -281,11 +281,11 @@ describe('scheduleCursorClickSound', () => {
   describe('recorded sounds', () => {
     it('fetches a recording served by URL, as on the dev server', async () => {
       vi.resetModules();
-      vi.doMock('src/assets/sounds/clicks/mouse-press.wav?inline', () => ({
-        default: '/src/assets/sounds/clicks/mouse-press.wav?inline',
+      vi.doMock('src/assets/sounds/clicks/mouse-press.wav', () => ({
+        default: '/src/assets/sounds/clicks/mouse-press.wav',
       }));
-      vi.doMock('src/assets/sounds/clicks/mouse-release.wav?inline', () => ({
-        default: '/src/assets/sounds/clicks/mouse-release.wav?inline',
+      vi.doMock('src/assets/sounds/clicks/mouse-release.wav', () => ({
+        default: '/src/assets/sounds/clicks/mouse-release.wav',
       }));
       const fetchMock = vi.fn(async (url: string) => ({
         ok: true,
@@ -298,12 +298,12 @@ describe('scheduleCursorClickSound', () => {
         await fresh.loadCursorClickSound(context, 'mouse');
         fresh.scheduleCursorClickSound(context, 'mouse', 1, 0, context.destination, { index: 0 });
 
-        expect(fetchMock).toHaveBeenCalledWith('/src/assets/sounds/clicks/mouse-press.wav?inline');
+        expect(fetchMock).toHaveBeenCalledWith('/src/assets/sounds/clicks/mouse-press.wav');
         expect(started).toEqual([expect.objectContaining({ kind: 'sample', sampleBytes: 40 })]);
       } finally {
         vi.unstubAllGlobals();
-        vi.doUnmock('src/assets/sounds/clicks/mouse-press.wav?inline');
-        vi.doUnmock('src/assets/sounds/clicks/mouse-release.wav?inline');
+        vi.doUnmock('src/assets/sounds/clicks/mouse-press.wav');
+        vi.doUnmock('src/assets/sounds/clicks/mouse-release.wav');
         vi.resetModules();
       }
     });
