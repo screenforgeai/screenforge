@@ -1,5 +1,5 @@
 import { useReducedMotion } from 'motion/react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconArrowUpRight, IconX } from 'src/lib/icons';
 import { CHANGELOG_URL } from 'src/lib/siteLinks';
@@ -96,15 +96,18 @@ const Feature = ({ item }: { item: ReleaseNoteItem }) => {
   );
 };
 
-type FixesProps = {
-  items: ReleaseNoteItem[];
-  /** Called after "Show more" unmounts, so focus can go back to the notes. */
-  onExpanded: () => void;
-};
-
-const Fixes = ({ items, onExpanded }: FixesProps) => {
+const Fixes = ({ items }: { items: ReleaseNoteItem[] }) => {
   const { t } = useTranslation('whatsNew');
   const [expanded, setExpanded] = useState(false);
+  const firstRevealedRef = useRef<HTMLLIElement>(null);
+
+  // "Show more" removes itself, so move focus to the first fix it revealed:
+  // the reader keeps their place and Tab carries on forward from there.
+  useEffect(() => {
+    if (expanded) {
+      firstRevealedRef.current?.focus({ preventScroll: true });
+    }
+  }, [expanded]);
   const hidden = items.length - VISIBLE_FIXES;
   const visible = expanded || hidden <= 0 ? items : items.slice(0, VISIBLE_FIXES);
 
@@ -116,7 +119,12 @@ const Fixes = ({ items, onExpanded }: FixesProps) => {
       </h4>
       <ul className="mt-3 flex flex-col gap-3">
         {visible.map((item, index) => (
-          <li key={index}>
+          <li
+            key={index}
+            ref={index === VISIBLE_FIXES ? firstRevealedRef : undefined}
+            tabIndex={index === VISIBLE_FIXES ? -1 : undefined}
+            className="rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-sf-border-lt"
+          >
             <LeadParagraph text={item.text} className="text-[13px] leading-[1.65]" />
             <Details details={item.details} />
           </li>
@@ -126,10 +134,7 @@ const Fixes = ({ items, onExpanded }: FixesProps) => {
         <button
           type="button"
           className="mt-3 cursor-pointer text-[13px] text-sf-secondary transition-colors hover:text-sf-primary"
-          onClick={() => {
-            setExpanded(true);
-            onExpanded();
-          }}
+          onClick={() => setExpanded(true)}
         >
           {t('showMore', { count: hidden })}
         </button>
@@ -138,12 +143,7 @@ const Fixes = ({ items, onExpanded }: FixesProps) => {
   );
 };
 
-type ReleaseContentProps = {
-  release: ReleaseNotes;
-  onFixesExpanded: () => void;
-};
-
-const ReleaseContent = ({ release, onFixesExpanded }: ReleaseContentProps) => (
+const ReleaseContent = ({ release }: { release: ReleaseNotes }) => (
   <div className="flex flex-col gap-8">
     {release.newItems.length > 0 && (
       <div className="flex flex-col gap-6">
@@ -154,7 +154,7 @@ const ReleaseContent = ({ release, onFixesExpanded }: ReleaseContentProps) => (
     )}
     {release.fixItems.length > 0 && (
       <div className={release.newItems.length > 0 ? 'border-t border-sf-border/60 pt-7' : ''}>
-        <Fixes items={release.fixItems} onExpanded={onFixesExpanded} />
+        <Fixes items={release.fixItems} />
       </div>
     )}
   </div>
@@ -166,9 +166,6 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
   const scrollRef = useRef<HTMLDivElement>(null);
   const latest = releases[0];
   const isRange = releases.length > 1;
-
-  // "Show more" removes itself; keep keyboard focus on the notes, not the dialog.
-  const focusNotes = () => scrollRef.current?.focus({ preventScroll: true });
 
   if (!latest) {
     return null;
@@ -237,12 +234,12 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
                 <h3 className="mb-5">
                   <VersionPill>{t('versionHeading', { version: release.version })}</VersionPill>
                 </h3>
-                <ReleaseContent release={release} onFixesExpanded={focusNotes} />
+                <ReleaseContent release={release} />
               </section>
             ))
           ) : (
             <div className="pt-1">
-              <ReleaseContent release={latest} onFixesExpanded={focusNotes} />
+              <ReleaseContent release={latest} />
             </div>
           )}
         </div>

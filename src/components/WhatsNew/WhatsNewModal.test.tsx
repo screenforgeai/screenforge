@@ -82,8 +82,25 @@ describe('WhatsNewModal', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Show 2 more' }));
 
     expect(within(dialog).getByText('Fix number 6.')).toBeInTheDocument();
-    expect(within(dialog).getByText('Fix number 6.').closest('[tabindex="0"]')).toHaveFocus();
+    // Focus lands on the first fix revealed, so the reader keeps their place.
+    expect(within(dialog).getByText('Fix number 5.').closest('li')).toHaveFocus();
     expect(within(dialog).queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps focus at the release that was expanded, so Tab moves forward', async () => {
+    const release = (version: string, label: string): ReleaseNotes => ({
+      version,
+      newItems: [],
+      fixItems: Array.from({ length: 6 }, (_, i) => ({ text: `${label} ${i + 1}.`, details: [] })),
+    });
+    const { dialog } = renderModal([release('0.9.0', 'Newer fix'), release('0.8.0', 'Older fix')]);
+    const [, olderShowMore] = within(dialog).getAllByRole('button', { name: 'Show 2 more' });
+
+    await userEvent.click(olderShowMore);
+
+    expect(within(dialog).getByText('Older fix 5.').closest('li')).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'Full changelog' })).toHaveFocus();
   });
 
   it('opens the full changelog on the website', async () => {
