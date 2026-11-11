@@ -195,6 +195,38 @@ const WEDGE_SHAPE: Shape = {
   s: WEDGE_SCALE,
 };
 
+// ── Pointer angle ────────────────────────────────────────────────────────────
+// The dart pointers (Wedge, Collaborator, Rounded) are drawn aiming at 45°, but
+// the macOS arrow's axis leans further toward vertical. The tilt-while-moving
+// rotation is tuned for the macOS arrow, so the darts are turned about their
+// tip to aim along the same axis.
+
+type Vec = [number, number];
+/** Direction (radians) from a pointer's tip into its body: the bisector of its two edges. */
+function axisOf(tip: Vec, a: Vec, b: Vec): number {
+  const ua = Math.hypot(a[0] - tip[0], a[1] - tip[1]);
+  const ub = Math.hypot(b[0] - tip[0], b[1] - tip[1]);
+  return Math.atan2(
+    (a[1] - tip[1]) / ua + (b[1] - tip[1]) / ub,
+    (a[0] - tip[0]) / ua + (b[0] - tip[0]) / ub,
+  );
+}
+// macOS arrow (inner body): vertical left edge, right edge to the wing.
+const MAC_AXIS = axisOf([7, 2.014], [7, 20.703], [20.162, 14.342]);
+const WEDGE_TURN = MAC_AXIS - axisOf([3.5, 2.8], [21, 10.2], [10.2, 21]);
+const ROUNDED_TURN = MAC_AXIS - axisOf([3, 3], [24.5, 11.2], [10.6, 24.8]);
+
+/** The axis a style's arrow aims along, after its turn (radians, 0 = pointing right). */
+export function getPointerAxis(style: 'cursor01' | 'wedge' | 'collaborator' | 'rounded'): number {
+  if (style === 'cursor01') {
+    return MAC_AXIS;
+  }
+  if (style === 'rounded') {
+    return axisOf([3, 3], [24.5, 11.2], [10.6, 24.8]) + ROUNDED_TURN;
+  }
+  return axisOf([3.5, 2.8], [21, 10.2], [10.2, 21]) + WEDGE_TURN;
+}
+
 // Path2D does not exist outside a browser (unit tests), so paths are built on use.
 const pathCache = new Map<string, Path2D>();
 function path(d: string): Path2D {
@@ -459,7 +491,7 @@ function drawNameTag(ctx: CanvasRenderingContext2D, color: string, label: string
 const ROUNDED_POINTER = 'M3 3L24.5 11.2L14.2 14.6L10.6 24.8Z';
 const ROUNDED_SCALE = 1.9;
 const ROUNDED_RIM = 5.5;
-const ROUNDED_TAG = { x: 32, y: 33, height: 33, radius: 9, padding: 14, fontSize: 20 };
+const ROUNDED_TAG = { x: 32, y: 36, height: 33, radius: 9, padding: 14, fontSize: 20 };
 const ROUNDED_TAG_FONT = `600 ${ROUNDED_TAG.fontSize}px Inter, "SF Pro Text", system-ui, sans-serif`;
 
 function drawRoundedPointer(ctx: CanvasRenderingContext2D, color: string) {
@@ -589,7 +621,10 @@ export function drawCursorStyle(
       if (state === 'text') {
         drawTextBar(ctx, fill);
       } else {
+        ctx.save();
+        ctx.rotate(WEDGE_TURN);
         drawShape(ctx, WEDGE_SHAPE, { kind: 'solid', fill, outline: '#ffffff' }, time);
+        ctx.restore();
       }
       if (style === 'collaborator') {
         drawNameTag(ctx, color, label);
@@ -600,7 +635,10 @@ export function drawCursorStyle(
       if (state === 'text') {
         drawTextBar(ctx, color);
       } else {
+        ctx.save();
+        ctx.rotate(ROUNDED_TURN);
         drawRoundedPointer(ctx, color);
+        ctx.restore();
       }
       drawRoundedTag(ctx, color, label);
       return;
@@ -643,6 +681,24 @@ function shapeExtent(shape: Shape, margin: number): CursorExtent {
   };
 }
 
+/** The box that holds `e` once it is turned by `angle` about the hotspot. */
+function rotateExtent(e: CursorExtent, angle: number): CursorExtent {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const corners: Vec[] = [
+    [e.left, e.top],
+    [e.right, e.top],
+    [e.left, e.bottom],
+    [e.right, e.bottom],
+  ].map(([x, y]) => [x * cos - y * sin, x * sin + y * cos]);
+  return {
+    left: Math.min(...corners.map((c) => c[0])),
+    top: Math.min(...corners.map((c) => c[1])),
+    right: Math.max(...corners.map((c) => c[0])),
+    bottom: Math.max(...corners.map((c) => c[1])),
+  };
+}
+
 function union(a: CursorExtent, b: CursorExtent): CursorExtent {
   return {
     left: Math.min(a.left, b.left),
@@ -681,7 +737,7 @@ export function getCursorStyleExtent(
       const base =
         state === 'text'
           ? { left: -5, top: -16, right: 5, bottom: 16 }
-          : shapeExtent(WEDGE_SHAPE, margin);
+          : rotateExtent(shapeExtent(WEDGE_SHAPE, margin), WEDGE_TURN);
       if (style === 'wedge' || !label) {
         return base;
       }
@@ -698,12 +754,15 @@ export function getCursorStyleExtent(
       const base =
         state === 'text'
           ? { left: -5, top: -16, right: 5, bottom: 16 }
-          : {
-              left: -8,
-              top: -8,
-              right: 21.5 * ROUNDED_SCALE + 9,
-              bottom: 21.8 * ROUNDED_SCALE + 11,
-            };
+          : rotateExtent(
+              {
+                left: -8,
+                top: -8,
+                right: 21.5 * ROUNDED_SCALE + 9,
+                bottom: 21.8 * ROUNDED_SCALE + 11,
+              },
+              ROUNDED_TURN,
+            );
       if (!label) {
         return base;
       }
