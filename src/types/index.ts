@@ -203,7 +203,7 @@ export interface ProjectCursorSettings {
   maxTilt: number;
   hideWhenIdle: boolean;
   idleHideSeconds: number;
-  clickSound: 'none' | 'soft' | 'mouse' | 'trackpad' | 'pop' | 'tick';
+  clickSound: 'none' | 'mouse' | 'mouse-2' | 'trackpad' | 'soft';
   clickSoundVolume: number;
   continuousTracking: boolean;
 }

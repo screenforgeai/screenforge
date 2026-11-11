@@ -8,7 +8,7 @@ import {
 } from './defaults';
 import type { EditorSessionState } from './types';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
-import { normalizeCursorClickSound } from '../lib/effects/cursor/audio';
+import { normalizeCursorClickSound } from '../lib/effects/cursor/clickSoundOptions';
 import type { CameraClip, MediaSegment } from '../types/timeline';
 import {
   cloneMotionClips,

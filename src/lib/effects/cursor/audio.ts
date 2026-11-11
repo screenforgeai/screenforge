@@ -1,12 +1,26 @@
 import type { CursorClickSound } from '../../../store';
+// Recorded mouse clicks. The renderer build embeds them as data URLs
+// (assetsInlineLimit in electron.vite.config.mts): the packaged app loads its
+// windows from file://, where fetch() can't read them. The dev server serves them by URL.
+// Sources and licenses: src/assets/sounds/clicks/README.md.
+import mousePressUrl from 'src/assets/sounds/clicks/mouse-press.wav';
+import mouseReleaseUrl from 'src/assets/sounds/clicks/mouse-release.wav';
+import mouse2PressUrl from 'src/assets/sounds/clicks/mouse-2-press.wav';
+import mouse2ReleaseUrl from 'src/assets/sounds/clicks/mouse-2-release.wav';
+
+export { CLICK_SOUND_OPTIONS, normalizeCursorClickSound } from './clickSoundOptions';
 
 type AudioContextLike = AudioContext | OfflineAudioContext;
 
 /**
- * Click sounds are synthesized, not sampled: each one is a short filtered-noise
- * transient plus a few exponentially decaying sine "modes" (the resonances of a
- * switch or a trackpad body). That keeps them license-free, tiny, and identical
- * between the live preview (AudioContext) and export (OfflineAudioContext).
+ * Two kinds of click sound share one scheduling path, used by both the live
+ * preview (AudioContext) and export (OfflineAudioContext):
+ *
+ * - Recorded (the mice): a press and a release recording, decoded once with
+ *   loadCursorClickSound() and then played as buffer sources.
+ * - Synthesized (trackpad, soft): a short filtered-noise transient plus a few
+ *   exponentially decaying sine "modes" (the resonances of a switch or a
+ *   trackpad body). Nothing to load.
  */
 type NoiseLayer = {
   kind: 'noise';
@@ -34,12 +48,22 @@ type ModeLayer = {
 
 type ClickSoundLayer = NoiseLayer | ModeLayer;
 
-type ClickSoundProfile = {
+type SynthClickSound = {
+  kind: 'synth';
   /** Loudness-matching gain: every profile peaks at about -4 dBFS at volume 1. */
   norm: number;
   press: ClickSoundLayer[];
-  /** Mouse-up: the press layers again, quieter and pitched up. Null = silent release. */
-  release: { gain: number; pitch: number } | null;
+  /** Mouse-up: the press layers again, quieter and pitched up. */
+  release: { gain: number; pitch: number };
+};
+
+type RecordedClickSound = {
+  kind: 'recorded';
+  /** Loudness-matching gain against the synthesized sounds. */
+  norm: number;
+  /** Data URLs of the press and release recordings. */
+  press: string;
+  release: string;
 };
 
 export type ClickSoundHitOptions = {
@@ -56,23 +80,15 @@ export type ClickSoundHit = {
   index: number;
 };
 
-export const CLICK_SOUND_OPTIONS: readonly CursorClickSound[] = [
-  'none',
-  'mouse',
-  'trackpad',
-  'soft',
-  'pop',
-  'tick',
-];
-
-/** Presets removed in favour of the current set, mapped to their closest replacement. */
-const LEGACY_CLICK_SOUNDS: Record<string, CursorClickSound> = {
-  'magic-mouse': 'trackpad',
-  'mx-master': 'mouse',
-};
-
-const CLICK_SOUND_PROFILES: Record<Exclude<CursorClickSound, 'none'>, ClickSoundProfile> = {
+const CLICK_SOUND_PROFILES: Record<
+  Exclude<CursorClickSound, 'none'>,
+  SynthClickSound | RecordedClickSound
+> = {
+  // Norms bring a 4-clicks-a-second train to about -29 LUFS at volume 1, like trackpad and soft.
+  mouse: { kind: 'recorded', norm: 0.596, press: mousePressUrl, release: mouseReleaseUrl },
+  'mouse-2': { kind: 'recorded', norm: 0.767, press: mouse2PressUrl, release: mouse2ReleaseUrl },
   soft: {
+    kind: 'synth',
     norm: 0.684,
     press: [
       { kind: 'noise', hp: 350, lp: 2600, tau: 0.0022, gain: 0.55 },
@@ -81,18 +97,8 @@ const CLICK_SOUND_PROFILES: Record<Exclude<CursorClickSound, 'none'>, ClickSound
     ],
     release: { gain: 0.32, pitch: 1.12 },
   },
-  mouse: {
-    norm: 0.4,
-    press: [
-      { kind: 'noise', hp: 2200, lp: 12000, tau: 0.001, gain: 0.6 },
-      { kind: 'mode', f: 3400, tau: 0.008, gain: 0.32 },
-      { kind: 'mode', f: 5700, tau: 0.005, gain: 0.18 },
-      { kind: 'mode', f: 1180, tau: 0.007, gain: 0.22 },
-      { kind: 'mode', f: 330, tau: 0.009, gain: 0.22 },
-    ],
-    release: { gain: 0.5, pitch: 1.09 },
-  },
   trackpad: {
+    kind: 'synth',
     norm: 0.351,
     press: [
       { kind: 'mode', f: 270, to: 175, sweep: 0.02, tau: 0.011, gain: 0.85, attack: 0.0008 },
@@ -101,45 +107,29 @@ const CLICK_SOUND_PROFILES: Record<Exclude<CursorClickSound, 'none'>, ClickSound
     ],
     release: { gain: 0.55, pitch: 1.18 },
   },
-  pop: {
-    norm: 0.389,
-    press: [
-      { kind: 'mode', f: 420, to: 1150, sweep: 0.03, tau: 0.016, gain: 0.7, attack: 0.002 },
-      { kind: 'noise', hp: 3000, lp: 9000, tau: 0.0007, gain: 0.12 },
-    ],
-    release: null,
-  },
-  tick: {
-    norm: 0.56,
-    press: [
-      { kind: 'mode', f: 2900, tau: 0.0022, gain: 0.7 },
-      { kind: 'mode', f: 5900, tau: 0.0012, gain: 0.22 },
-      { kind: 'noise', hp: 4000, lp: 14000, tau: 0.0005, gain: 0.15 },
-    ],
-    release: null,
-  },
 };
 
 /** Gap between press and release when auditioning a sound from the widget. */
 const PREVIEW_RELEASE_DELAY = 0.095;
+/**
+ * Shortest press-to-release gap that gets a release sound. Tap-to-click on a
+ * trackpad reports mouse-up a few ms after mouse-down; playing the same click
+ * twice that close together comb-filters it into a hollow, pitched zap instead
+ * of a click. Real button presses take longer than this.
+ */
+const MIN_RELEASE_GAP_SECONDS = 0.04;
 const NOISE_BUFFER_SECONDS = 0.08;
 const NOISE_BUFFER_CACHE = new Map<number, AudioBuffer>();
+/** Decoded recordings by data URL. AudioBuffers are not tied to the context that decoded them. */
+const RECORDING_CACHE = new Map<string, AudioBuffer>();
+const RECORDING_LOADS = new Map<string, Promise<AudioBuffer>>();
 let previewAudioContext: AudioContext | null = null;
 let previewClickIndex = 0;
 
-export function normalizeCursorClickSound(value: unknown): CursorClickSound {
-  if (typeof value !== 'string') {
-    return 'none';
-  }
-  if ((CLICK_SOUND_OPTIONS as readonly string[]).includes(value)) {
-    return value as CursorClickSound;
-  }
-  return LEGACY_CLICK_SOUNDS[value] ?? 'none';
-}
-
 /**
  * Turns click (mouse-down) events into sound hits: one press per click, plus a
- * release at the first mouse-up after it, when one was recorded. Hits are sorted
+ * release at the first mouse-up after it, when one was recorded and comes at
+ * least MIN_RELEASE_GAP_SECONDS later. Hits are sorted
  * by time, so a drag's release can land after a later click.
  */
 export function buildClickSoundHits(
@@ -159,7 +149,10 @@ export function buildClickSoundHits(
       releaseCursor += 1;
     }
     if (releaseCursor < releaseTimes.length) {
-      hits.push({ t: releaseTimes[releaseCursor], release: true, index });
+      const releaseTime = releaseTimes[releaseCursor];
+      if (releaseTime - click.t >= MIN_RELEASE_GAP_SECONDS) {
+        hits.push({ t: releaseTime, release: true, index });
+      }
       releaseCursor += 1;
     }
   });
@@ -295,6 +288,89 @@ function scheduleModeLayer(
   oscillator.stop(when + layer.tau * 8 + 0.02);
 }
 
+/**
+ * Production builds inline the recordings as base64 data URLs; the Vite dev
+ * server serves them by URL instead, so fetch those.
+ */
+async function readRecording(url: string): Promise<ArrayBuffer> {
+  if (!url.startsWith('data:')) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Could not load click sound ${url}: ${response.status}`);
+    }
+    return response.arrayBuffer();
+  }
+  const binary = atob(url.slice(url.indexOf(',') + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function decodeRecording(context: BaseAudioContext, url: string): Promise<AudioBuffer> {
+  let load = RECORDING_LOADS.get(url);
+  if (!load) {
+    load = readRecording(url)
+      .then((data) => context.decodeAudioData(data))
+      .then((buffer) => {
+        RECORDING_CACHE.set(url, buffer);
+        return buffer;
+      });
+    // A failed decode can be retried by the next caller.
+    load.catch(() => RECORDING_LOADS.delete(url));
+    RECORDING_LOADS.set(url, load);
+  }
+  return load;
+}
+
+/**
+ * Decodes a recorded click sound's press and release so scheduleCursorClickSound()
+ * can play them. Resolves immediately for synthesized sounds and for recordings
+ * that are already decoded.
+ */
+export async function loadCursorClickSound(
+  context: BaseAudioContext,
+  clickSound: CursorClickSound,
+): Promise<void> {
+  if (clickSound === 'none') {
+    return;
+  }
+  const profile = CLICK_SOUND_PROFILES[clickSound];
+  if (profile?.kind !== 'recorded') {
+    return;
+  }
+  await Promise.all([
+    decodeRecording(context, profile.press),
+    decodeRecording(context, profile.release),
+  ]);
+}
+
+function scheduleRecording(
+  context: AudioContextLike,
+  destination: AudioNode,
+  buffer: AudioBuffer,
+  when: number,
+  gain: number,
+  rate: number,
+): void {
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.playbackRate.setValueAtTime(rate, when);
+
+  const level = context.createGain();
+  level.gain.setValueAtTime(gain, when);
+
+  source.connect(level);
+  level.connect(destination);
+  disconnectLater(source, [level]);
+  source.start(when);
+}
+
+/**
+ * Schedules one hit (press or release). Recorded sounds play only once
+ * loadCursorClickSound() has decoded them; until then this is a no-op.
+ */
 export function scheduleCursorClickSound(
   context: AudioContextLike,
   clickSound: CursorClickSound,
@@ -313,17 +389,20 @@ export function scheduleCursorClickSound(
   }
 
   const isRelease = options.release === true;
-  if (isRelease && !profile.release) {
+  const index = options.index ?? 0;
+  const variation = getClickVariation(index);
+  const level = Math.min(volume, 1) * profile.norm * variation.gain;
+
+  if (profile.kind === 'recorded') {
+    const buffer = RECORDING_CACHE.get(isRelease ? profile.release : profile.press);
+    if (buffer) {
+      scheduleRecording(context, destination, buffer, when, level, variation.pitch);
+    }
     return;
   }
 
-  const index = options.index ?? 0;
-  const variation = getClickVariation(index);
-  const releaseGain = isRelease && profile.release ? profile.release.gain : 1;
-  const releasePitch = isRelease && profile.release ? profile.release.pitch : 1;
-  const gain = Math.min(volume, 1) * profile.norm * variation.gain * releaseGain;
-  const pitch = variation.pitch * releasePitch;
-
+  const gain = level * (isRelease ? profile.release.gain : 1);
+  const pitch = variation.pitch * (isRelease ? profile.release.pitch : 1);
   for (const layer of profile.press) {
     if (layer.kind === 'noise') {
       scheduleNoiseLayer(context, destination, layer, when, gain, index);
@@ -359,6 +438,7 @@ export async function playCursorClickSound(
   if (!context) {
     return;
   }
+  await loadCursorClickSound(context, clickSound);
 
   scheduleCursorClickSound(
     context,
@@ -383,6 +463,7 @@ export async function auditionCursorClickSound(
   if (!context) {
     return;
   }
+  await loadCursorClickSound(context, clickSound);
 
   const index = previewClickIndex;
   previewClickIndex += 1;

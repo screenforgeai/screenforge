@@ -215,7 +215,9 @@ describe('click sound in saved projects', () => {
   it.each([
     ['magic-mouse', 'trackpad'],
     ['mx-master', 'mouse'],
-    ['pop', 'pop'],
+    ['pop', 'soft'],
+    ['tick', 'soft'],
+    ['mouse-2', 'mouse-2'],
     ['none', 'none'],
   ])('loads %s as %s', (saved, expected) => {
     act(() => {

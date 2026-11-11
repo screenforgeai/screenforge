@@ -28,6 +28,12 @@ declare module '*.mp3' {
   export default url;
 }
 
+// Click sounds: the renderer build embeds these as data URLs (electron.vite.config.mts).
+declare module '*.wav' {
+  const url: string;
+  export default url;
+}
+
 // Vite inlines the file's text at build time (used for the bundled CHANGELOG.md).
 declare module '*.md?raw' {
   const content: string;
