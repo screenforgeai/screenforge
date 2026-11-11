@@ -139,6 +139,12 @@ export const CH = {
     CONFIRM: 'area-selector:confirm',
     CANCEL: 'area-selector:cancel',
   },
+  captureShortcuts: {
+    // Renderer → main: which global capture shortcuts are live
+    GET: 'capture-shortcuts:get',
+    // Main → toolbar: the record shortcut was pressed, switch to Video
+    VIDEO_MODE_REQUESTED: 'capture-shortcuts:video-mode-requested',
+  },
   screenshot: {
     // Toolbar → main: hide the toolbar, grab a still, hand it to the main window
     CAPTURE: 'screenshot:capture',

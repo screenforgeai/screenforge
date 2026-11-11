@@ -153,6 +153,10 @@ function createScreenforgeMock(backend: CaptureBackend) {
     onSceneOverlayClosed: vi.fn(noopUnsubscribe),
     onStopRequested: vi.fn(noopUnsubscribe),
     onRecordingSourceLost: vi.fn(noopUnsubscribe),
+    onVideoModeRequested: vi.fn(noopUnsubscribe),
+    getCaptureShortcuts: vi
+      .fn()
+      .mockResolvedValue({ screenshot: 'Alt+Shift+S', record: 'Alt+Shift+R' }),
     getSystemAudioSupport: vi.fn().mockResolvedValue({ supported: true }),
     prepareRecordingStartPermissions: vi.fn().mockResolvedValue(undefined),
     prepareScreenshotPermissions: vi.fn().mockResolvedValue(undefined),
@@ -521,6 +525,23 @@ describe('FloatingToolbar recording widget', () => {
       expect(screen.queryByRole('button', { name: 'Record' })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Take screenshot' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'More options' })).not.toBeInTheDocument();
+    });
+
+    it('switches back to Video when the record shortcut is pressed', async () => {
+      await switchToScreenshot();
+      const onVideoMode = screenforge.onVideoModeRequested.mock.calls.at(-1)?.[0] as
+        | (() => void)
+        | undefined;
+      act(() => onVideoMode?.());
+      expect(screen.getByRole('button', { name: 'Video' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
+    });
+
+    it('names the global shortcut in the Screenshot tooltip', async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureShortcuts).toHaveBeenCalled());
+      fireEvent.focus(screen.getByRole('button', { name: 'Screenshot' }));
+      expect(await screen.findAllByText('Alt+Shift+S')).not.toHaveLength(0);
     });
 
     it('captures the display, asking only for screen access', async () => {

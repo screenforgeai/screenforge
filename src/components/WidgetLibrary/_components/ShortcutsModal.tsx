@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { CAPTURE_SHORTCUTS, shortcutKeys } from 'src/lib/captureShortcuts';
 import { IconX } from 'src/lib/icons';
 import { Button, Dialog, DialogContent, DialogTitle } from 'src/lib/ui';
 
@@ -15,6 +16,19 @@ const buildGroups = (isMac: boolean, t: TFunction): ShortcutGroup[] => {
   const del = isMac ? '⌫' : 'Del';
 
   return [
+    {
+      label: t('captureAnywhere'),
+      shortcuts: [
+        {
+          description: t('takeScreenshot'),
+          keys: shortcutKeys(CAPTURE_SHORTCUTS.screenshot, isMac),
+        },
+        {
+          description: t('openRecordingToolbar'),
+          keys: shortcutKeys(CAPTURE_SHORTCUTS.record, isMac),
+        },
+      ],
+    },
     {
       label: t('playback'),
       shortcuts: [{ description: t('playPause'), keys: ['Space'] }],

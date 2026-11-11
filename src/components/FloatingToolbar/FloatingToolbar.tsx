@@ -21,6 +21,7 @@ import {
   IconCamera,
 } from 'src/lib/icons';
 import { trackEvent } from 'src/lib/analytics';
+import { formatShortcut } from 'src/lib/captureShortcuts';
 import { readableErrorMessage } from 'src/lib/ipcError';
 import {
   Button,
@@ -42,6 +43,7 @@ import type {
   SystemAudioSupport,
   ToolbarShapeRect,
   ScreenshotCaptureRequest,
+  RegisteredCaptureShortcuts,
 } from '../../types/index';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
 import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
@@ -66,6 +68,7 @@ const CAMERA_CAPTURE_BITRATE = 4_000_000;
 // hovering the toolbar expands the shape to the full window (the same
 // "interactive" state macOS/Windows use) and leaving shrinks it back.
 const IS_LINUX = navigator.platform.startsWith('Linux');
+const IS_MAC = navigator.platform.startsWith('Mac');
 const SHAPE_MEASURE_INTERVAL_MS = 200;
 // Keeps drop shadows and hover affordances inside the drawable region while
 // the shape is shrunken. Tooltips and menus only appear in the hovered
@@ -292,11 +295,19 @@ function getWindowSourceRelevance(source: DesktopSource): number {
   return score;
 }
 
+/** A global shortcut beside a tooltip label, styled like the editor's hotkey hints. */
+const ShortcutHint = ({ accelerator }: { accelerator?: string }) =>
+  accelerator ? (
+    <span className="ml-1 text-sf-muted">{formatShortcut(accelerator, IS_MAC)}</span>
+  ) : null;
+
 export const FloatingToolbar = () => {
   const { t } = useTranslation('toolbar');
   const [tab, setTab] = useState<SourceTab>('display');
   // One source picker serves both: Video records it, Screenshot grabs a still.
   const [captureMode, setCaptureMode] = useState<'video' | 'photo'>('video');
+  // Global shortcuts that registered, named in the tooltips so people find them.
+  const [captureShortcuts, setCaptureShortcuts] = useState<RegisteredCaptureShortcuts>({});
   const reduceMotion = useReducedMotion();
   const modeSpring = reduceMotion ? INSTANT : MODE_SPRING;
   const modeFade = reduceMotion ? INSTANT : MODE_FADE;
@@ -337,6 +348,15 @@ export const FloatingToolbar = () => {
 
   useEffect(() => {
     window.screenforge.getAppendMode().then(setIsAppendMode);
+  }, []);
+
+  useEffect(() => {
+    window.screenforge
+      .getCaptureShortcuts()
+      .then(setCaptureShortcuts)
+      .catch(() => undefined);
+    // The record shortcut reopens the toolbar ready for video.
+    return window.screenforge.onVideoModeRequested(() => setCaptureMode('video'));
   }, []);
 
   useEffect(() => {
@@ -1805,6 +1825,13 @@ export const FloatingToolbar = () => {
                         </TooltipTrigger>
                         <TooltipContent side="top">
                           {mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')}
+                          <ShortcutHint
+                            accelerator={
+                              mode === 'video'
+                                ? captureShortcuts.record
+                                : captureShortcuts.screenshot
+                            }
+                          />
                         </TooltipContent>
                       </Tooltip>
                     ))}
@@ -1940,7 +1967,12 @@ export const FloatingToolbar = () => {
                           <IconCrop size={16} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">{t('area')}</TooltipContent>
+                      <TooltipContent side="top">
+                        {t('area')}
+                        {captureMode === 'photo' && (
+                          <ShortcutHint accelerator={captureShortcuts.screenshot} />
+                        )}
+                      </TooltipContent>
                     </Tooltip>
                   </div>
 

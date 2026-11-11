@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { IconCamera, IconPlayerRecordFilled, IconRestart } from 'src/lib/icons';
+import { nudgeForKey } from 'src/lib/areaNudge';
 import type { AreaSelectorPurpose } from 'src/types';
 
 type SelectionRect = {
@@ -22,6 +23,7 @@ type DragState = {
 
 const MIN_AREA_SIZE = 32;
 const HANDLE_HIT = 20;
+
 const OVERLAY_COLOR = 'rgba(0,0,0,0.65)';
 
 function normalizeRect(x1: number, y1: number, x2: number, y2: number): SelectionRect {
@@ -125,14 +127,36 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleCancel();
+        return;
       }
-      if (e.key === 'Enter' && showConfirmButtons) {
-        handleConfirm();
+      if (e.key === 'Enter') {
+        if (showConfirmButtons) {
+          handleConfirm();
+        } else if (isScreenshot && !dragState) {
+          // Nothing drawn yet: Enter takes the whole screen.
+          void window.screenforge.confirmAreaSelection({
+            x: 0,
+            y: 0,
+            width: window.innerWidth,
+            height: window.innerHeight,
+          });
+        }
+        return;
+      }
+      if (showConfirmButtons && confirmedRect) {
+        const nudged = nudgeForKey(confirmedRect, e.key, e.shiftKey, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+        if (nudged) {
+          e.preventDefault();
+          setConfirmedRect(nudged);
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleCancel, handleConfirm, showConfirmButtons]);
+  }, [confirmedRect, dragState, handleCancel, handleConfirm, isScreenshot, showConfirmButtons]);
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) {
@@ -400,7 +424,7 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
               }}
             >
               {isScreenshot
-                ? 'Drag to select an area to capture · Esc to cancel'
+                ? 'Drag to select an area · Enter for the whole screen · Esc to cancel'
                 : 'Drag to select a recording area · Esc to cancel'}
             </div>
           </motion.div>
