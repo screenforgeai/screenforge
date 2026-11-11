@@ -27,6 +27,7 @@ import {
   VideoSource,
 } from 'pixi.js';
 import type { PixiEffect, PixiEffectUpdater, PixiScene } from '../../pixi/types';
+import { RECORDING_VIDEO_SPRITE_LABEL } from '../../pixi/types';
 import {
   SCREEN_VIDEO_MAG_FILTER,
   SCREEN_VIDEO_MIN_FILTER,
@@ -307,6 +308,8 @@ export const framePixiEffect: PixiEffect<null> = {
     const videoSprite = new Sprite();
     videoSprite.eventMode = 'none';
     videoSprite.roundPixels = false;
+    // The cursor's magnifier finds the recording by this label.
+    videoSprite.label = RECORDING_VIDEO_SPRITE_LABEL;
 
     // ── Media container (masked to mediaRect with rounded corners) ──────────
     const mediaContainer = new Container();

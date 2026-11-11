@@ -54,6 +54,10 @@ function cloneSnapshot(snapshot: HistorySnapshot): HistorySnapshot {
     cursorMaxTilt: snapshot.cursorMaxTilt,
     cursorHideWhenIdle: snapshot.cursorHideWhenIdle,
     cursorIdleHideSeconds: snapshot.cursorIdleHideSeconds,
+    cursorEffect: snapshot.cursorEffect,
+    cursorClickShrink: snapshot.cursorClickShrink,
+    cursorColor: snapshot.cursorColor,
+    cursorLabel: snapshot.cursorLabel,
     cursorClickSound: snapshot.cursorClickSound,
     cursorClickSoundVolume: snapshot.cursorClickSoundVolume,
     cursorContinuousTracking: snapshot.cursorContinuousTracking,
@@ -92,6 +96,10 @@ function createSnapshot(state: AppStore): HistorySnapshot {
     cursorMaxTilt: state.cursorMaxTilt,
     cursorHideWhenIdle: state.cursorHideWhenIdle,
     cursorIdleHideSeconds: state.cursorIdleHideSeconds,
+    cursorEffect: state.cursorEffect,
+    cursorClickShrink: state.cursorClickShrink,
+    cursorColor: state.cursorColor,
+    cursorLabel: state.cursorLabel,
     cursorClickSound: state.cursorClickSound,
     cursorClickSoundVolume: state.cursorClickSoundVolume,
     cursorContinuousTracking: state.cursorContinuousTracking,
@@ -122,6 +130,10 @@ function snapshotToPatch(snapshot: HistorySnapshot): EditableStorePatch {
     cursorMaxTilt: snapshot.cursorMaxTilt,
     cursorHideWhenIdle: snapshot.cursorHideWhenIdle,
     cursorIdleHideSeconds: snapshot.cursorIdleHideSeconds,
+    cursorEffect: snapshot.cursorEffect,
+    cursorClickShrink: snapshot.cursorClickShrink,
+    cursorColor: snapshot.cursorColor,
+    cursorLabel: snapshot.cursorLabel,
     cursorClickSound: snapshot.cursorClickSound,
     cursorClickSoundVolume: snapshot.cursorClickSoundVolume,
     cursorContinuousTracking: snapshot.cursorContinuousTracking,
@@ -173,6 +185,14 @@ function snapshotsEqual(a: HistorySnapshot, b: HistorySnapshot): boolean {
     return false;
   }
   if (a.cursorIdleHideSeconds !== b.cursorIdleHideSeconds) {
+    return false;
+  }
+  if (
+    a.cursorEffect !== b.cursorEffect ||
+    a.cursorClickShrink !== b.cursorClickShrink ||
+    a.cursorColor !== b.cursorColor ||
+    a.cursorLabel !== b.cursorLabel
+  ) {
     return false;
   }
   if (a.cursorClickSound !== b.cursorClickSound) {

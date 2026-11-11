@@ -57,6 +57,10 @@ describe('createCaptureStoreSnapshot', () => {
       cursorMaxTilt: 4,
       cursorHideWhenIdle: false,
       cursorIdleHideSeconds: 5,
+      cursorEffect: 'none' as const,
+      cursorClickShrink: false,
+      cursorColor: '#2F6FED',
+      cursorLabel: 'You',
       maskClips: [],
       motionClips: [] as MotionClip[],
     };

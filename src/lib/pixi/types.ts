@@ -71,3 +71,6 @@ export interface PixiEffect<TData = unknown> {
     scene: PixiScene,
   ): PixiEffectUpdater | void | Promise<PixiEffectUpdater | void>;
 }
+
+/** Label of the recording's video sprite, so other effects (the cursor magnifier) can find it. */
+export const RECORDING_VIDEO_SPRITE_LABEL = 'sf-recording-video';

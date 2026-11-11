@@ -20,6 +20,10 @@ type CaptureStoreSnapshotSource = Pick<
   | 'cursorMaxTilt'
   | 'cursorHideWhenIdle'
   | 'cursorIdleHideSeconds'
+  | 'cursorEffect'
+  | 'cursorClickShrink'
+  | 'cursorColor'
+  | 'cursorLabel'
   | 'cameraClips'
   | 'maskClips'
   | 'motionClips'
@@ -47,6 +51,10 @@ export function createCaptureStoreSnapshot(
     cursorMaxTilt: state.cursorMaxTilt,
     cursorHideWhenIdle: state.cursorHideWhenIdle,
     cursorIdleHideSeconds: state.cursorIdleHideSeconds,
+    cursorEffect: state.cursorEffect,
+    cursorClickShrink: state.cursorClickShrink,
+    cursorColor: state.cursorColor,
+    cursorLabel: state.cursorLabel,
     captions: captionsOverride,
     cameraClips: state.cameraClips.map((c) => ({ ...c })),
     maskClips: state.maskClips.map((c) => ({ ...c })),

@@ -22,7 +22,8 @@ import type { MotionClip } from '../lib/animation/motionClips';
 export type { MusicClip };
 
 export type CursorStyle = BaseCursorStyle;
-export type CursorClickEffect = 'ripple' | 'none';
+export type { CursorClickEffect, CursorEffect } from '../lib/effects/cursor/effects';
+import type { CursorClickEffect, CursorEffect } from '../lib/effects/cursor/effects';
 export type CursorClickSound = 'none' | 'mouse' | 'mouse-2' | 'trackpad' | 'soft';
 export type WidgetTab =
   | 'recordings'
@@ -74,6 +75,10 @@ export interface EditorSessionState {
   cursorMaxTilt: number;
   cursorHideWhenIdle: boolean;
   cursorIdleHideSeconds: number;
+  cursorEffect: CursorEffect;
+  cursorClickShrink: boolean;
+  cursorColor: string;
+  cursorLabel: string;
   cursorClickSound: CursorClickSound;
   cursorClickSoundVolume: number;
   cursorContinuousTracking: boolean;
@@ -103,6 +108,10 @@ export interface HistorySnapshot {
   cursorMaxTilt: number;
   cursorHideWhenIdle: boolean;
   cursorIdleHideSeconds: number;
+  cursorEffect: CursorEffect;
+  cursorClickShrink: boolean;
+  cursorColor: string;
+  cursorLabel: string;
   cursorClickSound: CursorClickSound;
   cursorClickSoundVolume: number;
   cursorContinuousTracking: boolean;
@@ -142,6 +151,10 @@ export interface EditableStorePatch {
   cursorMaxTilt?: number;
   cursorHideWhenIdle?: boolean;
   cursorIdleHideSeconds?: number;
+  cursorEffect?: CursorEffect;
+  cursorClickShrink?: boolean;
+  cursorColor?: string;
+  cursorLabel?: string;
   cursorClickSound?: CursorClickSound;
   cursorClickSoundVolume?: number;
   cursorContinuousTracking?: boolean;
