@@ -5,6 +5,7 @@ import {
   CURSOR_STYLE_IDS,
   DEFAULT_CURSOR_COLOR,
   getCursorStyleExtent,
+  getCursorTiltFactor,
   getPointerAxis,
   isAnimatedCursorStyle,
   isNameTagCursorStyle,
@@ -93,12 +94,22 @@ describe('cursor extents', () => {
 });
 
 describe('pointer angle', () => {
-  it('aims the dart pointers along the macOS arrow, so tilting while moving looks right', () => {
-    const mac = getPointerAxis('cursor01');
-    // The macOS arrow leans about 23° left of straight up (its body points down-right ~66°).
-    expect((mac * 180) / Math.PI).toBeCloseTo(66.6, 0);
+  const deg = (rad: number) => (rad * 180) / Math.PI;
+  // Lean from straight up: 90° − the axis the body points along.
+  const lean = (style: Parameters<typeof getPointerAxis>[0]) => 90 - deg(getPointerAxis(style));
+
+  it('leans the dart pointers a little more than the macOS arrow, all by the same amount', () => {
+    expect(lean('cursor01')).toBeCloseTo(23.4, 0);
     for (const style of ['wedge', 'collaborator', 'rounded'] as const) {
-      expect(Math.abs(getPointerAxis(style) - mac), style).toBeLessThan((1 * Math.PI) / 180);
+      expect(lean(style), style).toBeCloseTo(31, 0);
+    }
+  });
+
+  it('tilts the dart pointers more than the arrow cursors while moving', () => {
+    expect(getCursorTiltFactor('cursor01')).toBe(1);
+    expect(getCursorTiltFactor('glass')).toBe(1);
+    for (const style of ['wedge', 'collaborator', 'rounded'] as const) {
+      expect(getCursorTiltFactor(style), style).toBeGreaterThan(1.5);
     }
   });
 });

@@ -26,6 +26,7 @@ import type { CursorData, PressEvent, ActivityEvent } from './analyze';
 import { resolveCursorStyleState, isCursorStyleStateType, type CursorStyleState } from './cursors';
 import {
   cursorStyleReactsToPress,
+  getCursorTiltFactor,
   isAnimatedCursorStyle,
   isNameTagCursorStyle,
   normalizeCursorStyle,
@@ -676,7 +677,8 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
       const cvx = dispVelNx * scene.sourceWidth * frameScale * zoomScale;
       const cvy = dispVelNy * scene.sourceHeight * frameScale * zoomScale;
       const speed = Math.sqrt(cvx * cvx + cvy * cvy);
-      const MAX_TILT = (cursorMaxTilt * Math.PI) / 180;
+      // Dart pointers swing further than the arrow cursors at the same Rotation setting.
+      const MAX_TILT = (cursorMaxTilt * getCursorTiltFactor(style) * Math.PI) / 180;
       const TILT_SPEED_SCALE = 600;
       const tiltFactor = Math.min(speed / TILT_SPEED_SCALE, 1);
       const targetRotation =
