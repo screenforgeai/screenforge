@@ -399,6 +399,9 @@ export const framePixiEffect: PixiEffect<null> = {
     let videoElementSource: VideoSource | null = null;
     let videoElementSourceElement: HTMLVideoElement | null = null;
     let currentVideoTexture: Texture | null = null;
+    // True when the texture holds only the crop (the export bridge), so the
+    // sprite fills the media rect instead of being offset behind its mask.
+    let videoTextureIsCrop = false;
 
     // ── Renderer size tracking — reset change-detection guards on resize ──────
     let lastCw = -1;
@@ -609,12 +612,17 @@ export const framePixiEffect: PixiEffect<null> = {
 
       // ── Update video texture from renderContext ──────────────────────────
       // Preview uses the HTMLVideoElement directly. Export/canvas sources use a
-      // 1:1 bridge canvas so the copy stays unsmoothed before GPU upload.
+      // 1:1 bridge canvas so the copy stays unsmoothed before GPU upload. The
+      // bridge copies only the crop's exact pixels: scaling a full-source
+      // texture behind the media mask let the GPU blend in pixels from just
+      // outside the crop along its edges (and shifted it by a fraction of a
+      // pixel), which an area recording must never show.
       const videoSrc = renderContext.videoSource;
       if (videoSrc?.ready && videoSrc.source && videoSrc.width > 0 && videoSrc.height > 0) {
         const srcW = videoSrc.width;
         const srcH = videoSrc.height;
         if (isHTMLVideoSource(videoSrc.source)) {
+          videoTextureIsCrop = false;
           if (videoElementSourceElement !== videoSrc.source) {
             videoElementSource = new VideoSource({
               resource: videoSrc.source,
@@ -635,18 +643,33 @@ export const framePixiEffect: PixiEffect<null> = {
           }
           videoElementSource?.update();
         } else if (videoBridgeCtx) {
-          if (videoBridgeCanvas.width !== srcW || videoBridgeCanvas.height !== srcH) {
-            videoBridgeCanvas.width = srcW;
-            videoBridgeCanvas.height = srcH;
+          const crop = getFrameGeometry(effectiveFrame, srcW, srcH).cropRectPixels;
+          if (videoBridgeCanvas.width !== crop.width || videoBridgeCanvas.height !== crop.height) {
+            videoBridgeCanvas.width = crop.width;
+            videoBridgeCanvas.height = crop.height;
             configureScreenVideoBridgeContext(videoBridgeCtx);
+            // A new size needs a new GPU source; the old one keeps the old size.
+            videoBridgeSource?.destroy();
+            videoBridgeSource = null;
           }
-          videoBridgeCtx.drawImage(videoSrc.source as CanvasImageSource, 0, 0);
+          videoBridgeCtx.drawImage(
+            videoSrc.source as CanvasImageSource,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            0,
+            0,
+            crop.width,
+            crop.height,
+          );
           if (!videoBridgeSource) {
             videoBridgeSource = createScreenVideoCanvasSource(videoBridgeCanvas);
             currentVideoTexture = new Texture({ source: videoBridgeSource });
             videoSprite.texture = currentVideoTexture;
           }
           videoBridgeSource.update();
+          videoTextureIsCrop = true;
         }
       }
 
@@ -1006,7 +1029,13 @@ export const framePixiEffect: PixiEffect<null> = {
       // ── Video sprite: crop + scale to mediaRect ──────────────────────────
       const videoHidden = hiddenLayers.video;
       videoSprite.visible = !videoHidden;
-      if (currentVideoTexture && !videoHidden) {
+      if (currentVideoTexture && !videoHidden && videoTextureIsCrop) {
+        // The texture is already the crop: fill the media rect with it.
+        videoSprite.x = mediaRect.x;
+        videoSprite.y = mediaRect.y;
+        videoSprite.width = mediaRect.width;
+        videoSprite.height = mediaRect.height;
+      } else if (currentVideoTexture && !videoHidden) {
         const scaleX = mediaRect.width / Math.max(cropRectPixels.width, 1);
         const scaleY = mediaRect.height / Math.max(cropRectPixels.height, 1);
         videoSprite.x = mediaRect.x - cropRectPixels.x * scaleX;

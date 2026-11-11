@@ -1,6 +1,6 @@
 import type { SavedProject } from '../types';
 import { createInitialMediaSegments, getInitialPlaybackTime } from '../lib/helpers/segments';
-import { DEFAULT_FRAME, cloneFrameSettings } from '../lib/effects/frame';
+import { DEFAULT_FRAME, cloneFrameSettings, cropRectFromPixels } from '../lib/effects/frame';
 import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CURSOR_SETTINGS,
@@ -115,6 +115,18 @@ export function createEmptyEditorSession(): EditorSessionState {
   };
 }
 
+/** An area recording opens cropped to exactly the area; anything else, uncropped. */
+function createRecordingFrame(
+  recordingResult: NonNullable<EditorSessionState['recordingResult']>,
+): EditorSessionState['frame'] {
+  const frame = cloneFrameSettings(DEFAULT_FRAME);
+  const { areaCrop } = recordingResult;
+  if (areaCrop) {
+    frame.cropRect = cropRectFromPixels(areaCrop, areaCrop.sourceWidth, areaCrop.sourceHeight);
+  }
+  return frame;
+}
+
 export function createRecordingSession(
   recordingResult: NonNullable<EditorSessionState['recordingResult']>,
 ): EditorSessionState {
@@ -122,6 +134,7 @@ export function createRecordingSession(
   return {
     ...createEmptyEditorSession(),
     recordingResult,
+    frame: createRecordingFrame(recordingResult),
     camera: {
       ...DEFAULT_CAMERA_SETTINGS,
       shadow: { ...DEFAULT_CAMERA_SETTINGS.shadow },

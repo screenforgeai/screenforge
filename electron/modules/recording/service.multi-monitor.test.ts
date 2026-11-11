@@ -300,27 +300,90 @@ describe('recording service: multiple monitors', () => {
       expect(captureProcs).toHaveLength(0);
     });
 
-    it('reports the area in global coordinates, matching the cursor events', async () => {
+    /** The recorded video: the whole 2x primary monitor. */
+    async function probeRecordedDisplay(width = 5120, height = 2880) {
+      const { probeExportSource } = await import('../export/service');
+      vi.mocked(probeExportSource).mockResolvedValue({
+        fps: 60,
+        width,
+        height,
+        duration: 5,
+      });
+    }
+
+    it('keeps the whole display and reports it in global coordinates, matching the cursor events', async () => {
       const { startRecording, stopRecording } = await import('./service');
+      await probeRecordedDisplay();
 
       await startRecording('screen:0', area);
       const result = await stopRecording();
 
-      expect(result.recordingArea).toEqual({ x: 2020, y: 50, width: 800, height: 600 });
+      expect(result.recordingArea).toEqual({ x: 1920, y: 0, width: 2560, height: 1440 });
     });
 
-    it("crops with the recorded display's scale even if the primary changed mid-recording", async () => {
+    it('returns the exact pixels of the area for the editor to crop, without re-encoding', async () => {
       const { startRecording, stopRecording } = await import('./service');
+      await probeRecordedDisplay();
+
+      await startRecording('screen:0', { x: 101, y: 51, width: 641, height: 359 });
+      const result = await stopRecording();
+
+      expect(result.areaCrop).toEqual({
+        x: 202,
+        y: 102,
+        width: 1282,
+        height: 718,
+        sourceWidth: 5120,
+        sourceHeight: 2880,
+      });
+      const encodes = ffmpegRunnerMock.runFFmpeg.mock.calls.map(([args]) => args as string[]);
+      expect(encodes.some((args) => argAfter(args, '-vf')?.startsWith('crop='))).toBe(false);
+    });
+
+    it('measures the area on the recorded display even if the primary changed mid-recording', async () => {
+      const { startRecording, stopRecording } = await import('./service');
+      await probeRecordedDisplay();
 
       await startRecording('screen:0', area);
       // e.g. the primary monitor was unplugged and the OS promoted the other one.
       electronMock.state.primary = leftMonitor;
-      await stopRecording();
+      const result = await stopRecording();
 
-      const cropArgs = ffmpegRunnerMock.runFFmpeg.mock.calls
-        .map(([args]) => args as string[])
-        .find((args) => argAfter(args, '-vf')?.startsWith('crop='));
-      expect(argAfter(cropArgs ?? [], '-vf')).toBe('crop=1600:1200:200:100');
+      expect(result.areaCrop).toMatchObject({ x: 200, y: 100, width: 1600, height: 1200 });
+      expect(result.recordingArea).toEqual(primaryMonitor.bounds);
+    });
+
+    it('falls back to the display scale when the video size cannot be read', async () => {
+      const { startRecording, stopRecording } = await import('./service');
+      const { probeExportSource } = await import('../export/service');
+      vi.mocked(probeExportSource).mockResolvedValue({
+        fps: null,
+        width: null,
+        height: null,
+        duration: null,
+      });
+
+      await startRecording('screen:0', area);
+      const result = await stopRecording();
+
+      expect(result.areaCrop).toEqual({
+        x: 200,
+        y: 100,
+        width: 1600,
+        height: 1200,
+        sourceWidth: 5120,
+        sourceHeight: 2880,
+      });
+    });
+
+    it('returns no crop for a whole-display recording', async () => {
+      const { startRecording, stopRecording } = await import('./service');
+      await probeRecordedDisplay();
+
+      await startRecording('screen:0', null);
+      const result = await stopRecording();
+
+      expect(result.areaCrop).toBeUndefined();
     });
   });
 

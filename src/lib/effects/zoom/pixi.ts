@@ -19,6 +19,7 @@ import {
   setSharedPerspectiveState,
 } from './index';
 import { detectZoomClips } from './analyze';
+import { getZoomCrop, toCropSpacePoint, toCropSpaceRecording } from './crop-space';
 import { SharpenFilter } from '../../pixi/filters/SharpenFilter';
 import { CinematicZoomFilter } from '../../pixi/filters/CinematicZoomFilter';
 import { sortMediaSegments } from '../../helpers/segments';
@@ -672,7 +673,8 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
   id: 'zoom',
 
   analyze(recording) {
-    return detectZoomClips(recording);
+    // Auto zoom targets are positions in the cropped picture, like manual ones.
+    return detectZoomClips(toCropSpaceRecording(recording, getZoomCrop(useStore.getState())));
   },
 
   onLoad(data) {
@@ -947,7 +949,11 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
       const { padding } = state.frame.background;
       const { cursorHalflife, cursorContinuousTracking, mediaSegments } = state;
       const bounds = getCameraBounds(padding);
-      const pos = cursorData ? interpolateCursor(cursorData.moveEvents, t) : null;
+      // The camera centres on positions in the cropped picture; the cursor's
+      // are across the whole recording.
+      const zoomCrop = getZoomCrop(state);
+      const cursorPos = cursorData ? interpolateCursor(cursorData.moveEvents, t) : null;
+      const pos = cursorPos ? toCropSpacePoint(cursorPos, zoomCrop) : null;
 
       if (mediaSegments !== lastMediaSegmentsRef) {
         cachedSortedSegs = sortMediaSegments(mediaSegments);
@@ -1118,7 +1124,9 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
           }
 
           const startPos = interpolateCursor(cursorData.moveEvents, sourceStart);
-          return startPos ? { nx: startPos.nx, ny: startPos.ny } : dynamicTiltFocus;
+          return startPos
+            ? toCropSpacePoint({ nx: startPos.nx, ny: startPos.ny }, zoomCrop)
+            : dynamicTiltFocus;
         },
       });
       const staticTiltFocusKey = getCinematicTiltFocusCacheKey(

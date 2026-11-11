@@ -9,7 +9,9 @@ import {
   BT709_TAG_ARGS,
   RGB_TO_BT709_FILTER,
   buildX11GrabArgs,
+  buildAppendClipFilter,
   clampCaptureBounds,
+  computeAreaCropPixels,
   fitH264FrameSize,
 } from './capture-args';
 
@@ -304,5 +306,91 @@ describe('buildSegmentConcatArgs', () => {
       '+faststart',
       '/tmp/joined.mp4',
     ]);
+  });
+});
+
+describe('computeAreaCropPixels', () => {
+  it('maps a Retina selection to exactly twice its logical size', () => {
+    expect(
+      computeAreaCropPixels(
+        { x: 151, y: 98, width: 600, height: 401 },
+        { width: 1512, height: 982 },
+        { width: 3024, height: 1964 },
+      ),
+    ).toEqual({ x: 302, y: 196, width: 1200, height: 802 });
+  });
+
+  it('keeps odd sizes instead of rounding them to even', () => {
+    expect(
+      computeAreaCropPixels(
+        { x: 7, y: 3, width: 641, height: 359 },
+        { width: 1920, height: 1080 },
+        { width: 1920, height: 1080 },
+      ),
+    ).toEqual({ x: 7, y: 3, width: 641, height: 359 });
+  });
+
+  it('rounds edges, not sizes, at fractional scales', () => {
+    // 125% scaling: 101 → 126.25 and 701 → 876.25 logical px.
+    const crop = computeAreaCropPixels(
+      { x: 101, y: 51, width: 600, height: 400 },
+      { width: 1536, height: 864 },
+      { width: 1920, height: 1080 },
+    );
+    expect(crop).toEqual({ x: 126, y: 64, width: 750, height: 500 });
+  });
+
+  it('follows the video when it was recorded smaller than the display', () => {
+    // A 5K display captured at 4096x2304: the same screen region, scaled.
+    expect(
+      computeAreaCropPixels(
+        { x: 1280, y: 720, width: 1280, height: 720 },
+        { width: 2560, height: 1440 },
+        { width: 4096, height: 2304 },
+      ),
+    ).toEqual({ x: 2048, y: 1152, width: 2048, height: 1152 });
+  });
+
+  it('clamps an area that reaches past the edge of the video', () => {
+    expect(
+      computeAreaCropPixels(
+        { x: 1800, y: 1000, width: 300, height: 200 },
+        { width: 1920, height: 1080 },
+        { width: 1920, height: 1080 },
+      ),
+    ).toEqual({ x: 1800, y: 1000, width: 120, height: 80 });
+  });
+});
+
+describe('buildAppendClipFilter', () => {
+  it('keeps the existing fit-and-pad when nothing is cropped', () => {
+    expect(buildAppendClipFilter({ width: 1920, height: 1080 })).toBe(
+      'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p',
+    );
+  });
+
+  it('crops the appended clip to its own selected area first', () => {
+    expect(
+      buildAppendClipFilter({
+        width: 1920,
+        height: 1080,
+        sourceCrop: { x: 7, y: 3, width: 641, height: 359 },
+      }),
+    ).toBe(
+      'crop=641:359:7:3:exact=1,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p',
+    );
+  });
+
+  it('places the clip inside the project crop so it shows where the crop is', () => {
+    expect(
+      buildAppendClipFilter({
+        width: 3024,
+        height: 1964,
+        sourceCrop: { x: 302, y: 196, width: 1200, height: 802 },
+        target: { x: 151, y: 99, width: 1201, height: 803 },
+      }),
+    ).toBe(
+      'crop=1200:802:302:196:exact=1,format=yuv444p,scale=1201:803:force_original_aspect_ratio=decrease,pad=1201:803:(ow-iw)/2:(oh-ih)/2,pad=3024:1964:151:99,setsar=1,format=yuv420p',
+    );
   });
 });
