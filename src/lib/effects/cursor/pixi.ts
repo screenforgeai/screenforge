@@ -38,6 +38,7 @@ import {
   MAGNIFIER_ZOOM,
   MAX_CLICK_EFFECT_DURATION,
   PRESS_SCALE,
+  createCursorPath,
   SHRINK_PRESS_SCALE,
   drawCursorEffects,
   findClicksInWindow,
@@ -319,21 +320,35 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
     const lensBody = new Container();
     lensBody.eventMode = 'none';
     lensBody.addChild(lensSprite, lensCropClip);
-    const lensMask = new Graphics();
+    // A soft-edged circle (alpha mask) so the lens edge is feathered like glass,
+    // not a hard stencil cut. The glass itself is drawn on the effects layer above.
+    const lensMaskCanvas = document.createElement('canvas');
+    lensMaskCanvas.width = 256;
+    lensMaskCanvas.height = 256;
+    const lensMaskCtx = lensMaskCanvas.getContext('2d');
+    if (lensMaskCtx) {
+      const soft = lensMaskCtx.createRadialGradient(128, 128, 0, 128, 128, 128);
+      soft.addColorStop(0, '#ffffff');
+      soft.addColorStop(0.95, '#ffffff');
+      soft.addColorStop(1, 'rgba(255,255,255,0)');
+      lensMaskCtx.fillStyle = soft;
+      lensMaskCtx.fillRect(0, 0, 256, 256);
+    }
+    const lensMask = new Sprite(Texture.from(lensMaskCanvas));
     lensMask.eventMode = 'none';
+    lensMask.anchor.set(0.5);
     lensBody.mask = lensMask;
-    const lensRing = new Graphics();
-    lensRing.eventMode = 'none';
     const lens = new Container();
     lens.eventMode = 'none';
     lens.visible = false;
-    lens.addChild(lensBody, lensMask, lensRing);
+    lens.addChild(lensBody, lensMask);
     const layerMatrix = new Matrix();
     const recordingMatrix = new Matrix();
     const maskMatrix = new Matrix();
     const lensTransforms = { lens: new Matrix(), clip: new Matrix() };
     let recordingSprite: Sprite | null = null;
     let recordingMask: Graphics | null = null;
+    const drawnCursorPath = createCursorPath();
 
     // ── Display objects ──────────────────────────────────────────────────────
     // Motion blur: 6 ghost sprites drawn behind the main cursor.
@@ -363,9 +378,10 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
     const cursorContainer = new Container();
     cursorContainer.eventMode = 'none';
     // Draw order: effects → magnifier → ghosts → ripples → prevSprite → mainSprite
+    // The effects layer sits above the lens so it can draw the lens's glass.
     cursorContainer.addChild(
-      effectsSprite,
       lens,
+      effectsSprite,
       ...ghostSprites,
       ...ripplePool,
       prevSprite,
@@ -594,6 +610,8 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
         pendingStyleState = null;
         pendingStyleStateSince = 0;
         initialized = true;
+        drawnCursorPath.clear();
+        drawnCursorPath.record(t, posNx, posNy);
       }
 
       // Compute press/click state once — used both for click-scale spring and drawing.
@@ -636,6 +654,8 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
 
         [posNx, velNx] = springDamp(posNx, velNx, smoothTargetNx, cursorHalflife, dt);
         [posNy, velNy] = springDamp(posNy, velNy, smoothTargetNy, cursorHalflife, dt);
+
+        drawnCursorPath.record(t, posNx, posNy);
 
         // EMA-smooth display velocity to prevent motion blur / tilt snap.
         dispVelNx = dispVelNx * (1 - DISP_VEL_ALPHA) + velNx * DISP_VEL_ALPHA;
@@ -766,8 +786,9 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
             const point = toCanvasPoint(click.nx, click.ny);
             return { x: point.x, y: point.y, t: click.t, seed: index + 1 };
           }),
+          // The drawn (smoothed) cursor's path, not the raw mouse, which runs ahead of it.
           pointAt: (time) => {
-            const at = interpolateCursor(moveEvents, time);
+            const at = drawnCursorPath.at(time);
             return at ? toCanvasPoint(at.nx, at.ny) : null;
           },
           sinceClick: latest ? t - latest.t : null,
@@ -820,13 +841,9 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
         }
         lensCropClip.setFromMatrix(lensTransforms.clip);
         const radius = MAGNIFIER_RADIUS * baseScale;
-        lensMask.clear().circle(cx, cy, radius).fill(0xffffff);
-        lensRing
-          .clear()
-          .circle(cx, cy, radius + 1.2 * baseScale)
-          .stroke({ color: 0x000000, width: 1 * baseScale, alpha: 0.25 })
-          .circle(cx, cy, radius)
-          .stroke({ color: 0xffffff, width: 2.5 * baseScale });
+        lensMask.position.set(cx, cy);
+        lensMask.width = radius * 2;
+        lensMask.height = radius * 2;
         lens.visible = true;
       } else {
         lens.visible = false;

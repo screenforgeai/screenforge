@@ -187,7 +187,62 @@ export function getTrailParticles(
   return particles;
 }
 
-const SPOTLIGHT_RADIUS = 68;
+/**
+ * Where the drawn (smoothed) cursor has been, so the glitter trail follows the
+ * cursor viewers see rather than the raw mouse, which runs ahead of it. Positions
+ * are normalised (0–1) and recorded once per rendered frame; going back in time
+ * (a seek) starts over, just as the cursor itself snaps.
+ */
+export function createCursorPath(maxAge = TRAIL_LIFE + TRAIL_SPEED_PROBE + 0.1) {
+  let points: { t: number; nx: number; ny: number }[] = [];
+  return {
+    record(t: number, nx: number, ny: number) {
+      const last = points[points.length - 1];
+      if (last && t < last.t) {
+        points = [];
+      } else if (last && t === last.t) {
+        points.pop();
+      }
+      points.push({ t, nx, ny });
+      // Keep the newest point older than the cutoff so times just after it still interpolate.
+      const cutoff = t - maxAge;
+      let drop = 0;
+      while (drop + 1 < points.length && points[drop + 1].t <= cutoff) {
+        drop++;
+      }
+      if (drop > 0) {
+        points = points.slice(drop);
+      }
+    },
+    clear() {
+      points = [];
+    },
+    at(s: number): { nx: number; ny: number } | null {
+      if (points.length === 0 || s < points[0].t || s > points[points.length - 1].t) {
+        return null;
+      }
+      let lo = 0;
+      let hi = points.length - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (points[mid].t <= s) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      const a = points[lo];
+      const b = points[hi];
+      if (s <= a.t || a === b) {
+        return { nx: a.nx, ny: a.ny };
+      }
+      const k = (s - a.t) / (b.t - a.t);
+      return { nx: a.nx + (b.nx - a.nx) * k, ny: a.ny + (b.ny - a.ny) * k };
+    },
+  };
+}
+
+const SPOTLIGHT_RADIUS = 80;
 const SPOTLIGHT_TIGHTEN = 0.18;
 const SPOTLIGHT_TIGHTEN_DURATION = 0.35;
 
@@ -270,19 +325,24 @@ export function drawCursorEffects(ctx: CanvasRenderingContext2D, frame: CursorEf
   const { scale, cursor } = frame;
 
   if (frame.cursorEffect === 'spotlight' && cursor) {
+    // A soft stage light: clear around the cursor, then a long, gentle falloff
+    // into a dim that never goes fully dark, so the page stays readable.
     const r = getSpotlightRadius(scale, frame.sinceClick);
     const cx = cursor.x + 6 * scale;
     const cy = cursor.y + 9 * scale;
+    const light = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 2.6);
+    light.addColorStop(0, 'rgba(6,6,10,0)');
+    light.addColorStop(0.3, 'rgba(6,6,10,0.16)');
+    light.addColorStop(0.65, 'rgba(6,6,10,0.38)');
+    light.addColorStop(1, 'rgba(6,6,10,0.5)');
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.68)';
+    ctx.fillStyle = light;
     ctx.fillRect(0, 0, frame.width, frame.height);
-    ctx.globalCompositeOperation = 'destination-out';
-    const hole = ctx.createRadialGradient(cx, cy, r * 0.55, cx, cy, r * 1.25);
-    hole.addColorStop(0, 'rgba(0,0,0,1)');
-    hole.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = hole;
-    ctx.fillRect(cx - r * 1.3, cy - r * 1.3, r * 2.6, r * 2.6);
     ctx.restore();
+  }
+
+  if (frame.cursorEffect === 'magnifier' && cursor) {
+    drawMagnifierGlass(ctx, cursor.x, cursor.y, MAGNIFIER_RADIUS * scale, scale);
   }
 
   if (frame.cursorEffect === 'highlight' && cursor) {
@@ -323,6 +383,87 @@ export function drawCursorEffects(ctx: CanvasRenderingContext2D, frame: CursorEf
   }
 }
 
+/**
+ * The magnifier's glass, drawn over the zoomed recording (which is already
+ * clipped to the circle): a soft drop shadow outside, the edge darkening of a
+ * curved lens, a thin light rim brighter at the top-left, and a soft specular
+ * shine. No hard border.
+ */
+export function drawMagnifierGlass(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  scale: number,
+): void {
+  const tau = Math.PI * 2;
+  ctx.save();
+
+  // Drop shadow, only outside the lens.
+  const shadowOut = r + 14 * scale;
+  const shadow = ctx.createRadialGradient(
+    cx,
+    cy + 2 * scale,
+    r * 0.96,
+    cx,
+    cy + 2 * scale,
+    shadowOut,
+  );
+  shadow.addColorStop(0, 'rgba(0,0,0,0.26)');
+  shadow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, shadowOut + 2 * scale, 0, tau);
+  ctx.arc(cx, cy, r, 0, tau, true);
+  ctx.fillStyle = shadow;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, tau);
+  ctx.clip();
+
+  // A curved lens darkens slightly toward its edge.
+  const edge = ctx.createRadialGradient(cx, cy, r * 0.72, cx, cy, r);
+  edge.addColorStop(0, 'rgba(0,0,0,0)');
+  edge.addColorStop(1, 'rgba(0,0,0,0.2)');
+  ctx.fillStyle = edge;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+  // Specular shine at the top-left.
+  const shine = ctx.createRadialGradient(
+    cx - r * 0.42,
+    cy - r * 0.5,
+    0,
+    cx - r * 0.42,
+    cy - r * 0.5,
+    r * 0.75,
+  );
+  shine.addColorStop(0, 'rgba(255,255,255,0.3)');
+  shine.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = shine;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+  // Thin rim, catching light at the top-left and fading at the bottom-right.
+  const rim = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  rim.addColorStop(0, 'rgba(255,255,255,0.55)');
+  rim.addColorStop(0.5, 'rgba(255,255,255,0.14)');
+  rim.addColorStop(1, 'rgba(255,255,255,0.32)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 0.6 * scale, 0, tau);
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = 1.4 * scale;
+  ctx.stroke();
+
+  // A faint inner reflection along the lower edge.
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.86, Math.PI * 0.18, Math.PI * 0.58);
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.lineWidth = 2 * scale;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 /** True when this frame needs the overlay canvas at all. */
 export function needsEffectsOverlay(
   clickEffect: CursorClickEffect,
@@ -334,6 +475,7 @@ export function needsEffectsOverlay(
     clickEffect === 'confetti' ||
     cursorEffect === 'highlight' ||
     cursorEffect === 'spotlight' ||
+    cursorEffect === 'magnifier' ||
     cursorEffect === 'glitter'
   );
 }
