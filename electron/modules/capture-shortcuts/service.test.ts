@@ -8,7 +8,9 @@ vi.mock('../../lib/logger', () => ({ default: { info: vi.fn(), warn: vi.fn() } }
 import { CAPTURE_SHORTCUTS } from '../../../src/lib/captureShortcuts';
 import {
   getRegisteredCaptureShortcuts,
+  isToolbarRecording,
   registerCaptureShortcuts,
+  setToolbarRecording,
   unregisterCaptureShortcuts,
 } from './service';
 
@@ -76,5 +78,13 @@ describe('capture shortcuts', () => {
 
     unregisterCaptureShortcuts(registry);
     expect(registry.unregister).toHaveBeenCalledTimes(2);
+  });
+
+  it('remembers whether the toolbar is counting down or recording', () => {
+    expect(isToolbarRecording()).toBe(false);
+    setToolbarRecording(true);
+    expect(isToolbarRecording()).toBe(true);
+    setToolbarRecording(false);
+    expect(isToolbarRecording()).toBe(false);
   });
 });

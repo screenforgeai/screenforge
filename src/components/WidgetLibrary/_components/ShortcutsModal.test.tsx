@@ -1,15 +1,17 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RegisteredCaptureShortcuts } from 'src/types';
 import { ShortcutsModal } from './ShortcutsModal';
 
 const renderWithShortcuts = (live: RegisteredCaptureShortcuts) => {
+  const getCaptureShortcuts = vi.fn().mockResolvedValue(live);
   Object.defineProperty(window, 'screenforge', {
-    value: { getCaptureShortcuts: vi.fn().mockResolvedValue(live) },
+    value: { getCaptureShortcuts },
     configurable: true,
     writable: true,
   });
   render(<ShortcutsModal open onClose={() => undefined} />);
+  return getCaptureShortcuts;
 };
 
 afterEach(cleanup);
@@ -28,8 +30,13 @@ describe('ShortcutsModal', () => {
   });
 
   it('drops the capture group when no capture shortcut works', async () => {
-    renderWithShortcuts({});
-    expect(await screen.findByText('Play / Pause')).toBeInTheDocument();
+    const getCaptureShortcuts = renderWithShortcuts({});
+    // The group is also absent before the request answers, so wait for it.
+    await waitFor(() => expect(getCaptureShortcuts).toHaveBeenCalledOnce());
+    await act(async () => {
+      await getCaptureShortcuts.mock.results[0]?.value;
+    });
+    expect(screen.getByText('Play / Pause')).toBeInTheDocument();
     expect(screen.queryByText('Capture (from any app)')).not.toBeInTheDocument();
   });
 });

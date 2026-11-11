@@ -65,7 +65,9 @@ import { isAreaScreenshotInFlight, takeAreaScreenshot } from './modules/screensh
 import { isWaylandSession } from './lib/linux-capture';
 import { registerCaptureShortcutChannels } from './modules/capture-shortcuts/channel';
 import {
+  isToolbarRecording,
   registerCaptureShortcuts,
+  setToolbarRecording,
   unregisterCaptureShortcuts,
 } from './modules/capture-shortcuts/service';
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
@@ -352,6 +354,9 @@ function createToolbarWindow(): BrowserWindow {
   // Give the toolbar a stable title so the native SCK helper can exclude it by name.
   win.setTitle('ScreenforgeToolbar');
 
+  // A toolbar closed mid-countdown can't report going idle itself.
+  win.on('closed', () => setToolbarRecording(false));
+
   win.once('ready-to-show', () => {
     // Apply content protection after content is rendered — on Windows, calling
     // setContentProtection before the window is ready can conflict with transparent
@@ -553,7 +558,7 @@ app.on('ready', async () => {
       setToolbarWindow: (window) => {
         toolbarWindow = window;
       },
-      isBusy: isRecordingBusy,
+      isBusy: () => isRecordingBusy() || isToolbarRecording(),
       preparePermissions: prepareScreenshotPermissions,
       selectArea: () => openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot'),
       warn: showSystemWarning,
@@ -569,7 +574,12 @@ app.on('ready', async () => {
     {
       screenshot: takeScreenshot,
       record: () => {
-        if (isRecordingBusy() || getAreaSelectorWindow() || isAreaScreenshotInFlight()) {
+        if (
+          isRecordingBusy() ||
+          isToolbarRecording() ||
+          getAreaSelectorWindow() ||
+          isAreaScreenshotInFlight()
+        ) {
           return;
         }
         const hadToolbar = toolbarWindow !== null;

@@ -72,3 +72,18 @@ export function unregisterCaptureShortcuts(registry: ShortcutRegistry = globalSh
 export function getRegisteredCaptureShortcuts(): RegisteredCaptureShortcuts {
   return { ...registered };
 }
+
+/**
+ * The toolbar's own recording state. Its countdown, and the moment between
+ * the countdown and the capture starting, aren't visible to isRecordingBusy(),
+ * and a shortcut screenshot then would close the toolbar mid-recording.
+ */
+let toolbarRecording = false;
+
+export function setToolbarRecording(active: boolean): void {
+  toolbarRecording = active;
+}
+
+export function isToolbarRecording(): boolean {
+  return toolbarRecording;
+}

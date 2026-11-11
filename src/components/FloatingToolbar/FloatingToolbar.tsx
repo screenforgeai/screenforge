@@ -359,6 +359,12 @@ export const FloatingToolbar = () => {
     return window.screenforge.onVideoModeRequested(() => setCaptureMode('video'));
   }, []);
 
+  // The countdown counts as recording: the screenshot shortcut waits for it.
+  useEffect(() => {
+    window.screenforge.setToolbarRecording(recordState !== 'idle');
+  }, [recordState]);
+  useEffect(() => () => window.screenforge.setToolbarRecording(false), []);
+
   useEffect(() => {
     const unsubReady = window.screenforge.onTeleprompterReady(() => {
       teleprompterLoadingRef.current = false;

@@ -148,6 +148,22 @@ describe('takeAreaScreenshot', () => {
     expect(mainWindow.webContents.send).not.toHaveBeenCalled();
   });
 
+  it('drops the capture if a recording started while the area was being drawn', async () => {
+    let busy = false;
+    const { deps, mainWindow } = makeDeps({
+      isBusy: () => busy,
+      selectArea: vi.fn(async () => {
+        busy = true;
+        return area;
+      }),
+    });
+
+    await expect(takeAreaScreenshot(deps)).resolves.toBe('skipped');
+
+    expect(serviceMock.captureStill).not.toHaveBeenCalled();
+    expect(mainWindow.show).toHaveBeenCalledOnce();
+  });
+
   it('warns and brings the main window back when the area selector fails', async () => {
     const { deps, mainWindow } = makeDeps({
       selectArea: vi.fn(async () => {

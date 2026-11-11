@@ -144,6 +144,8 @@ export const CH = {
     GET: 'capture-shortcuts:get',
     // Main → toolbar: the record shortcut was pressed, switch to Video
     VIDEO_MODE_REQUESTED: 'capture-shortcuts:video-mode-requested',
+    // Toolbar → main: counting down or recording, so screenshots must wait
+    TOOLBAR_RECORDING: 'capture-shortcuts:toolbar-recording',
   },
   screenshot: {
     // Toolbar → main: hide the toolbar, grab a still, hand it to the main window

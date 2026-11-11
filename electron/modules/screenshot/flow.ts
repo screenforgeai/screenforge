@@ -123,6 +123,12 @@ export async function takeAreaScreenshot(deps: AreaScreenshotDeps): Promise<Area
       restoreMainWindow();
       return 'cancelled';
     }
+    // A recording may have started while the area was drawn: capturing now
+    // would close its toolbar out from under it.
+    if (deps.isBusy()) {
+      restoreMainWindow();
+      return 'skipped';
+    }
 
     try {
       // An area is matched to its display by id, so the source id is only a fallback.

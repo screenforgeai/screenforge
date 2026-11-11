@@ -763,6 +763,8 @@ export interface ScreenforgeAPI {
   getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;
   /** The record shortcut asks an open toolbar to switch back to Video. */
   onVideoModeRequested: (cb: () => void) => () => void;
+  /** Tells main the toolbar is counting down or recording (true) or idle (false). */
+  setToolbarRecording: (active: boolean) => void;
 }
 
 declare global {

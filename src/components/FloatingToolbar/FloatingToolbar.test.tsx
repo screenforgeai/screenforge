@@ -154,6 +154,7 @@ function createScreenforgeMock(backend: CaptureBackend) {
     onStopRequested: vi.fn(noopUnsubscribe),
     onRecordingSourceLost: vi.fn(noopUnsubscribe),
     onVideoModeRequested: vi.fn(noopUnsubscribe),
+    setToolbarRecording: vi.fn(),
     getCaptureShortcuts: vi
       .fn()
       .mockResolvedValue({ screenshot: 'Alt+Shift+S', record: 'Alt+Shift+R' }),
@@ -304,6 +305,8 @@ describe('FloatingToolbar recording widget', () => {
       await waitForRecordingState();
 
       expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0', null);
+      // The countdown already counts as recording, so the screenshot shortcut waits.
+      expect(screenforge.setToolbarRecording).toHaveBeenCalledWith(true);
       expect(getDisplayMedia).not.toHaveBeenCalled();
       expect(FakeMediaRecorder.instances).toHaveLength(0);
       expect(screenforge.hideToolbar).toHaveBeenCalled();
