@@ -12,7 +12,7 @@
  */
 import { Container, Sprite, Graphics, Assets, Texture, Matrix } from 'pixi.js';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
-import { RECORDING_VIDEO_SPRITE_LABEL } from '../../pixi/types';
+import { RECORDING_MASK_LABEL, RECORDING_VIDEO_SPRITE_LABEL } from '../../pixi/types';
 import { useStore } from '../../../store';
 import { getFrameGeometry, getFrameGeometryForPanel } from '../frame/analyze';
 import { getClipTransitionAlpha } from '../frame/index';
@@ -307,20 +307,31 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
     effectsSprite.visible = false;
 
     // ── Magnifier: the recording again, zoomed, inside a circle ──────────────
+    // The zoomed recording is clipped twice: to the recording's own crop (the
+    // frame effect's media mask, so cropped-out pixels never show) and, around
+    // that, to the round lens.
     const lensSprite = new Sprite();
     lensSprite.eventMode = 'none';
+    const lensCropClip = new Graphics();
+    lensCropClip.eventMode = 'none';
+    lensSprite.mask = lensCropClip;
+    const lensBody = new Container();
+    lensBody.eventMode = 'none';
+    lensBody.addChild(lensSprite, lensCropClip);
     const lensMask = new Graphics();
     lensMask.eventMode = 'none';
-    lensSprite.mask = lensMask;
+    lensBody.mask = lensMask;
     const lensRing = new Graphics();
     lensRing.eventMode = 'none';
     const lens = new Container();
     lens.eventMode = 'none';
     lens.visible = false;
-    lens.addChild(lensSprite, lensMask, lensRing);
+    lens.addChild(lensBody, lensMask, lensRing);
     const lensMatrix = new Matrix();
     const overlayMatrix = new Matrix();
+    const cropClipMatrix = new Matrix();
     let recordingSprite: Sprite | null = null;
+    let recordingMask: Graphics | null = null;
 
     // ── Display objects ──────────────────────────────────────────────────────
     // Motion blur: 6 ghost sprites drawn behind the main cursor.
@@ -773,10 +784,18 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
           true,
         ) as Sprite | null;
       }
+      if (!recordingMask || recordingMask.destroyed) {
+        recordingMask = scene.videoContainer.getChildByLabel(
+          RECORDING_MASK_LABEL,
+          true,
+        ) as Graphics | null;
+      }
       if (
         isVisible &&
         cursorEffect === 'magnifier' &&
         recordingSprite &&
+        // Without the crop mask the lens could reveal cropped-out pixels: don't draw it.
+        recordingMask &&
         recordingSprite.visible &&
         recordingSprite.texture !== Texture.EMPTY
       ) {
@@ -791,6 +810,18 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
         lensSprite.texture = recordingSprite.texture;
         lensSprite.anchor.copyFrom(recordingSprite.anchor);
         lensSprite.setFromMatrix(overlayMatrix);
+        // The crop mask's shape, zoomed exactly like the recording, so the lens shows
+        // what the crop shows (magnified) and never a pixel cropped out of it.
+        if (lensCropClip.context !== recordingMask.context) {
+          lensCropClip.context = recordingMask.context;
+        }
+        scene.motionOverlayContainer.getGlobalTransform(cropClipMatrix, false).invert();
+        cropClipMatrix
+          .append(recordingMask.getGlobalTransform(lensMatrix, false))
+          .translate(-cx, -cy)
+          .scale(MAGNIFIER_ZOOM, MAGNIFIER_ZOOM)
+          .translate(cx, cy);
+        lensCropClip.setFromMatrix(cropClipMatrix);
         const radius = MAGNIFIER_RADIUS * baseScale;
         lensMask.clear().circle(cx, cy, radius).fill(0xffffff);
         lensRing

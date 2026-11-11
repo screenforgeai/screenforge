@@ -74,3 +74,6 @@ export interface PixiEffect<TData = unknown> {
 
 /** Label of the recording's video sprite, so other effects (the cursor magnifier) can find it. */
 export const RECORDING_VIDEO_SPRITE_LABEL = 'sf-recording-video';
+
+/** Label of the mask that clips the recording to its crop (rounded media rect). */
+export const RECORDING_MASK_LABEL = 'sf-recording-mask';

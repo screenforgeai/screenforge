@@ -448,14 +448,19 @@ const CursorWidgetBody = () => {
                     aria-label={t('name')}
                     className="h-8 w-36"
                     onFocus={() => beginHistoryGroup('cursor-label', 'Edit cursor name')}
+                    // Keep what's typed (spaces included) and trim once the field is left.
                     onChange={(event) =>
                       updateCursor('Edit cursor name', {
-                        cursorLabel: normalizeCursorLabel(event.target.value),
+                        cursorLabel: event.target.value.slice(0, CURSOR_LABEL_MAX_LENGTH),
                       })
                     }
                     onBlur={() => {
+                      const trimmed = normalizeCursorLabel(cursorLabel);
+                      if (trimmed !== cursorLabel) {
+                        updateCursor('Edit cursor name', { cursorLabel: trimmed });
+                      }
                       endHistoryGroup('cursor-label');
-                      trackCursor('label_length', cursorLabel.length);
+                      trackCursor('label_length', trimmed.length);
                     }}
                   />
                 </div>

@@ -263,3 +263,20 @@ describe('CursorWidget name-tag colour', () => {
     getContext.mockRestore();
   });
 });
+
+describe('CursorWidget name tag', () => {
+  it('keeps spaces while typing and trims only when the field is left', async () => {
+    const user = userEvent.setup();
+    render(<CursorWidget />);
+    await user.click(screen.getByRole('radio', { name: 'Collaborator' }));
+
+    const name = screen.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, ' Mary Jane ');
+    expect(name).toHaveValue(' Mary Jane ');
+
+    await user.tab();
+    expect(useStore.getState().cursorLabel).toBe('Mary Jane');
+    expect(name).toHaveValue('Mary Jane');
+  });
+});

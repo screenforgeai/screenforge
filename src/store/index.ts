@@ -24,6 +24,7 @@ export type {
   SceneStatus,
   TextClip,
   CursorClickEffect,
+  CursorEffect,
   CursorClickSound,
   CursorStyle,
   EditorSessionState,
