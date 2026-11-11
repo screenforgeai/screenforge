@@ -59,8 +59,8 @@ describe('CursorWidget click sound', () => {
       within(listbox)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['None', 'Mouse', 'Trackpad', 'Soft', 'Pop', 'Tick']);
-    for (const name of ['Soft', 'Mouse', 'Trackpad', 'Pop', 'Tick']) {
+    ).toEqual(['None', 'Mouse', 'Mouse 2', 'Trackpad', 'Soft']);
+    for (const name of ['Mouse', 'Mouse 2', 'Trackpad', 'Soft']) {
       expect(screen.getByRole('button', { name: `Play ${name}` })).toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: 'Play None' })).not.toBeInTheDocument();
@@ -71,9 +71,9 @@ describe('CursorWidget click sound', () => {
     render(<CursorWidget />);
 
     await openDropdown(user);
-    await user.click(screen.getByRole('button', { name: 'Play Pop' }));
+    await user.click(screen.getByRole('button', { name: 'Play Soft' }));
 
-    expect(audition).toHaveBeenCalledWith('pop', 0.5);
+    expect(audition).toHaveBeenCalledWith('soft', 0.5);
     expect(useStore.getState().cursorClickSound).toBe('none');
     expect(screen.getByRole('listbox')).toBeInTheDocument();
   });
@@ -90,7 +90,7 @@ describe('CursorWidget click sound', () => {
     await waitFor(() => expect(audition).toHaveBeenLastCalledWith('mouse', 0.5));
 
     await user.keyboard('{ArrowDown}');
-    await waitFor(() => expect(audition).toHaveBeenLastCalledWith('trackpad', 0.5));
+    await waitFor(() => expect(audition).toHaveBeenLastCalledWith('mouse-2', 0.5));
 
     expect(useStore.getState().cursorClickSound).toBe('none');
     expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -101,8 +101,8 @@ describe('CursorWidget click sound', () => {
     render(<CursorWidget />);
 
     await openDropdown(user);
-    await user.hover(screen.getByRole('option', { name: 'Pop' }));
-    await user.hover(screen.getByRole('option', { name: 'Tick' }));
+    await user.hover(screen.getByRole('option', { name: 'Soft' }));
+    await user.hover(screen.getByRole('option', { name: 'Trackpad' }));
 
     expect(audition).not.toHaveBeenCalled();
   });
@@ -117,9 +117,9 @@ describe('CursorWidget click sound', () => {
     await waitFor(() => expect(audition).toHaveBeenLastCalledWith('mouse', 0.5));
     audition.mockClear();
 
-    await user.hover(screen.getByRole('option', { name: 'Pop' }));
+    await user.hover(screen.getByRole('option', { name: 'Soft' }));
 
-    expect(screen.getByRole('option', { name: 'Pop' })).toHaveFocus();
+    expect(screen.getByRole('option', { name: 'Soft' })).toHaveFocus();
     expect(audition).not.toHaveBeenCalled();
   });
 
@@ -139,7 +139,7 @@ describe('CursorWidget click sound', () => {
   it('hides the volume slider when the sound is turned off', async () => {
     const user = userEvent.setup();
     act(() => {
-      useStore.getState().setCursorClickSound('pop');
+      useStore.getState().setCursorClickSound('soft');
     });
     render(<CursorWidget />);
 

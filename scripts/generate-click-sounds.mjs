@@ -49,12 +49,6 @@ const SOUNDS = {
     press: `One very soft muted click, gentle rounded tap of a quiet silent-switch mouse. ${DRY}`,
     release: `One very faint soft release tick of a quiet silent-switch mouse. ${DRY}`,
   },
-  pop: {
-    press: `One short playful bubble pop user interface sound, clean and bright. ${DRY}`,
-  },
-  tick: {
-    press: `One tiny crisp digital tick user interface sound, extremely short and clean. ${DRY}`,
-  },
 };
 
 const TRIM_SECONDS = 0.15;
