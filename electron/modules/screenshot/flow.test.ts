@@ -11,7 +11,13 @@ vi.mock('../../lib/logger', () => ({
 vi.mock('../camera-preview/service', () => ({ closeCameraPreview: vi.fn() }));
 vi.mock('./service', () => serviceMock);
 
-import { SCREENSHOT_FAILED_MESSAGE, takeAreaScreenshot, type AreaScreenshotDeps } from './flow';
+import {
+  SCREENSHOT_FAILED_MESSAGE,
+  captureAndOpenEditor,
+  isAreaScreenshotInFlight,
+  takeAreaScreenshot,
+  type AreaScreenshotDeps,
+} from './flow';
 
 const area = {
   x: 10,
@@ -140,5 +146,69 @@ describe('takeAreaScreenshot', () => {
     expect(deps.warn).toHaveBeenCalledWith(SCREENSHOT_FAILED_MESSAGE);
     expect(mainWindow.show).toHaveBeenCalledOnce();
     expect(mainWindow.webContents.send).not.toHaveBeenCalled();
+  });
+
+  it('warns and brings the main window back when the area selector fails', async () => {
+    const { deps, mainWindow } = makeDeps({
+      selectArea: vi.fn(async () => {
+        throw new Error('selector window failed');
+      }),
+    });
+
+    await expect(takeAreaScreenshot(deps)).resolves.toBe('failed');
+
+    expect(deps.warn).toHaveBeenCalledWith(SCREENSHOT_FAILED_MESSAGE);
+    expect(mainWindow.show).toHaveBeenCalledOnce();
+    expect(isAreaScreenshotInFlight()).toBe(false);
+  });
+
+  it('reports a screenshot in progress until it finishes', async () => {
+    let finishSelection: (value: null) => void = () => undefined;
+    const { deps } = makeDeps({
+      selectArea: vi.fn(
+        () =>
+          new Promise<null>((resolve) => {
+            finishSelection = resolve;
+          }),
+      ),
+    });
+
+    const run = takeAreaScreenshot(deps);
+    expect(isAreaScreenshotInFlight()).toBe(true);
+    await vi.waitFor(() => expect(deps.selectArea).toHaveBeenCalledOnce());
+    finishSelection(null);
+    await run;
+    expect(isAreaScreenshotInFlight()).toBe(false);
+  });
+});
+
+describe('captureAndOpenEditor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    serviceMock.captureStill.mockResolvedValue(capture);
+  });
+
+  it('leaves alone a toolbar that opened while the still was being taken', async () => {
+    const mainWindow = makeWindow();
+    const newToolbar = makeWindow();
+    let currentToolbar: ReturnType<typeof makeWindow> | null = null;
+    serviceMock.captureStill.mockImplementation(async () => {
+      currentToolbar = newToolbar;
+      return capture;
+    });
+    const setToolbarWindow = vi.fn();
+
+    await captureAndOpenEditor(
+      { kind: 'area', sourceId: 'screen:0', area },
+      {
+        getMainWindow: () => mainWindow as never,
+        getToolbarWindow: () => currentToolbar as never,
+        setToolbarWindow,
+      },
+    );
+
+    expect(setToolbarWindow).not.toHaveBeenCalled();
+    expect(newToolbar.close).not.toHaveBeenCalled();
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(CH.screenshot.CAPTURED, capture);
   });
 });

@@ -52,7 +52,10 @@ export async function captureAndOpenEditor(
     throw new Error('Main window is not available to open the Screenshot editor');
   }
   toolbar?.close();
-  setToolbarWindow(null);
+  // A toolbar opened while the still was being taken isn't ours to forget.
+  if (getToolbarWindow() === toolbar) {
+    setToolbarWindow(null);
+  }
   mainWindow.webContents.send(CH.screenshot.CAPTURED, capture);
   mainWindow.show();
   mainWindow.focus();
@@ -70,6 +73,11 @@ export type AreaScreenshotDeps = ScreenshotWindows & {
 export type AreaScreenshotResult = 'taken' | 'cancelled' | 'skipped' | 'failed';
 
 let areaScreenshotInFlight = false;
+
+/** True from the shortcut press until the screenshot opens, is cancelled or fails. */
+export function isAreaScreenshotInFlight(): boolean {
+  return areaScreenshotInFlight;
+}
 
 /**
  * The screenshot shortcut: select an area, capture it and open the editor,
@@ -102,7 +110,15 @@ export async function takeAreaScreenshot(deps: AreaScreenshotDeps): Promise<Area
     if (mainWasVisible) {
       mainWindow.hide();
     }
-    const area = await deps.selectArea();
+    let area;
+    try {
+      area = await deps.selectArea();
+    } catch (error) {
+      log.error('[screenshot] shortcut: area selector failed', { error });
+      deps.warn(SCREENSHOT_FAILED_MESSAGE);
+      restoreMainWindow();
+      return 'failed';
+    }
     if (!area) {
       restoreMainWindow();
       return 'cancelled';

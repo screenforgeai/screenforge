@@ -66,4 +66,15 @@ describe('capture shortcuts', () => {
     expect(registry.unregister).toHaveBeenCalledWith(CAPTURE_SHORTCUTS.screenshot);
     expect(getRegisteredCaptureShortcuts()).toEqual({});
   });
+
+  it('registers but does not advertise shortcuts it cannot confirm (Wayland)', () => {
+    const registry = makeRegistry();
+
+    expect(registerCaptureShortcuts(handlers, registry, { canConfirm: false })).toEqual({});
+    expect(registry.register).toHaveBeenCalledTimes(2);
+    expect(getRegisteredCaptureShortcuts()).toEqual({});
+
+    unregisterCaptureShortcuts(registry);
+    expect(registry.unregister).toHaveBeenCalledTimes(2);
+  });
 });

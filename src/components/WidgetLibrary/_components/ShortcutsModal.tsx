@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CAPTURE_SHORTCUTS, shortcutKeys } from 'src/lib/captureShortcuts';
+import { shortcutKeys } from 'src/lib/captureShortcuts';
 import { IconX } from 'src/lib/icons';
 import { Button, Dialog, DialogContent, DialogTitle } from 'src/lib/ui';
+import type { RegisteredCaptureShortcuts } from 'src/types';
 
 type ShortcutGroup = {
   label: string;
@@ -10,25 +12,32 @@ type ShortcutGroup = {
 
 type TFunction = (key: string) => string;
 
-const buildGroups = (isMac: boolean, t: TFunction): ShortcutGroup[] => {
+/** Only the capture shortcuts that registered: one another app holds doesn't work. */
+const buildCaptureGroup = (
+  live: RegisteredCaptureShortcuts,
+  isMac: boolean,
+  t: TFunction,
+): ShortcutGroup[] => {
+  const shortcuts = [
+    { description: t('takeScreenshot'), accelerator: live.screenshot },
+    { description: t('openRecordingToolbar'), accelerator: live.record },
+  ].flatMap(({ description, accelerator }) =>
+    accelerator ? [{ description, keys: shortcutKeys(accelerator, isMac) }] : [],
+  );
+  return shortcuts.length > 0 ? [{ label: t('captureAnywhere'), shortcuts }] : [];
+};
+
+const buildGroups = (
+  isMac: boolean,
+  t: TFunction,
+  live: RegisteredCaptureShortcuts,
+): ShortcutGroup[] => {
   const mod = isMac ? '⌘' : 'Ctrl';
   const shift = isMac ? '⇧' : 'Shift';
   const del = isMac ? '⌫' : 'Del';
 
   return [
-    {
-      label: t('captureAnywhere'),
-      shortcuts: [
-        {
-          description: t('takeScreenshot'),
-          keys: shortcutKeys(CAPTURE_SHORTCUTS.screenshot, isMac),
-        },
-        {
-          description: t('openRecordingToolbar'),
-          keys: shortcutKeys(CAPTURE_SHORTCUTS.record, isMac),
-        },
-      ],
-    },
+    ...buildCaptureGroup(live, isMac, t),
     {
       label: t('playback'),
       shortcuts: [{ description: t('playPause'), keys: ['Space'] }],
@@ -76,7 +85,18 @@ type ShortcutsModalProps = {
 export const ShortcutsModal = ({ open, onClose }: ShortcutsModalProps) => {
   const { t } = useTranslation('shortcuts');
   const isMac = navigator.platform.startsWith('Mac');
-  const groups = buildGroups(isMac, t);
+  const [liveCaptureShortcuts, setLiveCaptureShortcuts] = useState<RegisteredCaptureShortcuts>({});
+  const groups = buildGroups(isMac, t, liveCaptureShortcuts);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    window.screenforge
+      .getCaptureShortcuts()
+      .then(setLiveCaptureShortcuts)
+      .catch(() => setLiveCaptureShortcuts({}));
+  }, [open]);
 
   return (
     <Dialog
@@ -100,7 +120,7 @@ export const ShortcutsModal = ({ open, onClose }: ShortcutsModalProps) => {
           </Button>
         </div>
 
-        <div className="flex flex-col px-5 pb-5">
+        <div className="flex max-h-[70vh] flex-col overflow-y-auto px-5 pb-5">
           {groups.map((group) => (
             <div key={group.label} className="pt-4">
               <p className="mb-2 text-xs font-medium uppercase tracking-widest text-sf-muted">

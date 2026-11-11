@@ -8,7 +8,20 @@ export type CaptureShortcutHandlers = Record<CaptureShortcutAction, () => void>;
 
 type ShortcutRegistry = Pick<typeof globalShortcut, 'register' | 'unregister'>;
 
+/** Accelerators this module holds, so they can be released. */
+let held: string[] = [];
+/** The subset reported to the UI as working. */
 let registered: RegisteredCaptureShortcuts = {};
+
+type RegisterOptions = {
+  /**
+   * False where a successful register() doesn't prove the shortcut works:
+   * on Wayland, Electron 45 reports success before the GlobalShortcuts portal
+   * answers, and a denied bind is never reported (electron#52218). Those
+   * shortcuts stay registered but aren't advertised.
+   */
+  canConfirm?: boolean;
+};
 
 /**
  * Registers the global capture shortcuts. A shortcut that another app already
@@ -18,6 +31,7 @@ let registered: RegisteredCaptureShortcuts = {};
 export function registerCaptureShortcuts(
   handlers: CaptureShortcutHandlers,
   registry: ShortcutRegistry = globalShortcut,
+  { canConfirm = true }: RegisterOptions = {},
 ): RegisteredCaptureShortcuts {
   unregisterCaptureShortcuts(registry);
 
@@ -26,7 +40,10 @@ export function registerCaptureShortcuts(
     const accelerator = CAPTURE_SHORTCUTS[action];
     try {
       if (registry.register(accelerator, handlers[action])) {
-        next[action] = accelerator;
+        held.push(accelerator);
+        if (canConfirm) {
+          next[action] = accelerator;
+        }
       } else {
         log.warn('[capture-shortcuts] shortcut is taken by another app', { action, accelerator });
       }
@@ -36,18 +53,19 @@ export function registerCaptureShortcuts(
   }
 
   registered = next;
-  log.info('[capture-shortcuts] registered', registered);
+  log.info('[capture-shortcuts] registered', { held, advertised: registered });
   return { ...registered };
 }
 
 export function unregisterCaptureShortcuts(registry: ShortcutRegistry = globalShortcut): void {
-  for (const accelerator of Object.values(registered)) {
+  for (const accelerator of held) {
     try {
       registry.unregister(accelerator);
     } catch (error) {
       log.warn('[capture-shortcuts] could not unregister shortcut', { accelerator, error });
     }
   }
+  held = [];
   registered = {};
 }
 

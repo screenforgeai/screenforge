@@ -61,7 +61,8 @@ import { registerImportChannels } from './modules/import/channel';
 import { registerScreenshotChannels } from './modules/screenshot/channel';
 import { pickAndImportVideo } from './modules/import/service';
 import { getAreaSelectorWindow, openAreaSelector } from './modules/area-selector/service';
-import { takeAreaScreenshot } from './modules/screenshot/flow';
+import { isAreaScreenshotInFlight, takeAreaScreenshot } from './modules/screenshot/flow';
+import { isWaylandSession } from './lib/linux-capture';
 import { registerCaptureShortcutChannels } from './modules/capture-shortcuts/channel';
 import {
   registerCaptureShortcuts,
@@ -532,6 +533,10 @@ app.on('ready', async () => {
   mainWindow.focus();
 
   const openToolbar = () => {
+    // The toolbar would land in the still, or outlive the capture that closes it.
+    if (isAreaScreenshotInFlight()) {
+      return;
+    }
     mainWindow?.hide();
     if (!toolbarWindow) {
       toolbarWindow = createToolbarWindow();
@@ -560,19 +565,24 @@ app.on('ready', async () => {
       }
     });
   };
-  const captureShortcuts = registerCaptureShortcuts({
-    screenshot: takeScreenshot,
-    record: () => {
-      if (isRecordingBusy() || getAreaSelectorWindow()) {
-        return;
-      }
-      const hadToolbar = toolbarWindow !== null;
-      openToolbar();
-      if (hadToolbar) {
-        toolbarWindow?.webContents.send(CH.captureShortcuts.VIDEO_MODE_REQUESTED);
-      }
+  const captureShortcuts = registerCaptureShortcuts(
+    {
+      screenshot: takeScreenshot,
+      record: () => {
+        if (isRecordingBusy() || getAreaSelectorWindow() || isAreaScreenshotInFlight()) {
+          return;
+        }
+        const hadToolbar = toolbarWindow !== null;
+        openToolbar();
+        if (hadToolbar) {
+          toolbarWindow?.webContents.send(CH.captureShortcuts.VIDEO_MODE_REQUESTED);
+        }
+      },
     },
-  });
+    undefined,
+    // Wayland can't confirm a bind, so its shortcuts aren't shown in the UI.
+    { canConfirm: !(process.platform === 'linux' && isWaylandSession()) },
+  );
 
   initAppTray(mainWindow, TRAY_ICON_PATH, {
     onNewRecording: openToolbar,
