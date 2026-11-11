@@ -312,6 +312,11 @@ export const FloatingToolbar = () => {
   const modeSpring = reduceMotion ? INSTANT : MODE_SPRING;
   const modeFade = reduceMotion ? INSTANT : MODE_FADE;
   const [recordState, setRecordState] = useState<RecordState>('idle');
+  // Before the countdown (append mode, permissions, area) and after Stop
+  // (saving, handing the recording to the editor) the toolbar is still busy.
+  // A count, so a second Record click can't end the first one's preparation.
+  const [preparingRecordings, setPreparingRecordings] = useState(0);
+  const [isSavingRecording, setIsSavingRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [countdown, setCountdown] = useState(3);
   const [sources, setSources] = useState<DesktopSource[]>([]);
@@ -359,10 +364,13 @@ export const FloatingToolbar = () => {
     return window.screenforge.onVideoModeRequested(() => setCaptureMode('video'));
   }, []);
 
-  // The countdown counts as recording: the screenshot shortcut waits for it.
+  // From the Record click until the recording reaches the editor, a shortcut
+  // screenshot would close this toolbar mid-flow, so it waits.
   useEffect(() => {
-    window.screenforge.setToolbarRecording(recordState !== 'idle');
-  }, [recordState]);
+    window.screenforge.setToolbarRecording(
+      recordState !== 'idle' || preparingRecordings > 0 || isSavingRecording,
+    );
+  }, [recordState, preparingRecordings, isSavingRecording]);
   useEffect(() => () => window.screenforge.setToolbarRecording(false), []);
 
   useEffect(() => {
@@ -1045,43 +1053,53 @@ export const FloatingToolbar = () => {
     }
 
     setTab('area');
-
+    setPreparingRecordings((n) => n + 1);
     try {
-      setIsAppendMode(await window.screenforge.getAppendMode());
-    } catch {
-      setIsAppendMode(false);
-    }
+      try {
+        setIsAppendMode(await window.screenforge.getAppendMode());
+      } catch {
+        setIsAppendMode(false);
+      }
 
-    const hasRecordingPermissions = await ensureRecordingStartPermissions();
-    if (!hasRecordingPermissions) {
-      return;
-    }
+      const hasRecordingPermissions = await ensureRecordingStartPermissions();
+      if (!hasRecordingPermissions) {
+        return;
+      }
 
-    const area = await window.screenforge.openAreaSelector();
-    if (!area) {
-      setTab('display');
-      return;
-    }
+      const area = await window.screenforge.openAreaSelector();
+      if (!area) {
+        setTab('display');
+        return;
+      }
 
-    setSelectedArea(area);
-    setCountdown(3);
-    setRecordState('countdown');
+      setSelectedArea(area);
+      setCountdown(3);
+      setRecordState('countdown');
+    } finally {
+      // Batched with the countdown above, so busy never dips in between.
+      setPreparingRecordings((n) => n - 1);
+    }
   }
 
   async function handleRecordClick() {
+    setPreparingRecordings((n) => n + 1);
     try {
-      setIsAppendMode(await window.screenforge.getAppendMode());
-    } catch {
-      setIsAppendMode(false);
-    }
+      try {
+        setIsAppendMode(await window.screenforge.getAppendMode());
+      } catch {
+        setIsAppendMode(false);
+      }
 
-    const hasRecordingPermissions = await ensureRecordingStartPermissions();
-    if (!hasRecordingPermissions) {
-      return;
-    }
+      const hasRecordingPermissions = await ensureRecordingStartPermissions();
+      if (!hasRecordingPermissions) {
+        return;
+      }
 
-    setCountdown(3);
-    setRecordState('countdown');
+      setCountdown(3);
+      setRecordState('countdown');
+    } finally {
+      setPreparingRecordings((n) => n - 1);
+    }
   }
 
   function handlePause() {
@@ -1159,6 +1177,7 @@ export const FloatingToolbar = () => {
     });
     setDiscardConfirming(false);
     setRecordState('idle');
+    setIsSavingRecording(true);
 
     if (teleprompterOpen) {
       window.screenforge.closeTeleprompter();
@@ -1279,6 +1298,7 @@ export const FloatingToolbar = () => {
       });
       window.screenforge.recordingFailed(message);
     } finally {
+      setIsSavingRecording(false);
       await window.screenforge.clearAppendMode().catch(() => undefined);
       setIsAppendMode(false);
       if (micEnabled && micStreamRef.current) {

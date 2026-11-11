@@ -305,11 +305,67 @@ describe('FloatingToolbar recording widget', () => {
       await waitForRecordingState();
 
       expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0', null);
-      // The countdown already counts as recording, so the screenshot shortcut waits.
-      expect(screenforge.setToolbarRecording).toHaveBeenCalledWith(true);
       expect(getDisplayMedia).not.toHaveBeenCalled();
       expect(FakeMediaRecorder.instances).toHaveLength(0);
       expect(screenforge.hideToolbar).toHaveBeenCalled();
+    });
+
+    const lastReportedBusy = () => screenforge.setToolbarRecording.mock.calls.at(-1)?.[0];
+
+    const clickRecord = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      await waitFor(
+        () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+          expect(screenforge.prepareRecordingStartPermissions).toHaveBeenCalled();
+        },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+    };
+
+    it('counts as busy while the permission check before the countdown runs', async () => {
+      screenforge.prepareRecordingStartPermissions.mockImplementation(
+        () => new Promise<void>(() => undefined),
+      );
+      await clickRecord();
+      await waitFor(() => expect(lastReportedBusy()).toBe(true));
+    });
+
+    it('goes back to idle when recording permissions are refused', async () => {
+      screenforge.prepareRecordingStartPermissions.mockRejectedValue(new Error('No access'));
+      await clickRecord();
+      await waitFor(() => expect(lastReportedBusy()).toBe(false));
+      expect(screenforge.setToolbarRecording).toHaveBeenCalledWith(true);
+    });
+
+    it('counts as busy during the countdown, before recording starts', async () => {
+      await clickRecord();
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+      expect(lastReportedBusy()).toBe(true);
+    });
+
+    it('stays busy after Stop until the recording reaches the editor', async () => {
+      let finishStop: (value: unknown) => void = () => undefined;
+      const stopResult = await screenforge.stopRecording();
+      screenforge.stopRecording.mockClear();
+      screenforge.stopRecording.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishStop = resolve;
+          }),
+      );
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+      await waitFor(() => expect(screenforge.stopRecording).toHaveBeenCalled());
+      expect(lastReportedBusy()).toBe(true);
+
+      finishStop(stopResult);
+      await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      await waitFor(() => expect(lastReportedBusy()).toBe(false));
     });
 
     it('stops recording and reports the result to the editor', async () => {
