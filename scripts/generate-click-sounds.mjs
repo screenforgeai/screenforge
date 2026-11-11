@@ -24,15 +24,26 @@ const API_URL = 'https://api.elevenlabs.io/v1/sound-generation';
 const DRY =
   'Isolated single sound, close-miked, dry studio recording, no reverb, no room tone, no background noise.';
 
+const SHORT = 'Very short, under 100 milliseconds, no ringing, no echo.';
+
 // Each sound gets a press take and, where the sound has one, a lighter release take.
+// A part may list several prompt styles; each style gets its own set of takes.
 const SOUNDS = {
   mouse: {
     press: `One crisp click of a computer mouse's left button being pressed, plastic micro-switch. ${DRY}`,
     release: `One light click of a computer mouse's left button being released, softer than a press. ${DRY}`,
   },
   trackpad: {
-    press: `One press of a laptop glass trackpad, short low soft haptic thock. ${DRY}`,
-    release: `One release of a laptop glass trackpad, very short faint higher tick. ${DRY}`,
+    press: [
+      `One click of a MacBook Force Touch trackpad: a soft, dull, low-pitched tap with a muted thud. ${SHORT} ${DRY}`,
+      `One physical click of a glass laptop touchpad, a short muted tock, felt more than heard. ${SHORT} ${DRY}`,
+      `ASMR extreme close-up of a fingertip pressing a laptop trackpad until it clicks once, one soft single click. ${SHORT} ${DRY}`,
+      `One click of a wireless desktop trackpad pressed on a desk, short soft muted click. ${SHORT} ${DRY}`,
+    ],
+    release: [
+      `One release of a laptop trackpad click, a tiny faint soft tick right after letting go. ${SHORT} ${DRY}`,
+      `ASMR extreme close-up of a fingertip releasing a laptop trackpad click, one very quiet soft tick. ${SHORT} ${DRY}`,
+    ],
   },
   soft: {
     press: `One very soft muted click, gentle rounded tap of a quiet silent-switch mouse. ${DRY}`,
@@ -196,13 +207,18 @@ async function main() {
   const plan = Object.entries(SOUNDS)
     .filter(([sound]) => !args.only || args.only.includes(sound))
     .flatMap(([sound, parts]) =>
-      Object.entries(parts).flatMap(([part, text]) =>
-        Array.from({ length: args.takes }, (_, i) => ({
-          sound,
-          part,
-          text,
-          name: `${sound}-${part}-${i + 1}`,
-        })),
+      Object.entries(parts).flatMap(([part, prompts]) =>
+        (Array.isArray(prompts) ? prompts : [prompts]).flatMap((text, style) =>
+          Array.from({ length: args.takes }, (_, i) => ({
+            sound,
+            part,
+            text,
+            // Multi-style parts name takes <sound>-<part>-s<style>-<n>.
+            name: Array.isArray(prompts)
+              ? `${sound}-${part}-s${style + 1}-${i + 1}`
+              : `${sound}-${part}-${i + 1}`,
+          })),
+        ),
       ),
     );
 
