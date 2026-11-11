@@ -1,17 +1,22 @@
 import { useReducedMotion } from 'motion/react';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { IconX } from 'src/lib/icons';
+import { IconArrowUpRight, IconX } from 'src/lib/icons';
+import { CHANGELOG_URL } from 'src/lib/siteLinks';
 import {
   Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from 'src/lib/ui';
-import type { ReleaseNoteItem, ReleaseNotes } from 'src/lib/whatsNew/changelog';
+import {
+  splitFirstSentence,
+  splitTitle,
+  type ReleaseNoteItem,
+  type ReleaseNotes,
+} from 'src/lib/whatsNew/changelog';
 
 type WhatsNewModalProps = {
   open: boolean;
@@ -19,6 +24,9 @@ type WhatsNewModalProps = {
   releases: ReleaseNotes[];
   onClose: () => void;
 };
+
+/** Fixes listed before "Show N more". */
+const VISIBLE_FIXES = 4;
 
 const SPRING_IN = {
   initial: { opacity: 0, transform: 'translateY(8px) scale(0.98)' },
@@ -34,53 +42,123 @@ const FADE_IN = {
   transition: { duration: 0.12 },
 } as const;
 
-type NoteSectionProps = {
-  label: string;
-  items: ReleaseNoteItem[];
+const VersionPill = ({ children }: { children: string }) => (
+  <span className="inline-flex h-6 items-center rounded-full border border-sf-border bg-sf-bg px-2.5 text-xs font-medium tabular-nums text-sf-secondary">
+    {children}
+  </span>
+);
+
+// All entry text renders as React text nodes, never as HTML.
+
+/** First sentence carries the point; the rest is supporting detail. */
+const LeadParagraph = ({ text, className }: { text: string; className: string }) => {
+  const { lead, rest } = splitFirstSentence(text);
+  return (
+    <p className={className}>
+      <span className="text-sf-primary">{lead}</span>
+      {rest && <span className="text-sf-secondary"> {rest}</span>}
+    </p>
+  );
 };
 
-// Entry text is rendered as React text nodes only, never as HTML.
-const NoteSection = ({ label, items }: NoteSectionProps) => (
-  <div>
-    <p className="mb-2.5 text-xs font-medium uppercase tracking-widest text-sf-muted">{label}</p>
-    <ul className="flex flex-col gap-3">
-      {items.map((item, index) => (
-        <li key={index} className="flex gap-3">
-          <span
-            aria-hidden="true"
-            className="mt-[9px] size-1 shrink-0 rounded-full bg-sf-secondary/60"
-          />
-          <div className="min-w-0 max-w-[62ch]">
-            <p className="text-sm leading-6 text-sf-primary">{item.text}</p>
-            {item.details.length > 0 && (
-              <ul className="mt-1 flex flex-col gap-1">
-                {item.details.map((detail, detailIndex) => (
-                  <li key={detailIndex} className="text-[13px] leading-5 text-sf-secondary">
-                    {detail}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+const Details = ({ details }: { details: string[] }) =>
+  details.length > 0 ? (
+    <ul className="mt-2 flex flex-col gap-1.5 border-l border-sf-border pl-3">
+      {details.map((detail, index) => (
+        <li key={index} className="text-[13px] leading-relaxed text-sf-secondary">
+          {detail}
         </li>
       ))}
     </ul>
-  </div>
-);
+  ) : null;
 
-const ReleaseBody = ({ release }: { release: ReleaseNotes }) => {
-  const { t } = useTranslation('whatsNew');
+/** Every feature gets a heading: its own "Label:" title, else its first sentence. */
+const featureHeading = (text: string): { title: string; body: string } => {
+  const titled = splitTitle(text);
+  if (titled) {
+    return titled;
+  }
+  const { lead, rest } = splitFirstSentence(text);
+  // Headings don't end in a full stop.
+  return { title: lead.replace(/\.$/, ''), body: rest };
+};
+
+const Feature = ({ item }: { item: ReleaseNoteItem }) => {
+  const { title, body } = featureHeading(item.text);
   return (
-    <div className="flex flex-col gap-6">
-      {release.newItems.length > 0 && (
-        <NoteSection label={t('sectionNew')} items={release.newItems} />
-      )}
-      {release.fixItems.length > 0 && (
-        <NoteSection label={t('sectionFixes')} items={release.fixItems} />
+    <article>
+      <h4 className="text-[15px] font-semibold leading-snug tracking-tight text-sf-primary">
+        {title}
+      </h4>
+      {body && <p className="mt-1.5 text-sm leading-[1.7] text-sf-secondary">{body}</p>}
+      <Details details={item.details} />
+    </article>
+  );
+};
+
+const Fixes = ({ items }: { items: ReleaseNoteItem[] }) => {
+  const { t } = useTranslation('whatsNew');
+  const [expanded, setExpanded] = useState(false);
+  const firstRevealedRef = useRef<HTMLLIElement>(null);
+
+  // "Show more" removes itself, so move focus to the first fix it revealed:
+  // the reader keeps their place and Tab carries on forward from there.
+  useEffect(() => {
+    if (expanded) {
+      firstRevealedRef.current?.focus({ preventScroll: true });
+    }
+  }, [expanded]);
+  const hidden = items.length - VISIBLE_FIXES;
+  const visible = expanded || hidden <= 0 ? items : items.slice(0, VISIBLE_FIXES);
+
+  return (
+    <div>
+      <h4 className="flex items-baseline gap-2 text-[13px] font-semibold text-sf-primary">
+        {t('sectionFixes')}
+        <span className="font-normal tabular-nums text-sf-muted">{items.length}</span>
+      </h4>
+      <ul className="mt-3 flex flex-col gap-3">
+        {visible.map((item, index) => (
+          <li
+            key={index}
+            ref={index === VISIBLE_FIXES ? firstRevealedRef : undefined}
+            tabIndex={index === VISIBLE_FIXES ? -1 : undefined}
+            className="rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-sf-border-lt"
+          >
+            <LeadParagraph text={item.text} className="text-[13px] leading-[1.65]" />
+            <Details details={item.details} />
+          </li>
+        ))}
+      </ul>
+      {!expanded && hidden > 0 && (
+        <button
+          type="button"
+          className="mt-3 cursor-pointer text-[13px] text-sf-secondary transition-colors hover:text-sf-primary"
+          onClick={() => setExpanded(true)}
+        >
+          {t('showMore', { count: hidden })}
+        </button>
       )}
     </div>
   );
 };
+
+const ReleaseContent = ({ release }: { release: ReleaseNotes }) => (
+  <div className="flex flex-col gap-8">
+    {release.newItems.length > 0 && (
+      <div className="flex flex-col gap-6">
+        {release.newItems.map((item, index) => (
+          <Feature key={index} item={item} />
+        ))}
+      </div>
+    )}
+    {release.fixItems.length > 0 && (
+      <div className={release.newItems.length > 0 ? 'border-t border-sf-border/60 pt-7' : ''}>
+        <Fixes items={release.fixItems} />
+      </div>
+    )}
+  </div>
+);
 
 export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) => {
   const { t } = useTranslation('whatsNew');
@@ -104,7 +182,7 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
     >
       <DialogContent
         showCloseButton={false}
-        className="flex max-h-[min(640px,calc(100vh-4rem))] w-[520px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-lg border-sf-border bg-sf-panel p-0 shadow-none outline-none sm:max-w-[520px]"
+        className="flex max-h-[min(720px,calc(100vh-4rem))] w-[640px] max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-xl border-sf-border bg-sf-panel p-0 shadow-[0_24px_80px_rgba(0,0,0,0.5)] outline-none sm:max-w-[640px]"
         onOpenAutoFocus={(event) => {
           // Focus the notes (no ring on a button) so arrow keys scroll and Enter dismisses.
           event.preventDefault();
@@ -120,56 +198,63 @@ export const WhatsNewModal = ({ open, releases, onClose }: WhatsNewModalProps) =
         }}
         {...(reduceMotion ? FADE_IN : SPRING_IN)}
       >
-        <DialogHeader className="gap-0 border-b border-sf-border/70 px-6 py-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-baseline gap-2">
-              <DialogTitle className="text-lg font-semibold tracking-tight text-sf-primary">
-                {t('title')}
-              </DialogTitle>
-              <span className="text-sm tabular-nums text-sf-muted">
-                {t('versionBadge', { version: latest.version })}
-              </span>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t('close')}
-              onClick={onClose}
-            >
-              <IconX size={14} />
-            </Button>
-          </div>
-          <DialogDescription className="mt-1 text-sm leading-relaxed text-sf-secondary">
+        <div className="relative px-8 pb-6 pt-7">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t('close')}
+            className="absolute right-4 top-4"
+            onClick={onClose}
+          >
+            <IconX size={14} />
+          </Button>
+          <VersionPill>{t('versionBadge', { version: latest.version })}</VersionPill>
+          <DialogTitle className="mt-4 text-2xl font-semibold tracking-tight text-sf-primary">
+            {t('title')}
+          </DialogTitle>
+          <DialogDescription className="mt-1.5 text-sm text-sf-secondary">
             {isRange ? t('subtitleRange') : t('subtitleSingle', { version: latest.version })}
           </DialogDescription>
-        </DialogHeader>
+        </div>
 
         <div
           ref={scrollRef}
           // Tabbable so keyboard users can come back and scroll long notes.
           tabIndex={0}
           aria-label={t('title')}
-          className="min-h-0 flex-1 overflow-y-auto px-6 py-5 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sf-border-lt"
+          className="min-h-0 flex-1 overflow-y-auto px-8 pb-8 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sf-border-lt"
         >
           {isRange ? (
-            <div className="flex flex-col gap-7">
-              {releases.map((release) => (
-                <section key={release.version} className="flex flex-col gap-4">
-                  <h3 className="flex items-center gap-3 text-xs font-medium tabular-nums text-sf-secondary">
-                    {t('versionHeading', { version: release.version })}
-                    <span aria-hidden="true" className="h-px flex-1 bg-sf-border" />
-                  </h3>
-                  <ReleaseBody release={release} />
-                </section>
-              ))}
-            </div>
+            releases.map((release) => (
+              <section
+                key={release.version}
+                className="border-t border-sf-border/60 py-7 first:border-t-0 first:pt-1 last:pb-0"
+              >
+                <h3 className="mb-5">
+                  <VersionPill>{t('versionHeading', { version: release.version })}</VersionPill>
+                </h3>
+                <ReleaseContent release={release} />
+              </section>
+            ))
           ) : (
-            <ReleaseBody release={latest} />
+            <div className="pt-1">
+              <ReleaseContent release={latest} />
+            </div>
           )}
         </div>
 
-        <DialogFooter className="items-center justify-end border-t border-sf-border/60 px-6 py-4">
+        <DialogFooter className="items-center justify-between border-t border-sf-border/60 px-6 py-3.5 sm:justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1 px-2 text-sf-secondary"
+            onClick={() => window.screenforge.openExternalUrl(CHANGELOG_URL)}
+          >
+            {t('fullChangelog')}
+            <IconArrowUpRight size={14} />
+          </Button>
           <Button
             type="button"
             size="sm"
