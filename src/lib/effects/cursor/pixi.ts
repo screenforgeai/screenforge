@@ -20,6 +20,7 @@ import { interpolateCamera } from '../zoom/render';
 import { resolveCameraAtTime } from '../camera/layout';
 import { transformPointWithSharedCamera, applyPerspectiveWarpToPoint } from '../zoom/index';
 import { interpolateCursor } from './render';
+import { computeMagnifierTransforms } from './magnifier';
 import { getMoveEvents, getClickEvents, getPressEvents, getActivityEvents } from './analyze';
 import type { CursorData, PressEvent, ActivityEvent } from './analyze';
 import { resolveCursorStyleState, isCursorStyleStateType, type CursorStyleState } from './cursors';
@@ -327,9 +328,10 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
     lens.eventMode = 'none';
     lens.visible = false;
     lens.addChild(lensBody, lensMask, lensRing);
-    const lensMatrix = new Matrix();
-    const overlayMatrix = new Matrix();
-    const cropClipMatrix = new Matrix();
+    const layerMatrix = new Matrix();
+    const recordingMatrix = new Matrix();
+    const maskMatrix = new Matrix();
+    const lensTransforms = { lens: new Matrix(), clip: new Matrix() };
     let recordingSprite: Sprite | null = null;
     let recordingMask: Graphics | null = null;
 
@@ -799,29 +801,24 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
         recordingSprite.visible &&
         recordingSprite.texture !== Texture.EMPTY
       ) {
-        // The recording's transform relative to this layer, then zoomed about the cursor.
-        scene.motionOverlayContainer.getGlobalTransform(overlayMatrix, false).invert();
-        recordingSprite.getGlobalTransform(lensMatrix, false);
-        overlayMatrix
-          .append(lensMatrix)
-          .translate(-cx, -cy)
-          .scale(MAGNIFIER_ZOOM, MAGNIFIER_ZOOM)
-          .translate(cx, cy);
+        // The recording and its crop mask, both zoomed about the cursor, in this
+        // layer's space: the lens shows what the crop shows and nothing it hides.
+        computeMagnifierTransforms(
+          scene.motionOverlayContainer.getGlobalTransform(layerMatrix, false),
+          recordingSprite.getGlobalTransform(recordingMatrix, false),
+          recordingMask.getGlobalTransform(maskMatrix, false),
+          cx,
+          cy,
+          MAGNIFIER_ZOOM,
+          lensTransforms,
+        );
         lensSprite.texture = recordingSprite.texture;
         lensSprite.anchor.copyFrom(recordingSprite.anchor);
-        lensSprite.setFromMatrix(overlayMatrix);
-        // The crop mask's shape, zoomed exactly like the recording, so the lens shows
-        // what the crop shows (magnified) and never a pixel cropped out of it.
+        lensSprite.setFromMatrix(lensTransforms.lens);
         if (lensCropClip.context !== recordingMask.context) {
           lensCropClip.context = recordingMask.context;
         }
-        scene.motionOverlayContainer.getGlobalTransform(cropClipMatrix, false).invert();
-        cropClipMatrix
-          .append(recordingMask.getGlobalTransform(lensMatrix, false))
-          .translate(-cx, -cy)
-          .scale(MAGNIFIER_ZOOM, MAGNIFIER_ZOOM)
-          .translate(cx, cy);
-        lensCropClip.setFromMatrix(cropClipMatrix);
+        lensCropClip.setFromMatrix(lensTransforms.clip);
         const radius = MAGNIFIER_RADIUS * baseScale;
         lensMask.clear().circle(cx, cy, radius).fill(0xffffff);
         lensRing
