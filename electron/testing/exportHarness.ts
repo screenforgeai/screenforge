@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { CaptureWindowParams, ExportRequest } from '../../src/types';
 import { createCaptureStoreSnapshot } from '../../src/lib/export/captureSnapshot';
+import { DEFAULT_CURSOR_SETTINGS } from '../../src/store/defaults';
 import { normalizeExportFpsForFormat } from '../../src/lib/export/gif';
 import { computeRequestedExportSize, computeTimelineDuration } from '../../src/lib/export/planning';
 import { VIDEO_DECODE_STALL_ERROR } from '../../src/lib/export/captureScheduling';
@@ -73,6 +74,10 @@ export async function runExportHarness(
       cursorMaxTilt: manifest.cursor.maxTilt,
       cursorHideWhenIdle: manifest.cursor.hideWhenIdle,
       cursorIdleHideSeconds: manifest.cursor.idleHideSeconds,
+      cursorEffect: manifest.cursor.effect ?? 'none',
+      cursorClickShrink: manifest.cursor.clickShrink ?? false,
+      cursorColor: manifest.cursor.color ?? DEFAULT_CURSOR_SETTINGS.color,
+      cursorLabel: manifest.cursor.label ?? DEFAULT_CURSOR_SETTINGS.label,
       cameraClips: [],
       maskClips: [],
       motionClips: manifest.motionClips ?? [],

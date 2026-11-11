@@ -220,7 +220,15 @@ export interface RecordingResult {
 export interface ProjectCursorSettings {
   enabled: boolean;
   style: import('../lib/effects/cursor/cursors').CursorStyle;
-  clickEffect: 'ripple' | 'none';
+  clickEffect: import('../lib/effects/cursor/effects').CursorClickEffect;
+  /** Cursor effect (highlight, spotlight, …). Missing in projects saved before it existed. */
+  effect: import('../lib/effects/cursor/effects').CursorEffect;
+  /** Deeper shrink on click. */
+  clickShrink: boolean;
+  /** Collaborator cursor colour. */
+  color: string;
+  /** Collaborator cursor name tag. */
+  label: string;
   size: number;
   halflife: number;
   motionBlur: boolean;
@@ -328,12 +336,16 @@ export interface CaptureStoreSnapshot {
   cursorEnabled: boolean;
   cursorStyle: string; // CursorStyle — string union, kept as string to avoid renderer-only imports
   cursorSize: number;
-  cursorClickEffect: string; // CursorClickEffect — 'ripple' | 'none'
+  cursorClickEffect: string; // CursorClickEffect
   cursorHalflife: number;
   cursorMotionBlur: boolean;
   cursorMaxTilt: number;
   cursorHideWhenIdle: boolean;
   cursorIdleHideSeconds: number;
+  cursorEffect: string; // CursorEffect
+  cursorClickShrink: boolean;
+  cursorColor: string;
+  cursorLabel: string;
   captions?: CaptionSettings;
   cameraClips: unknown[];
   maskClips: unknown[];

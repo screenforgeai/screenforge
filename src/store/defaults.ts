@@ -5,6 +5,8 @@ import type {
 } from '../types';
 import type { ZoomClip } from '../types/timeline';
 
+import { DEFAULT_CURSOR_COLOR, DEFAULT_CURSOR_LABEL } from '../lib/effects/cursor/styles';
+
 export const DEFAULT_CURSOR_SETTINGS: ProjectCursorSettings = {
   enabled: true,
   style: 'cursor01',
@@ -18,6 +20,10 @@ export const DEFAULT_CURSOR_SETTINGS: ProjectCursorSettings = {
   clickSound: 'none',
   clickSoundVolume: 0.5,
   continuousTracking: true,
+  effect: 'none',
+  clickShrink: false,
+  color: DEFAULT_CURSOR_COLOR,
+  label: DEFAULT_CURSOR_LABEL,
 };
 
 export const DEFAULT_ZOOM_CLIP: Pick<
