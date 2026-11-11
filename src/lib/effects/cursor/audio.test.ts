@@ -279,6 +279,35 @@ describe('scheduleCursorClickSound', () => {
   });
 
   describe('recorded sounds', () => {
+    it('fetches a recording served by URL, as on the dev server', async () => {
+      vi.resetModules();
+      vi.doMock('src/assets/sounds/clicks/mouse-press.wav?inline', () => ({
+        default: '/src/assets/sounds/clicks/mouse-press.wav?inline',
+      }));
+      vi.doMock('src/assets/sounds/clicks/mouse-release.wav?inline', () => ({
+        default: '/src/assets/sounds/clicks/mouse-release.wav?inline',
+      }));
+      const fetchMock = vi.fn(async (url: string) => ({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(url.includes('press') ? 40 : 20),
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const fresh = await import('./audio');
+        const { context, started } = createFakeContext();
+        await fresh.loadCursorClickSound(context, 'mouse');
+        fresh.scheduleCursorClickSound(context, 'mouse', 1, 0, context.destination, { index: 0 });
+
+        expect(fetchMock).toHaveBeenCalledWith('/src/assets/sounds/clicks/mouse-press.wav?inline');
+        expect(started).toEqual([expect.objectContaining({ kind: 'sample', sampleBytes: 40 })]);
+      } finally {
+        vi.unstubAllGlobals();
+        vi.doUnmock('src/assets/sounds/clicks/mouse-press.wav?inline');
+        vi.doUnmock('src/assets/sounds/clicks/mouse-release.wav?inline');
+        vi.resetModules();
+      }
+    });
+
     it('plays nothing until the recording has been loaded', () => {
       const { context, started } = createFakeContext();
       scheduleCursorClickSound(context, 'mouse-2', 1, 0.5);

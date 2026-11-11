@@ -1,7 +1,7 @@
 import type { CursorClickSound } from '../../../store';
-// Recorded mouse clicks, inlined as data URLs so they decode the same way in the
-// editor, the packaged app and the hidden export window. Sources and licenses:
-// src/assets/sounds/clicks/README.md.
+// Recorded mouse clicks. Builds inline them as data URLs, so the packaged app and
+// the hidden export window need no file access; the dev server serves them by URL.
+// Sources and licenses: src/assets/sounds/clicks/README.md.
 import mousePressUrl from 'src/assets/sounds/clicks/mouse-press.wav?inline';
 import mouseReleaseUrl from 'src/assets/sounds/clicks/mouse-release.wav?inline';
 import mouse2PressUrl from 'src/assets/sounds/clicks/mouse-2-press.wav?inline';
@@ -311,9 +311,19 @@ function scheduleModeLayer(
   oscillator.stop(when + layer.tau * 8 + 0.02);
 }
 
-function dataUrlToArrayBuffer(url: string): ArrayBuffer {
-  const base64 = url.slice(url.indexOf(',') + 1);
-  const binary = atob(base64);
+/**
+ * Production builds inline the recordings as base64 data URLs; the Vite dev
+ * server serves them by URL instead, so fetch those.
+ */
+async function readRecording(url: string): Promise<ArrayBuffer> {
+  if (!url.startsWith('data:')) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Could not load click sound ${url}: ${response.status}`);
+    }
+    return response.arrayBuffer();
+  }
+  const binary = atob(url.slice(url.indexOf(',') + 1));
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
     bytes[i] = binary.charCodeAt(i);
@@ -324,10 +334,12 @@ function dataUrlToArrayBuffer(url: string): ArrayBuffer {
 function decodeRecording(context: BaseAudioContext, url: string): Promise<AudioBuffer> {
   let load = RECORDING_LOADS.get(url);
   if (!load) {
-    load = context.decodeAudioData(dataUrlToArrayBuffer(url)).then((buffer) => {
-      RECORDING_CACHE.set(url, buffer);
-      return buffer;
-    });
+    load = readRecording(url)
+      .then((data) => context.decodeAudioData(data))
+      .then((buffer) => {
+        RECORDING_CACHE.set(url, buffer);
+        return buffer;
+      });
     // A failed decode can be retried by the next caller.
     load.catch(() => RECORDING_LOADS.delete(url));
     RECORDING_LOADS.set(url, load);
