@@ -159,6 +159,19 @@ describe('appending a clip to a cropped project', () => {
     );
   });
 
+  it('only lets whole-pixel numbers into the filter', async () => {
+    exportServiceMock.probeExportSource.mockResolvedValue({ width: 1920, height: 1080 });
+
+    await concatRecordings('/first.mp4', '/second.mp4', {
+      secondCrop: { x: '7', y: 3, width: 641, height: 359 },
+      target: { x: '0,movie=/etc/passwd', y: 0, width: 10, height: 10 },
+    } as never);
+
+    const filter = argAfter(lastFFmpegArgs(), '-filter_complex');
+    expect(filter).toContain('[1:v]crop=641:359:7:3:exact=1,scale=1920:1080');
+    expect(filter).not.toContain('movie');
+  });
+
   it('moves the project crop with the first clip when the join is scaled down', async () => {
     exportServiceMock.probeExportSource.mockResolvedValue({ width: 5120, height: 2880 });
 

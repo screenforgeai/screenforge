@@ -51,6 +51,8 @@ import {
   clampCaptureBounds,
   computeAreaCropPixels,
   fitH264FrameSize,
+  matchesDisplayShape,
+  toPixelBounds,
   type CaptureBounds,
   type CaptureSegment,
 } from './capture-args';
@@ -1330,17 +1332,18 @@ export async function concatRecordings(
   const { width: w, height: h } = fit;
   const scaleFilter = buildAppendClipFilter({ width: w, height: h });
   // The target is in the first clip's pixels; follow it when the join is scaled.
-  const target = options.target && {
-    x: Math.round((options.target.x * w) / firstWidth),
-    y: Math.round((options.target.y * h) / firstHeight),
-    width: Math.round((options.target.width * w) / firstWidth),
-    height: Math.round((options.target.height * h) / firstHeight),
+  const requestedTarget = toPixelBounds(options.target);
+  const target = requestedTarget && {
+    x: Math.round((requestedTarget.x * w) / firstWidth),
+    y: Math.round((requestedTarget.y * h) / firstHeight),
+    width: Math.round((requestedTarget.width * w) / firstWidth),
+    height: Math.round((requestedTarget.height * h) / firstHeight),
   };
   const secondFilter = buildAppendClipFilter({
     width: w,
     height: h,
-    sourceCrop: options.secondCrop,
-    target,
+    sourceCrop: toPixelBounds(options.secondCrop),
+    target: toPixelBounds(target),
   });
 
   const [firstHasAudio, secondHasAudio] = await Promise.all([
@@ -1740,12 +1743,22 @@ export async function stopRecording(rendererCapture?: {
             width: Math.round(areaDisplay.bounds.width * scaleFactor),
             height: Math.round(areaDisplay.bounds.height * scaleFactor),
           };
-    areaCrop = {
-      ...computeAreaCropPixels(selectedArea, areaDisplay.bounds, video),
-      sourceWidth: video.width,
-      sourceHeight: video.height,
-    };
-    log.info('[recording] area crop', { selectedArea, scaleFactor, video, areaCrop });
+    if (matchesDisplayShape(video, areaDisplay.bounds)) {
+      areaCrop = {
+        ...computeAreaCropPixels(selectedArea, areaDisplay.bounds, video),
+        sourceWidth: video.width,
+        sourceHeight: video.height,
+      };
+      log.info('[recording] area crop', { selectedArea, scaleFactor, video, areaCrop });
+    } else {
+      // Not a video of the display the area was drawn on: open it uncropped
+      // rather than crop the wrong picture.
+      log.warn('[recording] video does not match the area display, not cropping', {
+        selectedArea,
+        display: areaDisplay.bounds,
+        video,
+      });
+    }
   }
 
   const hasEmbeddedAudio = await hasAudioStream(filePath);

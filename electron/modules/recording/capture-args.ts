@@ -223,6 +223,44 @@ export function computeAreaCropPixels(
 }
 
 /**
+ * Whether a video has the shape of a display, allowing for a pixel or two of
+ * encoder rounding. A video of some other display (on Wayland the screen-share
+ * picker may stream a different monitor) must not get this display's crop.
+ */
+export function matchesDisplayShape(
+  video: { width: number; height: number },
+  display: { width: number; height: number },
+): boolean {
+  const videoAspect = video.width / video.height;
+  const displayAspect = display.width / display.height;
+  return Math.abs(videoAspect - displayAspect) / displayAspect <= 0.01;
+}
+
+/**
+ * A rect of whole, non-negative pixels, or undefined. Crop rects arrive over
+ * IPC and end up in an FFmpeg filter string, so only numbers may get through.
+ */
+export function toPixelBounds(value: unknown): CaptureBounds | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const rect = value as Record<string, unknown>;
+  const [x, y, width, height] = [rect.x, rect.y, rect.width, rect.height].map((v) =>
+    typeof v === 'number' || (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN,
+  );
+  if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0) {
+    return undefined;
+  }
+  const bounds = {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+  return bounds.width > 0 && bounds.height > 0 ? bounds : undefined;
+}
+
+/**
  * The filter that fits an appended clip into a width x height join. A clip
  * recorded from an area is first cut to that area (`exact` keeps odd offsets
  * exact). With a `target` — the project's crop, in the join's pixels — the clip

@@ -24,6 +24,7 @@ import { SharpenFilter } from '../../pixi/filters/SharpenFilter';
 import { CinematicZoomFilter } from '../../pixi/filters/CinematicZoomFilter';
 import { sortMediaSegments } from '../../helpers/segments';
 import { getFrameGeometry } from '../frame/analyze';
+import type { CropRect } from '../frame';
 
 const CAM_HALFLIFE = 0.08;
 const CAMERA_FOLLOW_START_SCALE = 1.32;
@@ -144,12 +145,15 @@ export function getCinematicTiltFocusCacheKey(
   clipId: string | null,
   clipStart: number | null,
   mode: ZoomClip['mode'],
+  crop?: CropRect,
 ): string | null {
   if (!clipId || tiltMode === 'follow') {
     return null;
   }
 
-  return `${clipId}:${Number.isFinite(clipStart) ? clipStart : 'unknown'}:${mode}`;
+  // The focus is a position in the crop, so a new crop needs a new lock.
+  const cropKey = crop ? `:${crop.x},${crop.y},${crop.width},${crop.height}` : '';
+  return `${clipId}:${Number.isFinite(clipStart) ? clipStart : 'unknown'}:${mode}${cropKey}`;
 }
 
 export function resolveCinematicTiltFocusTarget(
@@ -159,6 +163,7 @@ export function resolveCinematicTiltFocusTarget(
     clipId: string | null;
     clipStart: number | null;
     mode: ZoomClip['mode'];
+    crop?: CropRect;
     cache: Map<string, CinematicTiltFocus>;
     resolveStartFocus?: () => CinematicTiltFocus | null;
   },
@@ -169,6 +174,7 @@ export function resolveCinematicTiltFocusTarget(
     options.clipId,
     options.clipStart,
     options.mode,
+    options.crop,
   );
 
   if (!cacheKey) {
@@ -1109,6 +1115,7 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
         clipId: cinematic.clipId,
         clipStart: cinematic.clipStart,
         mode: cinematic.mode,
+        crop: zoomCrop,
         cache: staticTiltFocusCache,
         resolveStartFocus: () => {
           if (cinematic.mode === 'manual' || !cursorData) {
@@ -1134,6 +1141,7 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
         cinematic.clipId,
         cinematic.clipStart,
         cinematic.mode,
+        zoomCrop,
       );
       if (staticTiltFocusKey !== lastStaticTiltFocusKey) {
         if (staticTiltFocusKey) {

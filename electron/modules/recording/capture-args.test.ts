@@ -13,6 +13,8 @@ import {
   clampCaptureBounds,
   computeAreaCropPixels,
   fitH264FrameSize,
+  matchesDisplayShape,
+  toPixelBounds,
 } from './capture-args';
 
 describe('fitH264FrameSize', () => {
@@ -391,6 +393,68 @@ describe('buildAppendClipFilter', () => {
       }),
     ).toBe(
       'crop=1200:802:302:196:exact=1,format=yuv444p,scale=1201:803:force_original_aspect_ratio=decrease,pad=1201:803:(ow-iw)/2:(oh-ih)/2,pad=3024:1964:151:99,setsar=1,format=yuv420p',
+    );
+  });
+});
+
+describe('toPixelBounds', () => {
+  it('keeps whole-pixel rects as they are', () => {
+    expect(toPixelBounds({ x: 7, y: 3, width: 641, height: 359 })).toEqual({
+      x: 7,
+      y: 3,
+      width: 641,
+      height: 359,
+    });
+  });
+
+  it('turns numeric strings into numbers and rounds to whole pixels', () => {
+    expect(toPixelBounds({ x: '7', y: 3.4, width: '641', height: 358.6 })).toEqual({
+      x: 7,
+      y: 3,
+      width: 641,
+      height: 359,
+    });
+  });
+
+  it('drops anything that is not a usable rect, so nothing but numbers reaches FFmpeg', () => {
+    expect(toPixelBounds(undefined)).toBeUndefined();
+    expect(toPixelBounds(null)).toBeUndefined();
+    expect(
+      toPixelBounds({ x: '0,movie=/etc/passwd', y: 0, width: 10, height: 10 }),
+    ).toBeUndefined();
+    expect(toPixelBounds({ x: 0, y: 0, width: 0, height: 10 })).toBeUndefined();
+    expect(toPixelBounds({ x: -1, y: 0, width: 10, height: 10 })).toBeUndefined();
+    expect(toPixelBounds({ x: 0, y: 0, width: Infinity, height: 10 })).toBeUndefined();
+    expect(toPixelBounds({ x: 0, y: 0, width: 10 })).toBeUndefined();
+  });
+});
+
+describe('matchesDisplayShape', () => {
+  it('accepts a video of the display at any scale', () => {
+    expect(matchesDisplayShape({ width: 3024, height: 1964 }, { width: 1512, height: 982 })).toBe(
+      true,
+    );
+    expect(matchesDisplayShape({ width: 4096, height: 2304 }, { width: 2560, height: 1440 })).toBe(
+      true,
+    );
+    expect(matchesDisplayShape({ width: 1920, height: 1080 }, { width: 1536, height: 864 })).toBe(
+      true,
+    );
+  });
+
+  it('allows a pixel of encoder rounding', () => {
+    expect(matchesDisplayShape({ width: 3024, height: 1962 }, { width: 1512, height: 982 })).toBe(
+      true,
+    );
+  });
+
+  it('rejects a video of a differently shaped display', () => {
+    // e.g. the screen-share picker streamed the portrait monitor.
+    expect(matchesDisplayShape({ width: 1080, height: 1920 }, { width: 2560, height: 1440 })).toBe(
+      false,
+    );
+    expect(matchesDisplayShape({ width: 2880, height: 1800 }, { width: 2560, height: 1440 })).toBe(
+      false,
     );
   });
 });

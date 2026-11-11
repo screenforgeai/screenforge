@@ -376,6 +376,17 @@ describe('recording service: multiple monitors', () => {
       });
     });
 
+    it('opens uncropped rather than crop a video of a differently shaped display', async () => {
+      const { startRecording, stopRecording } = await import('./service');
+      // e.g. on Wayland the picker streamed a portrait monitor instead.
+      await probeRecordedDisplay(1080, 1920);
+
+      await startRecording('screen:0', area);
+      const result = await stopRecording();
+
+      expect(result.areaCrop).toBeUndefined();
+    });
+
     it('returns no crop for a whole-display recording', async () => {
       const { startRecording, stopRecording } = await import('./service');
       await probeRecordedDisplay();
