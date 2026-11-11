@@ -14,6 +14,7 @@ import {
   computeAreaCropPixels,
   fitH264FrameSize,
   matchesDisplayShape,
+  matchesDisplaySize,
   toPixelBounds,
 } from './capture-args';
 
@@ -456,5 +457,28 @@ describe('matchesDisplayShape', () => {
     expect(matchesDisplayShape({ width: 2880, height: 1800 }, { width: 2560, height: 1440 })).toBe(
       false,
     );
+  });
+});
+
+describe('matchesDisplaySize', () => {
+  it('accepts the display at its pixel size, with a pixel or two of rounding', () => {
+    expect(matchesDisplaySize({ width: 3024, height: 1964 }, { width: 1512, height: 982 }, 2)).toBe(
+      true,
+    );
+    expect(
+      matchesDisplaySize({ width: 1920, height: 1080 }, { width: 1536, height: 864 }, 1.25),
+    ).toBe(true);
+    expect(
+      matchesDisplaySize({ width: 1918, height: 1080 }, { width: 1920, height: 1080 }, 1),
+    ).toBe(true);
+  });
+
+  it('rejects a same-shaped display of another size', () => {
+    expect(matchesDisplaySize({ width: 1280, height: 720 }, { width: 1920, height: 1080 }, 1)).toBe(
+      false,
+    );
+    expect(
+      matchesDisplaySize({ width: 2560, height: 1440 }, { width: 1920, height: 1080 }, 1),
+    ).toBe(false);
   });
 });

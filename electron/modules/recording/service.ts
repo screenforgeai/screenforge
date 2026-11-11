@@ -52,6 +52,7 @@ import {
   computeAreaCropPixels,
   fitH264FrameSize,
   matchesDisplayShape,
+  matchesDisplaySize,
   toPixelBounds,
   type CaptureBounds,
   type CaptureSegment,
@@ -1692,6 +1693,9 @@ export async function stopRecording(rendererCapture?: {
   const wallStopTimeActive = computeActiveStopTime(recordingStartTime, wallStopTime, pauseSpans);
   const wallDurationMs = computeActiveDurationMs(recordingStartTime, wallStopTime, pauseSpans);
   let filePath: string;
+  // On Wayland the screen-share picker chose the monitor, so the video isn't
+  // necessarily the display the area was drawn on.
+  const fromScreenSharePicker = rendererCaptureActive;
 
   if (rendererCaptureActive) {
     rendererCaptureActive = false;
@@ -1736,14 +1740,31 @@ export async function stopRecording(rendererCapture?: {
   if (selectedArea) {
     const scaleFactor = areaDisplay.scaleFactor ?? 1;
     const probed = await probeExportSource(filePath);
+    const stream =
+      rendererCapture?.width && rendererCapture?.height
+        ? { width: rendererCapture.width, height: rendererCapture.height }
+        : null;
+    // A native or X11 capture records the area's own display, so its size can
+    // be assumed when the probe fails; a picker stream's can't.
     const video =
       probed.width && probed.height
         ? { width: probed.width, height: probed.height }
-        : {
-            width: Math.round(areaDisplay.bounds.width * scaleFactor),
-            height: Math.round(areaDisplay.bounds.height * scaleFactor),
-          };
-    if (matchesDisplayShape(video, areaDisplay.bounds)) {
+        : fromScreenSharePicker
+          ? stream
+          : {
+              width: Math.round(areaDisplay.bounds.width * scaleFactor),
+              height: Math.round(areaDisplay.bounds.height * scaleFactor),
+            };
+    // The picker gives no monitor id, so a picker stream must be the area
+    // display at its exact pixel size; a capture of that display only needs
+    // its shape (it may be scaled down). Identical monitors still can't be
+    // told apart from a picker stream.
+    const isAreaDisplay =
+      video !== null &&
+      (fromScreenSharePicker
+        ? matchesDisplaySize(video, areaDisplay.bounds, scaleFactor)
+        : matchesDisplayShape(video, areaDisplay.bounds));
+    if (video && isAreaDisplay) {
       areaCrop = {
         ...computeAreaCropPixels(selectedArea, areaDisplay.bounds, video),
         sourceWidth: video.width,
@@ -1756,7 +1777,9 @@ export async function stopRecording(rendererCapture?: {
       log.warn('[recording] video does not match the area display, not cropping', {
         selectedArea,
         display: areaDisplay.bounds,
+        scaleFactor,
         video,
+        fromScreenSharePicker,
       });
     }
   }

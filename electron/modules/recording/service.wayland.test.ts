@@ -219,6 +219,58 @@ describe('recording service on Linux', () => {
       expect(result.events).toEqual([]);
     });
 
+    describe('area recording', () => {
+      const area = { x: 100, y: 50, width: 801, height: 601 };
+
+      async function stopWithStream(
+        stream: { width?: number; height?: number },
+        probed: { width: number | null; height: number | null },
+      ) {
+        const { startRecording, stopRecording } = await loadService();
+        const { probeExportSource } = await import('../export/service');
+        vi.mocked(probeExportSource).mockResolvedValue({ fps: 30, duration: 3, ...probed });
+        await startRecording('screen:wayland', area, { rendererCapture: true });
+        return stopRecording({ webmPath: '/tmp/portal-capture.webm', ...stream });
+      }
+
+      it('crops when the streamed monitor is the one the area was drawn on', async () => {
+        const result = await stopWithStream(
+          { width: 1920, height: 1080 },
+          { width: 1920, height: 1080 },
+        );
+        expect(result.areaCrop).toEqual({
+          x: 100,
+          y: 50,
+          width: 801,
+          height: 601,
+          sourceWidth: 1920,
+          sourceHeight: 1080,
+        });
+      });
+
+      it('opens uncropped when the picker streamed a same-shaped monitor of another size', async () => {
+        // A 1280x720 monitor is 16:9 too: its shape alone can't tell them apart.
+        const result = await stopWithStream(
+          { width: 1280, height: 720 },
+          { width: 1280, height: 720 },
+        );
+        expect(result.areaCrop).toBeUndefined();
+      });
+
+      it("uses the stream's size when the video can't be measured", async () => {
+        const matching = await stopWithStream(
+          { width: 1920, height: 1080 },
+          { width: null, height: null },
+        );
+        expect(matching.areaCrop).toMatchObject({ sourceWidth: 1920, sourceHeight: 1080 });
+      });
+
+      it('opens uncropped when neither the video nor the stream has a size', async () => {
+        const result = await stopWithStream({}, { width: null, height: null });
+        expect(result.areaCrop).toBeUndefined();
+      });
+    });
+
     it('rejects stop when the renderer produced no video data', async () => {
       const { startRecording, stopRecording, isRecordingBusy } = await loadService();
 

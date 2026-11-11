@@ -237,6 +237,23 @@ export function matchesDisplayShape(
 }
 
 /**
+ * Whether a video is a display at its own pixel size (its logical size times
+ * scaleFactor), within a couple of pixels of rounding. Stricter than
+ * matchesDisplayShape: it also tells apart same-shaped displays of different
+ * resolutions, e.g. a 1080p and a 1440p monitor.
+ */
+export function matchesDisplaySize(
+  video: { width: number; height: number },
+  display: { width: number; height: number },
+  scaleFactor: number,
+): boolean {
+  return (
+    Math.abs(video.width - display.width * scaleFactor) <= 2 &&
+    Math.abs(video.height - display.height * scaleFactor) <= 2
+  );
+}
+
+/**
  * A rect of whole, non-negative pixels, or undefined. Crop rects arrive over
  * IPC and end up in an FFmpeg filter string, so only numbers may get through.
  */
