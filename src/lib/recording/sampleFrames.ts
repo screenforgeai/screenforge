@@ -9,6 +9,28 @@ export interface SampledFrames {
 
 const SEEK_TIMEOUT_MS = 4000;
 
+/**
+ * The positions to seek to for `times` in a video `duration` seconds long:
+ * clamped to the video, and each one only once. A video shorter than the
+ * recording said would otherwise give the same last frame many times over,
+ * and repeats must not count as frames that held still.
+ */
+export function distinctSeekTimes(times: number[], duration: number): number[] {
+  const end = Number.isFinite(duration) ? Math.max(0, duration - 0.05) : Infinity;
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const t of times) {
+    const at = Math.min(Math.max(0, t), end);
+    // Whole milliseconds: closer seeks than that land on the same frame.
+    const key = Math.round(at * 1000);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(at);
+    }
+  }
+  return out;
+}
+
 function once(target: EventTarget, event: string, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -53,10 +75,10 @@ export async function sampleVideoFrames(
       return { frames: [], videoWidth, videoHeight };
     }
     const frames: RgbaFrame[] = [];
-    for (const t of times) {
+    for (const t of distinctSeekTimes(times, video.duration)) {
       try {
         const seeked = once(video, 'seeked', SEEK_TIMEOUT_MS);
-        video.currentTime = Math.min(Math.max(0, t), Math.max(0, video.duration - 0.05));
+        video.currentTime = t;
         await seeked;
         ctx.drawImage(video, 0, 0, width, height);
         frames.push({ data: ctx.getImageData(0, 0, width, height).data, width, height });
