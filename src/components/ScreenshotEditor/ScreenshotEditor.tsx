@@ -1349,9 +1349,10 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     if (!rect || rect.width === 0 || rect.height === 0) {
       return null;
     }
+    // Anywhere over the canvas and a little past it: below the screenshot lights it from beneath.
     return {
       x: clamp((e.clientX - rect.left) / rect.width, -0.2, 1.2),
-      y: clamp((e.clientY - rect.top) / rect.height, 0, 0.6),
+      y: clamp((e.clientY - rect.top) / rect.height, -0.2, 1.2),
     };
   };
 

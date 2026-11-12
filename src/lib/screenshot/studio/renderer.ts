@@ -617,7 +617,8 @@ export class StudioRenderer {
       0.8,
     );
 
-    // Post-processing. TAA does the anti-aliasing when still, so no MSAA on the composer targets.
+    // Post-processing. The scene pass draws with 4× MSAA, so edges stay smooth while the camera
+    // moves; once still, TAA layers 32 jittered frames on top of that.
     this.composer = new EffectComposer(
       this.renderer,
       new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }),
@@ -625,6 +626,9 @@ export class StudioRenderer {
     this.taa = new TAARenderPass(scene, this.camera, 0x000000, 1);
     this.taa.sampleLevel = 0;
     this.taa.unbiased = true;
+    // The pass would make its own target without MSAA on first use; it resizes this one instead.
+    (this.taa as unknown as { sampleRenderTarget: THREE.WebGLRenderTarget }).sampleRenderTarget =
+      new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
     this.composer.addPass(this.taa);
 
     this.bokeh = new BokehPass(scene, this.camera, { focus: 13, aperture: 0.001, maxblur: 0.01 });
@@ -636,6 +640,7 @@ export class StudioRenderer {
     bokehUniforms.uFringe = { value: 0 };
     bokehUniforms.uRim = { value: 1.2 };
     bokehUniforms.uRange = { value: 0 };
+    bokehUniforms.uTexel = { value: new THREE.Vector2(0, 0) }; // set on resize
     const bokehMaterial = new THREE.ShaderMaterial({
       defines: { DEPTH_PACKING: 1, PERSPECTIVE_CAMERA: 1 },
       uniforms: bokehUniforms,
@@ -730,7 +735,9 @@ export class StudioRenderer {
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.bgUniforms.uRes.value.copy(buffer);
     (this.finish.uniforms.uRes.value as THREE.Vector2).copy(buffer);
-    (this.bokeh.uniforms as Record<string, THREE.IUniform>).aspect.value = this.width / this.height;
+    const bokehUniforms = this.bokeh.uniforms as Record<string, THREE.IUniform>;
+    bokehUniforms.aspect.value = this.width / this.height;
+    (bokehUniforms.uTexel.value as THREE.Vector2).set(1 / buffer.x, 1 / buffer.y);
     // Camera distance depends on the output's shape.
     this.placeCamera(false);
     this.invalidate();

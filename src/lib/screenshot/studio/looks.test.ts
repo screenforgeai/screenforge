@@ -123,6 +123,8 @@ describe('getStudioLook', () => {
     // the glass barely mirrors the lights in front of it (straight-on that reads as a grey haze).
     expect(macro?.settings).toMatchObject({
       reflect: 0.08,
+      // No lens bend: straight-on, the screenshot's own straight lines must stay straight.
+      fisheye: 0,
       screenFade: 0.6,
       fadeAngle: 90,
       fadeSoft: 0.65,

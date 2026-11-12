@@ -210,7 +210,7 @@ export const STUDIO_LOOKS: readonly StudioLook[] = [
     // The glass reflects little (reflect, above): facing the camera it would mirror the soft
     // boxes in front of it as a grey haze over the whole screen.
     vignette: 0.7,
-    fisheye: 0.12,
+    fisheye: 0,
     fringe: 0.3,
     screenFade: 0.6,
     fadeAngle: 90,

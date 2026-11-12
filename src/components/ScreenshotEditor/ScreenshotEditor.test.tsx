@@ -361,6 +361,20 @@ describe('ScreenshotEditor', () => {
       expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
     });
 
+    it('drags the sun anywhere over the canvas, below the screenshot too', async () => {
+      withLayout();
+      const renderer = await opened();
+      const sun = screen.getByRole('button', { name: /^light$/i });
+      sun.setPointerCapture = vi.fn();
+      press(sun, 100, 100);
+      fireEvent.pointerMove(sun, { button: 0, pointerId: 1, clientX: 424, clientY: 521 });
+      release(sun, 424, 521);
+      // Near the bottom of the 848×548 canvas: a light from below.
+      await waitFor(() =>
+        expect(renderer.setLightHandle.mock.calls.at(-1)?.[0].y).toBeGreaterThan(0.9),
+      );
+    });
+
     it('turns the camera on a drag, zooms on scroll, and a double-click on empty space resets it', async () => {
       withLayout();
       const renderer = await opened();

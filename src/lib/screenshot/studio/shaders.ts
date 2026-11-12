@@ -104,7 +104,7 @@ export const BOKEH_FRAGMENT = `
   varying vec2 vUv;
   uniform sampler2D tColor; uniform sampler2D tDepth;
   uniform float maxblur; uniform float aperture; uniform float nearClip; uniform float farClip; uniform float focus; uniform float aspect;
-  uniform float uFringe; uniform float uRim; uniform float uRange;
+  uniform float uFringe; uniform float uRim; uniform float uRange; uniform vec2 uTexel;
   #include <packing>
   // Thin lens: blur grows with distance from the focus plane relative to distance from the camera.
   float blurAt(vec2 p) {
@@ -115,7 +115,11 @@ export const BOKEH_FRAGMENT = `
   const int SAMPLES = 64;
   void main() {
     vec3 sharp = texture2D(tColor, vUv).rgb;
-    float c0 = blurAt(vUv);
+    // The depth map has one sample per pixel, so along a slanted edge the blur would switch from
+    // sharp to soft in stair steps. Averaged with its diagonal neighbours, it changes smoothly.
+    float c0 = 0.4 * blurAt(vUv) + 0.15 * (
+      blurAt(vUv + uTexel * vec2(-1.0, -1.0)) + blurAt(vUv + uTexel * vec2(1.0, -1.0)) +
+      blurAt(vUv + uTexel * vec2(-1.0, 1.0)) + blurAt(vUv + uTexel * vec2(1.0, 1.0)));
     if (c0 < 0.0004) { gl_FragColor = vec4(sharp, 1.0); return; }
     vec3 acc = vec3(0.0); float wsum = 0.0;
     // Each pixel turns the spiral by its own angle: a wide blur becomes fine grain, not stacked copies.
