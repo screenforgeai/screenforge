@@ -56,6 +56,7 @@
     "crop": "Browserleiste gefunden und abgeschnitten.",
     "adjust": "Möglicherweise eine Leiste, aber ihr Ende ist unsicher. Passe den Zuschnitt an, um es zu prüfen.",
     "none": "In dieser Aufnahme wurde keine Browserleiste gefunden.",
+    "failed": "Die Aufnahme konnte nicht nach einer Leiste durchsucht werden. Passe den Zuschnitt an, um sie von Hand abzuschneiden.",
     "manual": "Die oberen {{rows}} Zeilen werden abgeschnitten.",
     "off": "Die aufgenommene Leiste bleibt erhalten."
   }

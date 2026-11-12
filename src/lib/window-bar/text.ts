@@ -18,6 +18,11 @@ const ELLIPSIS_ADVANCE = 910;
 const OTHER_ADVANCE = 600;
 /** CJK and other full-width characters take a whole em. */
 const WIDE_ADVANCE = 1000;
+/** Emoji come from a fallback color font, wider than an em; better too wide than spilling over. */
+const EMOJI_ADVANCE = 1300;
+/** Joiners, variation selectors and combining marks draw nothing of their own width. */
+const ZERO_WIDTH = /\p{M}|[\u200B-\u200D\u2060]|[\u{E0020}-\u{E007F}]/u;
+const EMOJI = /\p{Emoji_Presentation}|\p{Regional_Indicator}/u;
 
 export const ELLIPSIS = '…';
 
@@ -28,6 +33,13 @@ function advance(char: string): number {
   }
   if (char === ELLIPSIS) {
     return ELLIPSIS_ADVANCE;
+  }
+  if (ZERO_WIDTH.test(char)) {
+    return 0;
+  }
+  if (EMOJI.test(char)) {
+    // A pair of regional indicators is one flag.
+    return /\p{Regional_Indicator}/u.test(char) ? EMOJI_ADVANCE / 2 : EMOJI_ADVANCE;
   }
   if (code >= 0x1100 && /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|[\u{20000}-\u{3FFFD}]/u.test(char)) {
     return WIDE_ADVANCE;

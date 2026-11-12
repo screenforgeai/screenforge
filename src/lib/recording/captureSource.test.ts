@@ -29,6 +29,11 @@ describe('knownBrowserOf', () => {
     expect(knownBrowserOf({ appName: 'Figma', windowTitle: 'Design' })).toBeNull();
     expect(knownBrowserOf(undefined)).toBeNull();
   });
+
+  it("doesn't take a browser's name in another app's title for that browser", () => {
+    expect(knownBrowserOf({ appName: 'Notes', windowTitle: 'Chrome tips' })).toBeNull();
+    expect(knownBrowserOf({ appName: 'Slack', windowTitle: 'Safari bugs - Slack' })).toBeNull();
+  });
 });
 
 describe('pageTitleFromWindowTitle', () => {

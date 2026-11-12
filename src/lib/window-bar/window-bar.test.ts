@@ -95,6 +95,30 @@ describe('text fitting', () => {
     expect(out.endsWith(ELLIPSIS)).toBe(true);
     expect(measureText(out, 12)).toBeLessThanOrEqual(80);
   });
+  it('measures emoji wider than a letter, and joiners as nothing', () => {
+    expect(measureText('🚀', 12)).toBeGreaterThan(measureText('M', 12));
+    expect(measureText('👩‍💻', 12)).toBe(measureText('👩💻', 12));
+    expect(measureText('🇺🇸', 12)).toBe(measureText('🚀', 12));
+  });
+  it('clips the text to the address box', () => {
+    const scene = layoutWindowBar({
+      settings: {
+        ...mac,
+        center: 'custom',
+        customText: '🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀',
+      },
+      theme: 'light',
+      width: 1280,
+    });
+    const box = scene.ops.find((op) => op.kind === 'rect' && op.w < 1280 && op.h < scene.height);
+    const text = scene.ops.find((op) => op.kind === 'text');
+    expect(box?.kind).toBe('rect');
+    expect(text?.kind === 'text' && text.clip).toBeTruthy();
+    if (box?.kind === 'rect' && text?.kind === 'text' && text.clip) {
+      expect(text.clip.x).toBeGreaterThanOrEqual(box.x);
+      expect(text.clip.x + text.clip.w).toBeLessThanOrEqual(box.x + box.w);
+    }
+  });
 });
 
 describe('layoutWindowBar', () => {
@@ -218,6 +242,10 @@ describe('windowBarSvg', () => {
     expect(svg).toContain('width="2560" height="72"');
     expect(svg).toContain('R&amp;D &lt;beta&gt;');
     expect(svg).toContain('font-family="Inter');
+    // The text sits in its own clipping viewport.
+    expect(svg).toMatch(
+      /<svg x="[\d.]+" y="0" width="[\d.]+" height="36" overflow="hidden"><text /,
+    );
   });
 });
 
@@ -272,6 +300,15 @@ describe('fitWindowWithBar', () => {
     const fit = fitWindowWithBar(0, 0, 1600, 700, 1280, 800, 'mac');
     expect(fit.window.height).toBeCloseTo(700, 1);
     expect(fit.media.width / fit.media.height).toBeCloseTo(1.6);
+  });
+  it('settles on the widest window that fits a wide, short box', () => {
+    // The bar grows with the width here as fast as the page shrinks, which
+    // sent a fixed-point search back and forth.
+    const fit = fitWindowWithBar(0, 0, 1600, 70, 1000, 20, 'mac');
+    expect(fit.window.height).toBeLessThanOrEqual(70 + 1e-6);
+    expect(fit.window.height).toBeCloseTo(70, 3);
+    expect(fit.window.width).toBeLessThanOrEqual(1600);
+    expect(fit.media.width / fit.media.height).toBeCloseTo(50);
   });
   it('is the plain contain-fit with no bar', () => {
     const fit = fitWindowWithBar(0, 0, 1600, 700, 1280, 800, 'none');

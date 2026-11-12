@@ -10,6 +10,7 @@ import {
 } from 'src/lib/effects/frame';
 import type { CropHandle, CropRect } from 'src/lib/effects/frame';
 import { useStore } from 'src/store';
+import { applyRecordedBar } from 'src/lib/recording/recordedBar';
 
 interface FrameCropOverlayProps {
   containerRef: RefObject<HTMLDivElement | null>;
@@ -189,21 +190,21 @@ export const FrameCropOverlay = ({
   };
 
   const updateCropRect = (label: string, nextRect: CropRect) => {
-    commitEdit(label, (state) => ({
-      frame: {
-        ...state.frame,
-        cropRect: nextRect,
-        // The toolbar line is the crop's top edge: keep the two in step.
-        ...(editsToolbarLine &&
-          state.frame.recordedBar && {
-            recordedBar: {
-              ...state.frame.recordedBar,
-              mode: 'manual' as const,
-              cropTop: Math.round(nextRect.y * resolvedSourceHeight),
-            },
-          }),
-      },
-    }));
+    commitEdit(label, (state) => {
+      const bar = state.frame.recordedBar;
+      // The toolbar line: its top edge is a manual toolbar crop, added to
+      // (never replacing) the person's own crop.
+      if (editsToolbarLine && bar) {
+        return {
+          frame: applyRecordedBar(
+            state.frame,
+            { ...bar, mode: 'manual', cropTop: Math.round(nextRect.y * bar.height) },
+            bar.height,
+          ),
+        };
+      }
+      return { frame: { ...state.frame, cropRect: nextRect } };
+    });
   };
 
   const startInteraction = (
@@ -299,6 +300,15 @@ export const FrameCropOverlay = ({
   }
 
   if (editsToolbarLine) {
+    // The line is the toolbar crop's own; the dimmed part is everything cut
+    // off above the crop (the person's own top may go deeper).
+    const bar = frame.recordedBar;
+    const lineShare = bar ? bar.cropTop / Math.max(bar.height, 1) : cropOverlayRect.y;
+    const lineRect = {
+      ...frame.cropRect,
+      y: lineShare,
+      height: frame.cropRect.y + frame.cropRect.height - lineShare,
+    };
     return (
       <div
         className="absolute inset-0 z-10 select-none rounded-[inherit]"
@@ -335,10 +345,10 @@ export const FrameCropOverlay = ({
             aria-orientation="vertical"
             aria-valuemin={0}
             aria-valuemax={resolvedSourceHeight}
-            aria-valuenow={Math.round(cropOverlayRect.y * resolvedSourceHeight)}
+            aria-valuenow={Math.round(lineShare * resolvedSourceHeight)}
             tabIndex={0}
             className="group absolute left-0 h-4 w-full -translate-y-1/2 cursor-ns-resize"
-            style={{ top: `${cropOverlayRect.y * 100}%`, touchAction: 'none' }}
+            style={{ top: `${lineShare * 100}%`, touchAction: 'none' }}
             onPointerDown={(event) => {
               const point = getPointerSourcePoint(event.clientX, event.clientY);
               startInteraction(
@@ -346,7 +356,7 @@ export const FrameCropOverlay = ({
                 {
                   type: 'resize',
                   handle: 'n',
-                  startRect: frame.cropRect,
+                  startRect: lineRect,
                   startPointerSourceX: point.x,
                   startPointerSourceY: point.y,
                 },
@@ -361,11 +371,11 @@ export const FrameCropOverlay = ({
                 return;
               }
               event.preventDefault();
-              const top = Math.max(0, frame.cropRect.y * resolvedSourceHeight + delta);
+              const top = Math.max(0, lineShare * resolvedSourceHeight + delta);
               updateCropRect(
                 'Move recorded toolbar crop',
                 resizeCropRectFromHandle(
-                  frame.cropRect,
+                  lineRect,
                   'n',
                   0,
                   top,

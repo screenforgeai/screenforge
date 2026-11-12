@@ -746,6 +746,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
               windowBarAvailable={!isCroppedCapture(capture)}
               windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
               captureImage={capture.dataUrl}
+              capturePage={capturePage(capture)}
             />
           </PreviewCardProvider>
         </aside>

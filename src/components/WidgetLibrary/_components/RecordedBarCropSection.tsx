@@ -4,7 +4,11 @@ import { trackEvent } from 'src/lib/analytics';
 import { getInitialPlaybackTime } from 'src/lib/helpers/segments';
 import type { RecordedBarSettings } from 'src/lib/effects/frame';
 import type { RecordedBarCropMode } from 'src/lib/window-bar';
-import { applyRecordedBar, recordedBarEligibility } from 'src/lib/recording/recordedBar';
+import {
+  applyRecordedBar,
+  recordedBarEligibility,
+  withRecordedBarMode,
+} from 'src/lib/recording/recordedBar';
 import { WIDGET_SECTION_HEADING_CLASS } from 'src/components/layout';
 import { Button, ToggleGroup, ToggleGroupItem } from '../../../lib/ui';
 import { useStore } from '../../../store';
@@ -58,7 +62,7 @@ export const RecordedBarCropSection = () => {
     if (!bar) {
       return;
     }
-    commitBar('Change recorded toolbar crop', { ...bar, mode });
+    commitBar('Change recorded toolbar crop', withRecordedBarMode(bar, mode));
     trackEvent('widget_config_changed', {
       widget: 'frame',
       property: 'recorded_bar',

@@ -29,6 +29,7 @@ import { WindowBarControls } from 'src/components/WindowBarControls';
 import {
   DEFAULT_WINDOW_BAR,
   activeBarStyle,
+  type WindowBarPage,
   type WindowBarSettings,
   type WindowBarStyle,
 } from 'src/lib/window-bar';
@@ -46,6 +47,8 @@ type Props = {
   windowBarText: string;
   /** The capture itself, for the window bar's hover previews. */
   captureImage: string;
+  /** The captured page (address and title), as the export's bar reads it. */
+  capturePage: WindowBarPage | null;
   /** `group`: changes sharing one (a slider drag, one colour pick) undo as a single step. */
   onChange: (style: ScreenshotStyle, group?: string) => void;
 };
@@ -60,6 +63,7 @@ export const ScreenshotStylePanel = ({
   windowBarAvailable,
   windowBarText,
   captureImage,
+  capturePage,
 }: Props) => {
   const { t } = useTranslation('screenshot');
   const { t: tFrame } = useTranslation('frame');
@@ -83,6 +87,7 @@ export const ScreenshotStylePanel = ({
             settings={{ ...windowBar, style: barStyle }}
             background={background}
             still={captureImage}
+            page={capturePage}
           />
         }
         title={tFrame(`windowStyle.${barStyle}`)}

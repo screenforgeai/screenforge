@@ -22,20 +22,19 @@ const BROWSER_NAMES: [RegExp, KnownBrowser][] = [
   [/\bchrom(e|ium)\b/i, 'chrome'],
 ];
 
-/** The browser a recorded window belongs to, from its app name or title; null for any other app. */
+/**
+ * The browser a recorded window belongs to, from its app name; only without
+ * one, from its title (a page titled "Chrome tips" in Notes isn't Chrome).
+ * Null for any other app.
+ */
 export function knownBrowserOf(
   source: Pick<RecordingCaptureSource, 'appName' | 'windowTitle'> | undefined,
 ): KnownBrowser | null {
-  for (const text of [source?.appName, source?.windowTitle]) {
-    if (!text) {
-      continue;
-    }
-    const match = BROWSER_NAMES.find(([pattern]) => pattern.test(text));
-    if (match) {
-      return match[1];
-    }
+  const text = source?.appName || source?.windowTitle;
+  if (!text) {
+    return null;
   }
-  return null;
+  return BROWSER_NAMES.find(([pattern]) => pattern.test(text))?.[1] ?? null;
 }
 
 /**

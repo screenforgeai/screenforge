@@ -56,6 +56,7 @@
     "crop": "Found the browser's toolbar and cropped it off.",
     "adjust": "Found what may be a toolbar but couldn't be sure where it ends. Adjust the crop to check.",
     "none": "No browser toolbar found in this recording.",
+    "failed": "Couldn't read this recording to find a toolbar. Adjust the crop to cut it off by hand.",
     "manual": "Cropping the top {{rows}} rows.",
     "off": "The recorded toolbar is kept."
   }

@@ -28,7 +28,7 @@ import {
   type WindowBarStyle,
 } from 'src/lib/window-bar';
 import { windowBarStartText } from 'src/lib/recording/captureSource';
-import { withWindowBar } from 'src/lib/recording/recordedBar';
+import { withFullCrop, withWindowBar } from 'src/lib/recording/recordedBar';
 import { WindowBarControls } from 'src/components/WindowBarControls';
 import { WindowBarPreviewStage } from 'src/components/WindowBarPreviewStage';
 import { RecordedBarCropSection } from './RecordedBarCropSection';
@@ -66,7 +66,8 @@ const FrameWidgetBody = () => {
     frame,
     recordingResult,
     mediaSegments,
-    isCropEditing,
+    isCropEditing: isEditingAnyCrop,
+    cropEditTarget,
     setIsCropEditing,
     requestPauseAndSeekTo,
     commitEdit,
@@ -79,6 +80,7 @@ const FrameWidgetBody = () => {
       recordingResult: state.recordingResult,
       mediaSegments: state.mediaSegments,
       isCropEditing: state.isCropEditing,
+      cropEditTarget: state.cropEditTarget,
       setIsCropEditing: state.setIsCropEditing,
       requestPauseAndSeekTo: state.requestPauseAndSeekTo,
       commitEdit: state.commitEdit,
@@ -86,6 +88,9 @@ const FrameWidgetBody = () => {
       endHistoryGroup: state.endHistoryGroup,
     })),
   );
+
+  // The frame's own crop; the recorded toolbar's line has its own Done button.
+  const isCropEditing = isEditingAnyCrop && cropEditTarget === 'frame';
 
   // Subscribe separately to avoid unnecessary re-renders from shallow selector
   const pendingPauseSeekTime = useStore((s) => s.pendingPauseSeekTime);
@@ -658,7 +663,7 @@ const FrameWidgetBody = () => {
                   className="flex-1"
                   onClick={() => {
                     commitFrameEdit('Reset crop', (state) => ({
-                      frame: { ...state.frame, cropRect: { x: 0, y: 0, width: 1, height: 1 } },
+                      frame: withFullCrop(state.frame),
                     }));
                   }}
                 >

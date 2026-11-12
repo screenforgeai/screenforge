@@ -8,11 +8,16 @@ import {
   resolveWindowBarTheme,
   topBandBrightness,
   type ResolvedWindowBarTheme,
+  type WindowBarPage,
   type WindowBarSettings,
 } from 'src/lib/window-bar';
 
-/** Light or dark for an 'auto' bar, from the still's top rows (as the export decides it). */
-function useAutoTheme(still: string | null): ResolvedWindowBarTheme {
+/**
+ * Light or dark for an 'auto' bar, from the still's top rows as they show
+ * under the bar: from `cropTop` (a share of the still's height) down, as the
+ * export decides it.
+ */
+function useAutoTheme(still: string | null, cropTop: number): ResolvedWindowBarTheme {
   const [theme, setTheme] = useState<ResolvedWindowBarTheme>('light');
   useEffect(() => {
     if (!still) {
@@ -28,12 +33,14 @@ function useAutoTheme(still: string | null): ResolvedWindowBarTheme {
       if (!ctx || cancelled) {
         return;
       }
+      const top = Math.round(Math.min(Math.max(cropTop, 0), 1) * image.naturalHeight);
+      const rows = Math.max(1, Math.min(AUTO_THEME_SAMPLE_ROWS, image.naturalHeight - top));
       ctx.drawImage(
         image,
         0,
-        0,
+        Math.min(top, image.naturalHeight - rows),
         image.naturalWidth,
-        AUTO_THEME_SAMPLE_ROWS,
+        rows,
         0,
         0,
         canvas.width,
@@ -51,7 +58,7 @@ function useAutoTheme(still: string | null): ResolvedWindowBarTheme {
     return () => {
       cancelled = true;
     };
-  }, [still]);
+  }, [still, cropTop]);
   return theme;
 }
 
@@ -59,21 +66,24 @@ function useAutoTheme(still: string | null): ResolvedWindowBarTheme {
  * A hover card's stage for one window bar style: the frame's background, and
  * a small window with the bar (drawn by the same window-bar renderer as the
  * video) over a still of the recording. `cropTop` is the share of the still's
- * height the recorded toolbar crop takes off the top.
+ * height the recorded toolbar crop takes off the top; `page` is what an
+ * address or title bar reads, as in the output.
  */
 export const WindowBarPreviewStage = ({
   settings,
   background,
   still,
   cropTop = 0,
+  page = null,
 }: {
   settings: WindowBarSettings;
   background: BackgroundSettings;
   still: string | null;
   cropTop?: number;
+  page?: WindowBarPage | null;
 }) => {
   const barRef = useRef<HTMLCanvasElement>(null);
-  const autoTheme = useAutoTheme(still);
+  const autoTheme = useAutoTheme(still, cropTop);
   const theme = settings.theme === 'auto' ? autoTheme : settings.theme;
   const backdrop = frameBackgroundCss(background);
 
@@ -84,14 +94,14 @@ export const WindowBarPreviewStage = ({
     if (!canvas || !ctx || width <= 0) {
       return;
     }
-    const scene = layoutWindowBar({ settings, theme, width });
+    const scene = layoutWindowBar({ settings, theme, width, page });
     const ratio = window.devicePixelRatio || 1;
     canvas.width = Math.round(scene.width * ratio);
     canvas.height = Math.round(scene.height * ratio);
     canvas.style.height = `${scene.height}px`;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawWindowBar(ctx, scene, 0, 0, ratio);
-  }, [settings, theme]);
+  }, [settings, theme, page]);
 
   return (
     <div

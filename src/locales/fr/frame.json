@@ -56,6 +56,7 @@
     "crop": "Barre du navigateur trouvée et recadrée.",
     "adjust": "Une barre semble présente, mais sa limite est incertaine. Ajustez le recadrage pour vérifier.",
     "none": "Aucune barre de navigateur dans cet enregistrement.",
+    "failed": "Impossible de lire l'enregistrement pour y chercher une barre. Ajustez le recadrage pour la retirer à la main.",
     "manual": "Recadrage des {{rows}} premières lignes.",
     "off": "La barre enregistrée est conservée."
   }

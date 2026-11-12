@@ -61,6 +61,11 @@ function drawOp(ctx: Ctx2D, op: WindowBarOp): void {
       ctx.textAlign = op.align;
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = op.color;
+      if (op.clip) {
+        ctx.beginPath();
+        ctx.rect(op.clip.x, op.clip.y, op.clip.w, op.clip.h);
+        ctx.clip();
+      }
       ctx.fillText(op.text, op.x, op.y);
       ctx.restore();
     }

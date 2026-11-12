@@ -31,25 +31,24 @@ export function fitWindowWithBar(
   style: WindowBarStyle,
 ): WindowFit {
   const ratio = mediaHeight / Math.max(mediaWidth, 1);
+  const fits = (w: number) => w * ratio + windowBarHeight(style, w) <= boxHeight;
   let width = boxWidth;
-  let bar = windowBarHeight(style, width);
-  if (width * ratio + bar > boxHeight) {
-    // Height-bound: the bar's height depends on the width it ends up at, so
-    // settle the two together (it converges in a few steps: the bar changes
-    // far less than the page does).
-    width = Math.max(0, (boxHeight - bar) / Math.max(ratio, 1e-6));
-    for (let i = 0; i < 8; i++) {
-      bar = windowBarHeight(style, width);
-      const next = Math.max(0, (boxHeight - bar) / Math.max(ratio, 1e-6));
-      if (Math.abs(next - width) < 0.01) {
-        width = next;
-        break;
+  if (!fits(width)) {
+    // Height-bound. The window's height grows with its width (page and bar
+    // both do), so the widest width that fits is a bisection away.
+    let lo = 0;
+    let hi = boxWidth;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) {
+        lo = mid;
+      } else {
+        hi = mid;
       }
-      width = next;
     }
-    width = Math.min(width, boxWidth);
-    bar = windowBarHeight(style, width);
+    width = lo;
   }
+  const bar = windowBarHeight(style, width);
   const pageHeight = width * ratio;
   const totalHeight = pageHeight + bar;
   const x = boxX + (boxWidth - width) / 2;

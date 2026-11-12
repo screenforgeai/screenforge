@@ -46,18 +46,35 @@ export function shouldDetectRecordedBar(
   );
 }
 
-/** The crop with its top edge at `cropTop` source rows, everything else about it kept. */
-export function cropRectWithTop(crop: CropRect, cropTop: number, sourceHeight: number): CropRect {
+/** The crop with its top edge at `top` (0–1), everything else about it kept. */
+export function cropRectWithTop(crop: CropRect, top: number): CropRect {
   const bottom = crop.y + crop.height;
-  const top = Math.min(Math.max(0, cropTop / Math.max(sourceHeight, 1)), bottom - 0.05);
-  return { ...crop, y: top, height: bottom - top };
+  const y = Math.max(0, Math.min(top, bottom - 0.05));
+  return { ...crop, y, height: bottom - y };
+}
+
+/** Whether this bar, with the window bar on, crops the recorded toolbar off. */
+export function recordedBarCrops(frame: FrameSettings, bar: RecordedBarSettings): boolean {
+  // Only crop the real toolbar when the window bar is there to replace it.
+  if (activeBarStyle(frame.windowBar) === 'none' || bar.cropTop <= 0) {
+    return false;
+  }
+  return bar.mode === 'manual' || (bar.mode === 'auto' && bar.detected === 'crop');
+}
+
+function withoutAppliedTop(bar: RecordedBarSettings): RecordedBarSettings {
+  const next = { ...bar };
+  delete next.appliedTop;
+  return next;
 }
 
 /**
  * The frame with the recorded toolbar handled: cropped off at `bar.cropTop`
  * while the window bar is on and the mode allows it (detection, or the
- * person, settled on a line); the top edge restored when the bar or the
- * crop is switched off.
+ * person, settled on a line); the top edge given back when the bar or the
+ * crop is switched off. The person's own crop is never widened: the toolbar
+ * crop only ever adds to it (the lower of the two tops wins), and lifting it
+ * returns the person's top as it was.
  */
 export function applyRecordedBar(
   frame: FrameSettings,
@@ -65,32 +82,44 @@ export function applyRecordedBar(
   sourceHeight: number,
 ): FrameSettings {
   const previous = frame.recordedBar;
-  // Only undo a top crop this feature put there, never one the person drew.
-  const ownTop =
-    previous && previous.mode !== 'off' && previous.cropTop > 0
-      ? previous.cropTop / Math.max(sourceHeight, 1)
-      : null;
-  const ownsTop = ownTop !== null && Math.abs(frame.cropRect.y - ownTop) < 1e-6;
-  // Only crop the real toolbar when the window bar is there to replace it.
-  const barOn = activeBarStyle(frame.windowBar) !== 'none';
-  const crops =
-    barOn &&
-    (bar.mode === 'manual' || (bar.mode === 'auto' && bar.detected === 'crop' && bar.cropTop > 0));
-  let cropRect = frame.cropRect;
-  if (crops && bar.cropTop > 0) {
-    cropRect = cropRectWithTop(frame.cropRect, bar.cropTop, sourceHeight);
-  } else if (ownsTop) {
-    cropRect = cropRectWithTop(frame.cropRect, 0, sourceHeight);
+  // The top is the person's unless it is still exactly what this feature set.
+  const stillOurs =
+    previous?.appliedTop !== undefined && Math.abs(frame.cropRect.y - previous.appliedTop) < 1e-6;
+  const personTop = stillOurs ? (previous?.personTop ?? 0) : frame.cropRect.y;
+  const rest = withoutAppliedTop(bar);
+  if (recordedBarCrops(frame, bar)) {
+    const top = Math.max(personTop, bar.cropTop / Math.max(sourceHeight, 1));
+    const cropRect = cropRectWithTop(frame.cropRect, top);
+    return { ...frame, cropRect, recordedBar: { ...rest, personTop, appliedTop: cropRect.y } };
   }
-  return { ...frame, cropRect, recordedBar: { ...bar } };
+  return {
+    ...frame,
+    cropRect: stillOurs ? cropRectWithTop(frame.cropRect, personTop) : frame.cropRect,
+    recordedBar: { ...rest, personTop },
+  };
 }
 
-/** The mode a person picks, applied: Auto goes back to what detection said. */
+/**
+ * The frame with the person's own crop reset to the whole recording: the
+ * recorded toolbar's crop, when it is on, stays.
+ */
+export function withFullCrop(frame: FrameSettings): FrameSettings {
+  const full = { ...frame, cropRect: { x: 0, y: 0, width: 1, height: 1 } };
+  const bar = frame.recordedBar;
+  if (!bar) {
+    return full;
+  }
+  return applyRecordedBar({ ...full, recordedBar: withoutAppliedTop(bar) }, bar, bar.height);
+}
+
+/** The mode a person picks, applied: Auto goes back to detection's own line. */
 export function withRecordedBarMode(
   bar: RecordedBarSettings,
   mode: RecordedBarCropMode,
 ): RecordedBarSettings {
-  return { ...bar, mode };
+  return mode === 'auto' && bar.detectedTop !== undefined
+    ? { ...bar, mode, cropTop: bar.detectedTop }
+    : { ...bar, mode };
 }
 
 /**
@@ -98,15 +127,17 @@ export function withRecordedBarMode(
  * recording's own settings: the crop line in the video's rows.
  */
 export function recordedBarFromDetection(
-  detection: { action: 'crop' | 'adjust' | 'none'; cropTop: number },
+  detection: { action: RecordedBarSettings['detected']; cropTop: number },
   sampleHeight: number,
   video: { width: number; height: number },
   mode: RecordedBarCropMode = 'auto',
 ): RecordedBarSettings {
+  const cropTop = Math.round((detection.cropTop * video.height) / Math.max(sampleHeight, 1));
   return {
     mode,
     detected: detection.action,
-    cropTop: Math.round((detection.cropTop * video.height) / Math.max(sampleHeight, 1)),
+    cropTop,
+    detectedTop: cropTop,
     width: video.width,
     height: video.height,
   };

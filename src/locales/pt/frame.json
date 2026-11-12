@@ -56,6 +56,7 @@
     "crop": "A barra do navegador foi encontrada e recortada.",
     "adjust": "Parece haver uma barra, mas não dá para ter certeza de onde termina. Ajuste o recorte para conferir.",
     "none": "Nenhuma barra de navegador encontrada nesta gravação.",
+    "failed": "Não foi possível ler a gravação para procurar uma barra. Ajuste o recorte para removê-la à mão.",
     "manual": "Recortando as {{rows}} linhas de cima.",
     "off": "A barra gravada é mantida."
   }

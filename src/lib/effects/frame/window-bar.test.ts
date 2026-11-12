@@ -56,6 +56,19 @@ describe('WindowBarPainter', () => {
     expect(later?.ops[0]).toMatchObject({ fill: '#2B2D32' });
     expect(samples).toBe(1);
   });
+  it('decides again when the crop top or the recording changes', () => {
+    const painter = new WindowBarPainter();
+    const fill = (f: FrameSettings, visits: { t: number; url: string }[] | null, b: number) =>
+      painter.sceneAt(f, geometry, 0, { pageVisits: visits }, () => b)?.ops[0];
+    const one = [{ t: 0, url: 'https://a.com' }];
+    expect(fill(frame, one, 0.1)).toMatchObject({ fill: '#2B2D32' });
+    expect(fill(frame, one, 0.9)).toMatchObject({ fill: '#2B2D32' });
+    const cropped = { ...frame, cropRect: { x: 0, y: 0.1, width: 1, height: 0.9 } };
+    expect(fill(cropped, one, 0.9)).toMatchObject({ fill: '#F2F3F5' });
+    expect(fill(cropped, [{ t: 0, url: 'https://b.com' }], 0.1)).toMatchObject({
+      fill: '#2B2D32',
+    });
+  });
   it('follows the page visits', () => {
     const painter = new WindowBarPainter();
     const visits = [

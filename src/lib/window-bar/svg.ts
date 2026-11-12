@@ -40,13 +40,19 @@ function opSvg(op: WindowBarOp): string {
         `fill="none" stroke="${op.color}" stroke-width="${n(op.strokeWidth)}" ` +
         `stroke-linecap="round" stroke-linejoin="round" opacity="${n(op.alpha)}"/>`
       );
-    case 'text':
-      return (
-        `<text x="${n(op.x)}" y="${n(op.y)}" font-family="${escapeXml(WINDOW_BAR_FONT)}" ` +
+    case 'text': {
+      const text =
+        `<text x="${n(op.x - (op.clip?.x ?? 0))}" y="${n(op.y - (op.clip?.y ?? 0))}" ` +
+        `font-family="${escapeXml(WINDOW_BAR_FONT)}" ` +
         `font-weight="${WINDOW_BAR_FONT_WEIGHT}" font-size="${n(op.size)}" fill="${op.color}" ` +
         `text-anchor="${op.align === 'center' ? 'middle' : 'start'}" opacity="${n(op.alpha)}" ` +
-        `xml:space="preserve">${escapeXml(op.text)}</text>`
-      );
+        `xml:space="preserve">${escapeXml(op.text)}</text>`;
+      // A nested viewport clips what it holds, with no ids to keep unique.
+      return op.clip
+        ? `<svg x="${n(op.clip.x)}" y="${n(op.clip.y)}" width="${n(op.clip.w)}" ` +
+            `height="${n(op.clip.h)}" overflow="hidden">${text}</svg>`
+        : text;
+    }
   }
 }
 

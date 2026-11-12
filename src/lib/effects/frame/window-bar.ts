@@ -67,11 +67,15 @@ export interface WindowBarFrameState {
 }
 
 /**
- * One per pipeline instance (one video). Decides 'auto' once, from the
- * first frame it can read, and keeps it for the whole video.
+ * One per pipeline instance. Decides 'auto' once per video, from the first
+ * frame it can read, and keeps it for the whole video: until another
+ * recording opens or the crop's top (the rows it reads) moves.
  */
 export class WindowBarPainter {
   private decidedTheme: ResolvedWindowBarTheme | null = null;
+  /** What the decided theme was read from: the recording (its page visits) and the crop's top. */
+  private themeVisits: PageVisit[] | null | undefined = undefined;
+  private themeTop: number | null = null;
   private visitsRef: PageVisit[] | null | undefined = undefined;
   private visits: PageVisit[] = [];
 
@@ -90,6 +94,11 @@ export class WindowBarPainter {
     if (state.pageVisits !== this.visitsRef) {
       this.visitsRef = state.pageVisits;
       this.visits = normalizePageVisits(state.pageVisits);
+    }
+    if (state.pageVisits !== this.themeVisits || frame.cropRect.y !== this.themeTop) {
+      this.themeVisits = state.pageVisits;
+      this.themeTop = frame.cropRect.y;
+      this.decidedTheme = null;
     }
     const theme = this.themeFor(settings.theme, state.windowBarTheme, sampleFirstFrame);
     const { page, previous, mix } = pageAtTime(this.visits, t);

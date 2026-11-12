@@ -58,8 +58,17 @@ export interface FrameSettings {
 }
 
 export interface RecordedBarSettings extends RecordedBarCrop {
-  /** What detection found: crop by itself, ask the person to adjust, or nothing to crop. */
-  detected: 'crop' | 'adjust' | 'none';
+  /**
+   * What detection found: crop by itself, ask the person to adjust, nothing
+   * to crop, or it couldn't read the recording (a line can still be dragged).
+   */
+  detected: 'crop' | 'adjust' | 'none' | 'failed';
+  /** Detection's own line, in video rows: what Auto goes back to after a manual drag. */
+  detectedTop?: number;
+  /** The person's own crop top (0–1) under the toolbar crop: kept, and given back when it lifts. */
+  personTop?: number;
+  /** The crop top (0–1) this feature last set, absent while it isn't cropping. */
+  appliedTop?: number;
 }
 
 export * from './analyze';

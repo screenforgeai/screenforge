@@ -8,6 +8,8 @@ import {
   recordedBarEligibility,
   recordedBarFromDetection,
   shouldDetectRecordedBar,
+  withFullCrop,
+  withRecordedBarMode,
 } from './recordedBar';
 
 const H = 1000;
@@ -93,16 +95,76 @@ describe('applyRecordedBar', () => {
     };
     expect(applyRecordedBar(drawn, bar({ mode: 'off' }), H).cropRect.y).toBe(0.2);
   });
+
+  it("keeps the person's deeper top crop instead of widening it to the toolbar", () => {
+    const drawn: FrameSettings = { ...withBar, cropRect: { x: 0, y: 0.2, width: 1, height: 0.8 } };
+    const cropped = applyRecordedBar(drawn, bar(), H);
+    expect(cropped.cropRect.y).toBe(0.2);
+    expect(applyRecordedBar(cropped, bar({ mode: 'off' }), H).cropRect.y).toBe(0.2);
+  });
+
+  it("gives the person's own shallower top back when the toolbar crop lifts", () => {
+    const drawn: FrameSettings = {
+      ...withBar,
+      cropRect: { x: 0, y: 0.03, width: 1, height: 0.97 },
+    };
+    const cropped = applyRecordedBar(drawn, bar(), H);
+    expect(cropped.cropRect.y).toBeCloseTo(0.08);
+    const off = { ...cropped, windowBar: { ...mac, enabled: false } };
+    expect(applyRecordedBar(off, bar(), H).cropRect.y).toBeCloseTo(0.03);
+  });
+
+  it('takes a top the person changed after the toolbar crop as theirs', () => {
+    const cropped = applyRecordedBar(withBar, bar(), H);
+    const redrawn = { ...cropped, cropRect: { ...cropped.cropRect, y: 0.3, height: 0.7 } };
+    const off = applyRecordedBar(redrawn, bar({ mode: 'off' }), H);
+    expect(off.cropRect.y).toBe(0.3);
+    // Back on: the deeper of the two still wins.
+    expect(applyRecordedBar(off, bar(), H).cropRect.y).toBe(0.3);
+  });
+});
+
+describe('withFullCrop', () => {
+  it("resets the person's crop but keeps the toolbar's", () => {
+    const cropped = applyRecordedBar(
+      { ...withBar, cropRect: { x: 0.1, y: 0.2, width: 0.8, height: 0.7 } },
+      bar(),
+      H,
+    );
+    const reset = withFullCrop(cropped);
+    expect(reset.cropRect).toEqual({ x: 0, y: 0.08, width: 1, height: 0.92 });
+    // And with the toolbar crop off later, the whole recording comes back.
+    const off = applyRecordedBar(reset, bar({ mode: 'off' }), H);
+    expect(off.cropRect).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+  });
+});
+
+describe('withRecordedBarMode', () => {
+  it("goes back to detection's own line on Auto after a manual drag", () => {
+    const dragged = bar({ mode: 'manual', cropTop: 140, detectedTop: 80 });
+    expect(withRecordedBarMode(dragged, 'auto')).toMatchObject({ mode: 'auto', cropTop: 80 });
+    expect(withRecordedBarMode(dragged, 'off')).toMatchObject({ mode: 'off', cropTop: 140 });
+  });
+
+  it('keeps the line on Auto when detection never gave one', () => {
+    expect(withRecordedBarMode(bar({ mode: 'manual', cropTop: 140 }), 'auto').cropTop).toBe(140);
+  });
 });
 
 describe('cropRectWithTop', () => {
   it('keeps the bottom edge where it was', () => {
-    expect(cropRectWithTop({ x: 0, y: 0, width: 1, height: 0.9 }, 100, H)).toEqual({
+    expect(cropRectWithTop({ x: 0, y: 0, width: 1, height: 0.9 }, 0.1)).toEqual({
       x: 0,
       y: 0.1,
       width: 1,
       height: 0.8,
     });
+  });
+
+  it('never puts the top above the source, even on a very short crop', () => {
+    const rect = cropRectWithTop({ x: 0, y: 0, width: 1, height: 0.03 }, 0.5);
+    expect(rect.y).toBe(0);
+    expect(rect.height).toBeCloseTo(0.03);
   });
 });
 
@@ -110,6 +172,13 @@ describe('recordedBarFromDetection', () => {
   it("moves the line from sampled rows to the video's rows", () => {
     expect(
       recordedBarFromDetection({ action: 'crop', cropTop: 40 }, 540, { width: 3200, height: 2160 }),
-    ).toEqual({ mode: 'auto', detected: 'crop', cropTop: 160, width: 3200, height: 2160 });
+    ).toEqual({
+      mode: 'auto',
+      detected: 'crop',
+      cropTop: 160,
+      detectedTop: 160,
+      width: 3200,
+      height: 2160,
+    });
   });
 });

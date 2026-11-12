@@ -70,6 +70,11 @@ export type WindowBarOp =
       color: string;
       align: 'left' | 'center';
       alpha: number;
+      /**
+       * The box the text may draw in. Widths are estimated from Inter's own,
+       * so a glyph from a fallback font can run longer: it is cut here.
+       */
+      clip?: { x: number; y: number; w: number; h: number };
     };
 
 export interface WindowBarScene {
@@ -126,7 +131,14 @@ interface Ctx {
   width: number;
 }
 
-function textOp(c: Ctx, x: number, text: string, align: 'left' | 'center', alpha: number): void {
+function textOp(
+  c: Ctx,
+  x: number,
+  text: string,
+  align: 'left' | 'center',
+  alpha: number,
+  clip?: { x: number; w: number },
+): void {
   if (!text || alpha <= 0) {
     return;
   }
@@ -140,6 +152,7 @@ function textOp(c: Ctx, x: number, text: string, align: 'left' | 'center', alpha
     color: c.colors.text,
     align,
     alpha,
+    ...(clip && { clip: { x: clip.x, y: 0, w: Math.max(0, clip.w), h: c.height } }),
   });
 }
 
@@ -187,7 +200,12 @@ function labelOps(
   if (lock) {
     lockOp(c, left, alpha);
   }
-  textOp(c, left + lockSpace, fitted, 'left', alpha);
+  const boxLeft = align === 'center' ? x - maxWidth / 2 : x;
+  const textLeft = left + lockSpace;
+  textOp(c, textLeft, fitted, 'left', alpha, {
+    x: textLeft,
+    w: boxLeft + maxWidth - textLeft,
+  });
 }
 
 function iconOp(

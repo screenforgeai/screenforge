@@ -1180,6 +1180,10 @@ export const FloatingToolbar = () => {
   }
 
   async function handleStop() {
+    // What this recording captured, taken now: a next recording may start
+    // (and set its own) before this one has finished saving.
+    const captureSource = captureSourceRef.current;
+    captureSourceRef.current = null;
     logToolbarDiagnostic('toolbar.recording.stop-clicked', {
       elapsed,
       micEnabled,
@@ -1296,7 +1300,7 @@ export const FloatingToolbar = () => {
         hasEmbeddedAudio,
         audioPath: timelineAudioPath ?? undefined,
         cameraPath: cameraPath ?? undefined,
-        ...(captureSourceRef.current && { captureSource: captureSourceRef.current }),
+        ...(captureSource && { captureSource }),
       });
     } catch (err) {
       console.error('[recording] stop pipeline failed:', err);
