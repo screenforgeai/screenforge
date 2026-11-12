@@ -196,10 +196,9 @@ const WEDGE_SHAPE: Shape = {
 };
 
 // ── Pointer angle ────────────────────────────────────────────────────────────
-// The dart pointers (Wedge, Collaborator, Rounded) are drawn aiming at 45°, but
-// the macOS arrow's axis leans further toward vertical. The tilt-while-moving
-// rotation is tuned for the macOS arrow, so the darts are turned about their
-// tip to aim along the same axis.
+// The dart pointers (Wedge, Collaborator, Rounded) are drawn aiming at 45°.
+// They are turned about their tip to lean 31° from vertical: closer to the
+// macOS arrow (≈23°) so they rotate naturally while moving, but still a dart.
 
 type Vec = [number, number];
 /** Direction (radians) from a pointer's tip into its body: the bisector of its two edges. */
@@ -213,8 +212,19 @@ function axisOf(tip: Vec, a: Vec, b: Vec): number {
 }
 // macOS arrow (inner body): vertical left edge, right edge to the wing.
 const MAC_AXIS = axisOf([7, 2.014], [7, 20.703], [20.162, 14.342]);
-const WEDGE_TURN = MAC_AXIS - axisOf([3.5, 2.8], [21, 10.2], [10.2, 21]);
-const ROUNDED_TURN = MAC_AXIS - axisOf([3, 3], [24.5, 11.2], [10.6, 24.8]);
+const DART_LEAN_DEG = 31;
+const DART_AXIS = ((90 - DART_LEAN_DEG) * Math.PI) / 180;
+const WEDGE_TURN = DART_AXIS - axisOf([3.5, 2.8], [21, 10.2], [10.2, 21]);
+const ROUNDED_TURN = DART_AXIS - axisOf([3, 3], [24.5, 11.2], [10.6, 24.8]);
+
+/**
+ * How much more a style tilts into its motion than the Rotation setting says.
+ * The compact dart pointers read as still at the arrow cursors' tilt, so they
+ * swing further.
+ */
+export function getCursorTiltFactor(style: CursorStyleId): number {
+  return style === 'wedge' || style === 'collaborator' || style === 'rounded' ? 1.8 : 1;
+}
 
 /** The axis a style's arrow aims along, after its turn (radians, 0 = pointing right). */
 export function getPointerAxis(style: 'cursor01' | 'wedge' | 'collaborator' | 'rounded'): number {
