@@ -120,9 +120,10 @@ export const ScreenshotStylePanel = ({
     if (lookId === studio.lookId) {
       return;
     }
-    onChange({ ...style, studio: { lookId, offset: { x: 0, y: 0 }, light: null } });
+    onChange({ ...style, studio: { ...FLAT_STUDIO, lookId } });
   };
-  const moved = studio.offset.x !== 0 || studio.offset.y !== 0 || studio.light !== null;
+  const moved =
+    studio.offset.x !== 0 || studio.offset.y !== 0 || studio.depth !== 0 || studio.light !== null;
 
   const aspectRatio = (
     <div className="flex flex-col gap-2">
@@ -195,7 +196,7 @@ export const ScreenshotStylePanel = ({
               variant="secondary"
               size="sm"
               onClick={() =>
-                onChange({ ...style, studio: { ...studio, offset: { x: 0, y: 0 }, light: null } })
+                onChange({ ...style, studio: { ...FLAT_STUDIO, lookId: studio.lookId } })
               }
             >
               {t('resetPosition')}

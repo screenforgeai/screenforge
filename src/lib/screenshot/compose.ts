@@ -50,6 +50,8 @@ export interface ScreenshotStudio {
   lookId: string | null;
   /** Where the screenshot sits: a shift from centre, as fractions of the output's width and height. */
   offset: { x: number; y: number };
+  /** Depth toward the camera: a share of its distance (0 = the look's own framing). */
+  depth: number;
   /** Light handle position (fractions of the output), or null for the look's own light. */
   light: { x: number; y: number } | null;
 }
@@ -72,7 +74,12 @@ export interface ScreenshotWindowInfo {
   scaleFactor: number;
 }
 
-export const FLAT_STUDIO: ScreenshotStudio = { lookId: null, offset: { x: 0, y: 0 }, light: null };
+export const FLAT_STUDIO: ScreenshotStudio = {
+  lookId: null,
+  offset: { x: 0, y: 0 },
+  depth: 0,
+  light: null,
+};
 
 export interface ScreenshotGeometry {
   canvasWidth: number;

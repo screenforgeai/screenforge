@@ -285,6 +285,7 @@ export class StudioRenderer {
   private media = { w: 1600, h: 1000 };
   private mediaLum = 0.5;
   private offset: StudioPoint = { x: 0, y: 0 };
+  private depth = 0;
   private handle: StudioPoint | null = null;
   private width = 1;
   private height = 1;
@@ -716,10 +717,25 @@ export class StudioRenderer {
     this.applySettings(animate);
   }
 
-  /** Where the screenshot sits, as a shift of the output's width and height from centre. */
-  setOffset(offset: StudioPoint): void {
+  /**
+   * Where the screenshot sits: a shift of the output's width and height from
+   * centre (measured at the screenshot's own depth), and a depth toward the
+   * camera (a share of its distance; see `pose.ts`).
+   */
+  setOffset(offset: StudioPoint, depth = 0): void {
     this.offset = { ...offset };
+    this.depth = depth;
     this.invalidate();
+  }
+
+  /** The closest the screenshot may come for the current look without reaching the lens. */
+  maxDepth(): number {
+    const { halfWidth = PANEL_W / 2, halfHeight = 1 } = this.panel.userData as {
+      halfWidth?: number;
+      halfHeight?: number;
+    };
+    const reach = Math.hypot(halfWidth, halfHeight) * 1.2;
+    return Math.max(0, 1 - reach / this.sphericalFor(this.s.camera).radius);
   }
 
   /** Light handle position (fractions of the output), or null for the look's own light. */
@@ -1117,13 +1133,18 @@ export class StudioRenderer {
     this.panel.rotation.order = 'YXZ';
     this.panel.rotation.set(-THREE.MathUtils.degToRad(s.lean), THREE.MathUtils.degToRad(s.tilt), 0);
     this.camera.updateMatrixWorld();
-    const distance = this.camera.position.distanceTo(this.camTarget);
-    const viewH = 2 * distance * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    // Depth slides the screenshot along the line of sight; the 2D shift is measured at that
+    // depth, so a drag follows the pointer 1:1 however near or far it is.
+    const toTarget = this.camTarget.clone().sub(this.camera.position);
+    const distance = toTarget.length();
+    const along = distance * (1 - Math.min(this.depth, this.maxDepth()));
+    const viewH = 2 * along * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
     const viewW = viewH * this.camera.aspect;
     const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
     const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
     this.panel.position
-      .copy(this.panelBase)
+      .copy(this.camera.position)
+      .addScaledVector(toTarget.normalize(), along)
       .addScaledVector(right, this.offset.x * viewW)
       .addScaledVector(up, -this.offset.y * viewH);
     this.panelTarget.copy(this.panel.position);

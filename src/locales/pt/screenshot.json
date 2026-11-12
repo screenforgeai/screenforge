@@ -33,7 +33,7 @@
   "actions": "Ações de edição",
   "look": "Visual",
   "flat": "Plano",
-  "studioHint": "Arraste a captura para movê-la. Arraste a pequena luz para mudar de onde vem a luz.",
+  "studioHint": "Arraste a captura para movê-la e role para aproximá-la ou afastá-la. Arraste a pequena luz para mudar de onde vem a luz.",
   "resetPosition": "Redefinir posição e luz",
   "lightHandle": "Posição da luz",
   "studioUnavailable": "Os visuais de estúdio precisam de WebGL 2, que não está disponível aqui."

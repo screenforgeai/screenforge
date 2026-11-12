@@ -1,0 +1,34 @@
+/**
+ * Where the screenshot sits in the studio, as the user moves it: a 2D shift
+ * (fractions of the output, at the screenshot's own depth, so a drag follows
+ * the pointer 1:1) and a depth along the camera's line of sight.
+ */
+import type { StudioPoint } from './looks';
+
+/** How far past the frame the screenshot may go, in output widths/heights from centre. */
+export const MAX_OFFSET = 1.5;
+/**
+ * Depth: the share of the camera's distance the screenshot has moved toward it.
+ * 0 is the look's own framing; 0.85 is very close (15% of the distance left);
+ * -3 is four times as far.
+ */
+export const MAX_DEPTH = 0.85;
+export const MIN_DEPTH = -3;
+/** Distance change per wheel pixel: about 15% per notch of a mouse wheel. */
+const WHEEL_RATE = 0.0015;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+export const clampOffset = (offset: StudioPoint): StudioPoint => ({
+  x: clamp(offset.x, -MAX_OFFSET, MAX_OFFSET),
+  y: clamp(offset.y, -MAX_OFFSET, MAX_OFFSET),
+});
+
+/**
+ * Depth after a wheel (or trackpad pinch) step. The distance to the camera is
+ * scaled, not shifted, so each notch feels the same near and far.
+ */
+export const depthAfterWheel = (depth: number, deltaY: number): number => {
+  const distance = (1 - depth) * Math.exp(deltaY * WHEEL_RATE);
+  return clamp(1 - distance, MIN_DEPTH, MAX_DEPTH);
+};

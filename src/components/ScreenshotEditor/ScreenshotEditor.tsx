@@ -47,7 +47,9 @@ import {
 } from 'src/lib/screenshot/compose';
 import {
   StudioRenderer,
+  clampOffset,
   defaultLightHandle,
+  depthAfterWheel,
   getStudioLook,
   getStudioOutputSize,
   imageStats,
@@ -423,26 +425,65 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     if (drag?.mode === 'pan' && display.width > 0 && display.height > 0) {
       return {
         offset: {
-          x: clamp(drag.origin.x + (drag.current.x - drag.start.x) / display.width, -0.6, 0.6),
-          y: clamp(drag.origin.y + (drag.current.y - drag.start.y) / display.height, -0.6, 0.6),
+          ...clampOffset({
+            x: drag.origin.x + (drag.current.x - drag.start.x) / display.width,
+            y: drag.origin.y + (drag.current.y - drag.start.y) / display.height,
+          }),
         },
+        depth: studio.depth,
         light: studio.light,
       };
     }
     if (drag?.mode === 'light') {
-      return { offset: studio.offset, light: drag.current };
+      return { offset: studio.offset, depth: studio.depth, light: drag.current };
     }
-    return { offset: studio.offset, light: studio.light };
-  }, [display.height, display.width, drag, studio.light, studio.offset]);
+    return { offset: studio.offset, depth: studio.depth, light: studio.light };
+  }, [display.height, display.width, drag, studio.depth, studio.light, studio.offset]);
 
   useEffect(() => {
     const renderer = studioRef.current;
     if (!renderer) {
       return;
     }
-    renderer.setOffset(studioPose.offset);
+    renderer.setOffset(studioPose.offset, studioPose.depth);
     renderer.setLightHandle(studioPose.light);
   }, [studioPose, studioReady]);
+
+  // Scroll (or pinch) over the studio: bring the screenshot closer or push it back. One gesture
+  // is one undo step; the depth is tracked here between renders so fast wheels lose nothing.
+  const wheelGesture = useRef<{ group: string; at: number; depth: number } | null>(null);
+  const handleWheel = useRef<(e: WheelEvent) => void>(() => undefined);
+  useLayoutEffect(() => {
+    handleWheel.current = (e: WheelEvent) => {
+      const renderer = studioRef.current;
+      if (!renderer || drag) {
+        return;
+      }
+      e.preventDefault();
+      const now = performance.now();
+      const gesture =
+        wheelGesture.current && now - wheelGesture.current.at < 400
+          ? wheelGesture.current
+          : { group: `studio-depth-${now}`, at: now, depth: studio.depth };
+      // Line-based wheels (deltaMode 1) report notches, not pixels.
+      const delta = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+      const depth = Math.min(depthAfterWheel(gesture.depth, delta), renderer.maxDepth());
+      wheelGesture.current = { ...gesture, at: now, depth };
+      if (depth !== studio.depth) {
+        setStyle({ ...style, studio: { ...studio, depth } }, gesture.group);
+      }
+    };
+  });
+  useEffect(() => {
+    const canvas = studioCanvasRef.current;
+    if (!studioOn || !canvas) {
+      return;
+    }
+    // Not React's onWheel: that listener is passive and can't stop the page from zooming.
+    const onWheel = (e: WheelEvent) => handleWheel.current(e);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [studioOn, studioReady]);
 
   const lightHandle = studioPose.light ?? (look ? defaultLightHandle(look.settings.envRot) : null);
 

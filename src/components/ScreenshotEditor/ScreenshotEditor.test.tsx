@@ -16,6 +16,7 @@ const studio = vi.hoisted(() => ({
     setSettings: (...args: unknown[]) => void;
     pickImagePoint: ReturnType<typeof vi.fn>;
     projectImagePoint: ReturnType<typeof vi.fn>;
+    setOffset: ReturnType<typeof vi.fn>;
   }[],
 }));
 vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
@@ -28,6 +29,7 @@ vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
     setSettings = vi.fn();
     setOffset = vi.fn();
     setLightHandle = vi.fn();
+    maxDepth = vi.fn(() => 0.85);
     pickImagePoint = vi.fn(() => null);
     projectImagePoint = vi.fn(() => null);
     renderStill = vi.fn((width: number, height: number) =>
@@ -198,6 +200,29 @@ describe('ScreenshotEditor', () => {
         'true',
       );
       expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
+    });
+
+    it('scrolling over the studio moves the screenshot in depth, as one undo step', async () => {
+      const user = userEvent.setup();
+      await renderEditor();
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      const renderer = studio.instances[0];
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+      const lastDepth = () => renderer.setOffset.mock.calls.at(-1)?.[1] as number;
+      fireEvent.wheel(canvas, { deltaY: -100 });
+      fireEvent.wheel(canvas, { deltaY: -100 });
+      await waitFor(() => expect(lastDepth()).toBeGreaterThan(0.2));
+      // Scrolling back out goes behind the look's own framing.
+      fireEvent.wheel(canvas, { deltaY: 600 });
+      await waitFor(() => expect(lastDepth()).toBeLessThan(0));
+      // The whole gesture undoes at once, leaving the look on.
+      await user.click(screen.getByRole('button', { name: /^undo$/i }));
+      await waitFor(() => expect(lastDepth()).toBe(0));
+      expect(screen.getByRole('button', { name: /night glow/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
     });
 
     it('switches looks on the same renderer', async () => {
