@@ -19,6 +19,6 @@
   "unsavedRecording_desc": "Tienes una grabación sin guardar.",
   "discard": "Descartar",
   "takeScreenshot": "Hacer captura",
-  "openImage": "Abrir imagen…",
+  "importImage": "Importar imagen",
   "openImageFailed": "No se pudo abrir ese archivo como imagen."
 }

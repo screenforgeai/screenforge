@@ -19,6 +19,6 @@
   "unsavedRecording_desc": "未保存の録画があります。",
   "discard": "破棄",
   "takeScreenshot": "スクリーンショットを撮る",
-  "openImage": "画像を開く…",
+  "importImage": "画像を読み込む",
   "openImageFailed": "そのファイルは画像として開けませんでした。"
 }

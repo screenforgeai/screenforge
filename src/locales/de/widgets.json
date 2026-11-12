@@ -19,6 +19,6 @@
   "unsavedRecording_desc": "Sie haben eine nicht gespeicherte Aufnahme.",
   "discard": "Verwerfen",
   "takeScreenshot": "Screenshot aufnehmen",
-  "openImage": "Bild öffnen…",
+  "importImage": "Bild importieren",
   "openImageFailed": "Diese Datei ließ sich nicht als Bild öffnen."
 }

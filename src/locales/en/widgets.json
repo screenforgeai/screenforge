@@ -20,6 +20,6 @@
   "unsavedRecording_desc": "You have an unsaved recording.",
   "discard": "Discard",
   "takeScreenshot": "Take screenshot",
-  "openImage": "Open image…",
+  "importImage": "Import image",
   "openImageFailed": "That file couldn't be opened as an image."
 }

@@ -225,25 +225,25 @@ export const WidgetLibrary = () => {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
+                  onClick={() => void importAsNewProject()}
+                >
+                  <IconUpload size={11} style={{ position: 'relative', top: '-0.5px' }} />
+                  <span>Import video</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
                   onClick={() => void window.screenforge.takeScreenshot().catch(() => undefined)}
                 >
                   <IconCamera size={11} style={{ position: 'relative', top: '-0.5px' }} />
                   <span>{t('takeScreenshot')}</span>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
                   onClick={() => imageInputRef.current?.click()}
                 >
-                  <IconPhoto size={11} style={{ position: 'relative', top: '-0.5px' }} />
-                  <span>{t('openImage')}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
-                  onClick={() => void importAsNewProject()}
-                >
                   <IconUpload size={11} style={{ position: 'relative', top: '-0.5px' }} />
-                  <span>Import video</span>
+                  <span>{t('importImage')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

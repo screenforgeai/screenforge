@@ -19,6 +19,6 @@
   "unsavedRecording_desc": "Vous avez un enregistrement non sauvegardé.",
   "discard": "Ignorer",
   "takeScreenshot": "Faire une capture",
-  "openImage": "Ouvrir une image…",
+  "importImage": "Importer une image",
   "openImageFailed": "Ce fichier n'a pas pu être ouvert comme image."
 }
