@@ -681,6 +681,9 @@ export const framePixiEffect: PixiEffect<null> = {
               magFilter: SCREEN_VIDEO_MAG_FILTER,
               minFilter: SCREEN_VIDEO_MIN_FILTER,
               mipmapFilter: SCREEN_VIDEO_MIPMAP_FILTER,
+              // As in export: a Retina recording is shown smaller than it is, and without a
+              // mip chain small text and UI edges shimmer and step.
+              autoGenerateMipmaps: true,
             });
             videoElementSource.autoUpdate = false;
             videoElementSourceElement = videoSrc.source;
