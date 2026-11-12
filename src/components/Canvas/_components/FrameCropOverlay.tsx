@@ -304,11 +304,8 @@ export const FrameCropOverlay = ({
     // off above the crop (the person's own top may go deeper).
     const bar = frame.recordedBar;
     const lineShare = bar ? bar.cropTop / Math.max(bar.height, 1) : cropOverlayRect.y;
-    const lineRect = {
-      ...frame.cropRect,
-      y: lineShare,
-      height: frame.cropRect.y + frame.cropRect.height - lineShare,
-    };
+    // The line moves over the whole recording, whatever the crop's bottom.
+    const lineRect = { x: 0, y: lineShare, width: 1, height: 1 - lineShare };
     return (
       <div
         className="absolute inset-0 z-10 select-none rounded-[inherit]"

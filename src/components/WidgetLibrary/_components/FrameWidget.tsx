@@ -221,15 +221,24 @@ const FrameWidgetBody = () => {
     if (patch.style) {
       trackFrame('window_bar_style', patch.style);
     }
+    // No bar, no recorded toolbar section: close its line editor with it.
+    if (patch.style === 'none' && isEditingAnyCrop && cropEditTarget === 'recordedBar') {
+      setIsCropEditing(false);
+    }
   };
   // The share of the recording the recorded toolbar crop takes off, for the previews.
   const recordedBar = frame.recordedBar;
-  const toolbarShare =
+  // With a bar, the output starts at the deeper of the person's top and the
+  // toolbar's (see applyRecordedBar); the frame's top already includes it
+  // while a bar is on.
+  const toolbarShare = Math.max(
+    frame.cropRect.y,
     recordedBar &&
-    (recordedBar.mode === 'manual' ||
-      (recordedBar.mode === 'auto' && recordedBar.detected === 'crop'))
+      (recordedBar.mode === 'manual' ||
+        (recordedBar.mode === 'auto' && recordedBar.detected === 'crop'))
       ? recordedBar.cropTop / Math.max(recordedBar.height, 1)
-      : 0;
+      : 0,
+  );
   const previewStyle = (style: WindowBarStyle) =>
     preview.bind(`window-bar-${style}`, () => (
       <PreviewCardBody

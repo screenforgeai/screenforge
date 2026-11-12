@@ -161,6 +161,16 @@ describe('cropRectWithTop', () => {
     });
   });
 
+  it("never stretches the person's own short crop", () => {
+    const short = { x: 0, y: 0.9, width: 1, height: 0.02 };
+    expect(cropRectWithTop(short, 0.9)).toEqual(short);
+    expect(cropRectWithTop(short, 0.95)).toEqual(short);
+    const drawn: FrameSettings = { ...withBar, cropRect: short };
+    const cropped = applyRecordedBar(drawn, bar(), H);
+    expect(cropped.cropRect).toEqual(short);
+    expect(applyRecordedBar(cropped, bar({ mode: 'off' }), H).cropRect).toEqual(short);
+  });
+
   it('never puts the top above the source, even on a very short crop', () => {
     const rect = cropRectWithTop({ x: 0, y: 0, width: 1, height: 0.03 }, 0.5);
     expect(rect.y).toBe(0);

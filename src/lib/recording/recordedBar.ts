@@ -46,11 +46,16 @@ export function shouldDetectRecordedBar(
   );
 }
 
-/** The crop with its top edge at `top` (0–1), everything else about it kept. */
+/**
+ * The crop with its top edge at `top` (0–1), everything else about it kept.
+ * A top pushed down past the crop's last 5% stops there, but a crop already
+ * shorter than that (the person's own) is never stretched upward to make room.
+ */
 export function cropRectWithTop(crop: CropRect, top: number): CropRect {
   const bottom = crop.y + crop.height;
-  const y = Math.max(0, Math.min(top, bottom - 0.05));
-  return { ...crop, y, height: bottom - y };
+  const limit = bottom - 0.05;
+  const y = Math.max(0, top <= limit ? top : Math.max(limit, Math.min(top, crop.y)));
+  return y === crop.y ? { ...crop } : { ...crop, y, height: bottom - y };
 }
 
 /** Whether this bar, with the window bar on, crops the recorded toolbar off. */
