@@ -43,7 +43,6 @@
     "light": "Hell",
     "dark": "Dunkel"
   },
-  "windowBarCropped": "Keine Fensterleiste bei einem Ausschnitt: Eine ganze Fensterleiste über einem Teil des Bildschirms sieht falsch aus.",
   "recordedBar": "Aufgenommene Leiste",
   "adjustCrop": "Zuschnitt anpassen",
   "recordedBarMode": {

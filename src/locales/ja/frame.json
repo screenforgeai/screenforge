@@ -43,7 +43,6 @@
     "light": "ライト",
     "dark": "ダーク"
   },
-  "windowBarCropped": "切り抜いたキャプチャにはウィンドウバーを付けません。画面の一部にウィンドウ全体のバーを付けると不自然になるためです。",
   "recordedBar": "録画されたツールバー",
   "adjustCrop": "切り抜きを調整",
   "recordedBarMode": {

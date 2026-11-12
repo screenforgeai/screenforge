@@ -129,17 +129,13 @@ const initialStyle = (capture: ScreenshotCapture): ScreenshotStyle => {
     frameEnabled: capture.kind !== 'frame',
     aspectRatioId: 'original',
     background: { ...(recordingResult ? frame.background : DEFAULT_BACKGROUND) },
-    // The project's window bar, for a capture of a window or screen (a preview
-    // frame already has the project's bar drawn into it).
+    // The project's window bar to start with; a preview frame already has it
+    // drawn in, so it starts without one (any capture can still pick a bar).
     ...(recordingResult &&
       frame.windowBar &&
       capture.kind !== 'frame' && { windowBar: { ...frame.windowBar } }),
   };
 };
-
-/** A cropped capture (an area, or a preview frame) gets no whole-window bar. */
-const isCroppedCapture = (capture: ScreenshotCapture) =>
-  capture.kind === 'area' || capture.kind === 'frame';
 
 /** The page a capture shows, for its window bar: the window's title at the moment of capture. */
 const capturePage = (capture: ScreenshotCapture): WindowBarPage | null =>
@@ -181,7 +177,6 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     () =>
       getScreenshotGeometry(capture.width, capture.height, style, undefined, {
         scaleFactor: capture.scaleFactor ?? 1,
-        cropped: isCroppedCapture(capture),
       }),
     [capture, style],
   );
@@ -743,7 +738,6 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
               style={style}
               presets={presets}
               onChange={setStyle}
-              windowBarAvailable={!isCroppedCapture(capture)}
               windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
               captureImage={capture.dataUrl}
               capturePage={capturePage(capture)}
