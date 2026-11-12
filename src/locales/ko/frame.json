@@ -43,7 +43,6 @@
     "light": "라이트",
     "dark": "다크"
   },
-  "windowBarCropped": "잘라낸 캡처에는 창 막대를 넣지 않습니다. 화면 일부에 창 전체 막대를 넣으면 어색해 보입니다.",
   "recordedBar": "녹화된 도구 모음",
   "adjustCrop": "자르기 조정",
   "recordedBarMode": {

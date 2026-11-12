@@ -43,7 +43,6 @@
     "light": "Claro",
     "dark": "Oscuro"
   },
-  "windowBarCropped": "Sin barra de ventana en una captura recortada: una barra de ventana completa sobre parte de la pantalla se ve mal.",
   "recordedBar": "Barra grabada",
   "adjustCrop": "Ajustar recorte",
   "recordedBarMode": {

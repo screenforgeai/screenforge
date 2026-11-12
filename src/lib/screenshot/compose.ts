@@ -70,8 +70,6 @@ export const WINDOW_BAR_CAPTURE_SCALE = 2;
 export interface ScreenshotWindowInfo {
   /** Image pixels per screen point at capture (2 on Retina); 1 when unknown. */
   scaleFactor: number;
-  /** A crop of part of the screen: a whole-window bar on it looks wrong, so it gets none. */
-  cropped: boolean;
 }
 
 export const FLAT_STUDIO: ScreenshotStudio = { lookId: null, offset: { x: 0, y: 0 }, light: null };
@@ -103,11 +101,11 @@ export function getScreenshotGeometry(
   imageHeight: number,
   style: ScreenshotStyle,
   maxDimension = MAX_SCREENSHOT_DIMENSION,
-  window: ScreenshotWindowInfo = { scaleFactor: 1, cropped: false },
+  window: ScreenshotWindowInfo = { scaleFactor: 1 },
 ): ScreenshotGeometry {
   const scaleFactor = window.scaleFactor > 0 ? window.scaleFactor : 1;
   const windowPoints = imageWidth / scaleFactor;
-  const barStyle = window.cropped ? 'none' : activeBarStyle(style.windowBar);
+  const barStyle = activeBarStyle(style.windowBar);
   // The bar in screenshot pixels, sized for the window's width in points.
   const barPixels = windowBarHeight(barStyle, windowPoints) * scaleFactor;
   // A bar is drawn sharp at 2x, so a 1x capture is written at 2x around it.

@@ -43,7 +43,6 @@
     "light": "Light",
     "dark": "Dark"
   },
-  "windowBarCropped": "No window bar on a cropped capture: a whole-window bar on part of the screen looks wrong.",
   "recordedBar": "Recorded toolbar",
   "adjustCrop": "Adjust crop",
   "recordedBarMode": {
