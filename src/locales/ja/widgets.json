@@ -17,5 +17,8 @@
   "comingSoon": "近日公開",
   "unsavedRecording_title": "未保存の録画",
   "unsavedRecording_desc": "未保存の録画があります。",
-  "discard": "破棄"
+  "discard": "破棄",
+  "takeScreenshot": "スクリーンショットを撮る",
+  "openImage": "画像を開く…",
+  "openImageFailed": "そのファイルは画像として開けませんでした。"
 }

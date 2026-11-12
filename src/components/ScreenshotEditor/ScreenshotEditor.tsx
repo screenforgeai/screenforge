@@ -13,7 +13,9 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
 import {
   DEFAULT_BACKGROUND,
+  GRADIENT_PRESETS,
   getContainRect,
+  resolveWallpaperPreset,
   preloadCustomWallpaperAsync,
   preloadWallpapersAsync,
 } from 'src/lib/effects/frame';
@@ -48,6 +50,7 @@ import {
 } from 'src/lib/screenshot/compose';
 import {
   StudioRenderer,
+  type StudioBackdrop,
   clampOffset,
   defaultLightHandle,
   autoFocusPoint,
@@ -192,8 +195,10 @@ const initialStyle = (capture: ScreenshotCapture): ScreenshotStyle => {
     frameEnabled: capture.kind !== 'frame',
     // Every screenshot starts in the studio, through the macro lens; the canvas is the only control.
     studio: { ...FLAT_STUDIO, lookId: 'macro' },
-    aspectRatioId: 'original',
-    background: { ...(recordingResult ? frame.background : DEFAULT_BACKGROUND) },
+    // 16:9 to start: ready for a slide, a post or a page header.
+    aspectRatioId: '16:9',
+    // The recorder's backdrop, with square corners to start with.
+    background: { ...(recordingResult ? frame.background : DEFAULT_BACKGROUND), cornerRadius: 0 },
     // The project's window bar to start with; a preview frame already has it
     // drawn in, so it starts without one (any capture can still pick a bar).
     ...(recordingResult &&
@@ -532,6 +537,58 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       studioPose.focusRange,
     );
   }, [flatGeometry, measured, studioPose, studioReady]);
+
+  // The studio's wall: the frame's background (a wallpaper, a gradient or a colour). Only the fields
+  // that pick it count, so a padding drag never rebuilds the reflections.
+  const {
+    type: bgType,
+    wallpaperSeed,
+    gradientPresetId,
+    gradientFrom,
+    gradientTo,
+    gradientAngle,
+    solidColor,
+    padding: bgPadding,
+    cornerRadius: bgRadius,
+    shadowOpacity: bgShadow,
+  } = style.background;
+  const studioBackdrop = useMemo((): StudioBackdrop => {
+    if (bgType === 'wallpaper') {
+      return { kind: 'image', url: resolveWallpaperPreset(wallpaperSeed).url };
+    }
+    if (bgType === 'gradient') {
+      const preset = GRADIENT_PRESETS.find((item) => item.id === gradientPresetId);
+      return preset
+        ? { kind: 'gradient', angle: preset.angle, stops: preset.stops }
+        : {
+            kind: 'gradient',
+            angle: gradientAngle,
+            stops: [
+              { offset: 0, color: gradientFrom },
+              { offset: 1, color: gradientTo },
+            ],
+          };
+    }
+    return { kind: 'solid', color: solidColor };
+  }, [
+    bgType,
+    gradientAngle,
+    gradientFrom,
+    gradientPresetId,
+    gradientTo,
+    solidColor,
+    wallpaperSeed,
+  ]);
+  useEffect(() => {
+    studioRef.current?.setBackdrop(studioBackdrop);
+  }, [studioBackdrop, studioReady]);
+  useEffect(() => {
+    studioRef.current?.setFrame({
+      padding: bgPadding,
+      radiusPx: bgRadius,
+      shadowStr: clamp(bgShadow * 1.2, 0, 1),
+    });
+  }, [bgPadding, bgRadius, bgShadow, studioReady]);
 
   // Where the focus ring sits on the canvas (fractions), following the camera and the screenshot.
   // A passive effect after the one above, so it reads the renderer's new focus and camera.
@@ -1590,7 +1647,6 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
             <ScreenshotStylePanel
               style={panelStyle}
               presets={presets}
-              looksAvailable={!studioFailed}
               onChange={setStyle}
               windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
               captureImage={capture.imageUrl}

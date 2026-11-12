@@ -809,6 +809,8 @@ export interface ScreenforgeAPI {
   saveScreenshot: (png: Uint8Array) => Promise<string>;
   captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<void>;
   copyScreenshotToClipboard: (png: Uint8Array) => Promise<void>;
+  /** Selects an area and takes a screenshot, as the global shortcut does. */
+  takeScreenshot: () => Promise<void>;
   onScreenshotCaptured: (cb: (capture: ScreenshotCaptureData) => void) => () => void;
   minimizeToDock: () => void;
   quitApp: () => void;

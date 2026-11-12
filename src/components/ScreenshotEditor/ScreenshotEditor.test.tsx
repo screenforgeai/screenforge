@@ -17,6 +17,8 @@ const studio = vi.hoisted(() => ({
     setLightPower: ReturnType<typeof vi.fn>;
     setBlurAmount: ReturnType<typeof vi.fn>;
     setLightSize: ReturnType<typeof vi.fn>;
+    setBackdrop: ReturnType<typeof vi.fn>;
+    setFrame: ReturnType<typeof vi.fn>;
     start: () => void;
     renderStill: (w: number, h: number) => HTMLCanvasElement;
     setScreen: (...args: unknown[]) => void;
@@ -44,6 +46,8 @@ vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
     setLightPower = vi.fn();
     setBlurAmount = vi.fn();
     setLightSize = vi.fn();
+    setBackdrop = vi.fn();
+    setFrame = vi.fn();
     getFocusPoint = vi.fn(() => ({ x: 400, y: 300 }));
     pickImagePoint = vi.fn((): { x: number; y: number } | null => null);
     projectImagePoint = vi.fn(() => studio.project);
@@ -207,21 +211,39 @@ describe('ScreenshotEditor', () => {
       return studio.instances[0];
     };
 
-    it('opens every screenshot through the macro lens, with the looks in the sidebar', async () => {
+    it('opens every screenshot through the macro lens, 16:9 with square corners', async () => {
       studio.project = { x: 0.5, y: 0.5 };
       const renderer = await opened();
       // Straight-on to start: no lean, depth of field ready for when the camera turns.
       expect(renderer.settings.lean).toBe(0);
       expect(renderer.settings.dof).toBe(true);
       expect(renderer.start).toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /macro/i })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
+      // No looks to pick: the sidebar is the frame and the background.
+      expect(screen.queryByRole('button', { name: /macro/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: /aspect ratio/i })).toHaveTextContent('16:9');
+      expect(renderer.setFrame).toHaveBeenLastCalledWith(expect.objectContaining({ radiusPx: 0 }));
+      expect(renderer.setBackdrop).toHaveBeenCalled();
       expect(screen.getByText(/click to focus/i)).toBeInTheDocument();
       // The handles introduce themselves.
       expect(screen.getByText('Focus')).toBeInTheDocument();
       expect(screen.getByText('Light')).toBeInTheDocument();
+    });
+
+    it('paints the chosen background behind the screenshot', async () => {
+      const user = userEvent.setup();
+      const renderer = await opened();
+      await user.click(screen.getByRole('radio', { name: /^solid$/i }));
+      await waitFor(() =>
+        expect(renderer.setBackdrop).toHaveBeenLastCalledWith(
+          expect.objectContaining({ kind: 'solid' }),
+        ),
+      );
+      await user.click(screen.getByRole('radio', { name: /^wallpaper$/i }));
+      await waitFor(() =>
+        expect(renderer.setBackdrop).toHaveBeenLastCalledWith(
+          expect.objectContaining({ kind: 'image' }),
+        ),
+      );
     });
 
     it('hovering the focus ring offers a wider sharp area and more or less blur', async () => {
@@ -415,11 +437,7 @@ describe('ScreenshotEditor', () => {
         await Promise.resolve();
       });
       expect(container.querySelector('canvas')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-      expect(screen.getByRole('button', { name: /macro/i })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: /macro/i })).not.toBeInTheDocument();
       expect(screen.getByRole('switch', { name: /^frame$/i })).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /^copy$/i }));
       await waitFor(() =>

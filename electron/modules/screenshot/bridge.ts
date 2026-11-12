@@ -5,5 +5,6 @@ import type { ScreenshotCaptureData, ScreenshotCaptureRequest } from '../../../s
 export const screenshotBridge = {
   captureScreenshot: createInvokeBridge<[ScreenshotCaptureRequest], void>(CH.screenshot.CAPTURE),
   copyScreenshotToClipboard: createInvokeBridge<[Uint8Array], void>(CH.screenshot.COPY),
+  takeScreenshot: createInvokeBridge<[], void>(CH.screenshot.TAKE_AREA),
   onScreenshotCaptured: createSubscription<ScreenshotCaptureData>(CH.screenshot.CAPTURED),
 };

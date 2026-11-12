@@ -154,6 +154,8 @@ export const CH = {
     CAPTURED: 'screenshot:captured',
     // Renderer → main: put a rendered PNG on the system clipboard
     COPY: 'screenshot:copy',
+    // Main window → main: select an area and take a screenshot, as the shortcut does
+    TAKE_AREA: 'screenshot:take-area',
   },
   app: {
     SAVE_SCREENSHOT: 'app:save-screenshot',

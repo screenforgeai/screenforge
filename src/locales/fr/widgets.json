@@ -17,5 +17,8 @@
   "comingSoon": "Bientôt disponible",
   "unsavedRecording_title": "Enregistrement non sauvegardé",
   "unsavedRecording_desc": "Vous avez un enregistrement non sauvegardé.",
-  "discard": "Ignorer"
+  "discard": "Ignorer",
+  "takeScreenshot": "Faire une capture",
+  "openImage": "Ouvrir une image…",
+  "openImageFailed": "Ce fichier n'a pas pu être ouvert comme image."
 }

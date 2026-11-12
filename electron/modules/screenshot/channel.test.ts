@@ -108,3 +108,25 @@ describe('screenshot capture channel', () => {
     expect(setToolbarWindow).not.toHaveBeenCalled();
   });
 });
+
+describe('take-screenshot channel', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('runs the same area screenshot as the shortcut when the main window asks for one', async () => {
+    const takeArea = vi.fn();
+    registerScreenshotChannels(
+      {
+        getMainWindow: () => null,
+        getToolbarWindow: () => null,
+        setToolbarWindow: vi.fn(),
+      },
+      { takeArea },
+    );
+    const handler = handlers.get(CH.screenshot.TAKE_AREA);
+    expect(handler).toBeDefined();
+    await handler?.();
+    expect(takeArea).toHaveBeenCalledTimes(1);
+  });
+});

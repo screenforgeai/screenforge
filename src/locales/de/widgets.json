@@ -17,5 +17,8 @@
   "comingSoon": "Demnächst",
   "unsavedRecording_title": "Nicht gespeicherte Aufnahme",
   "unsavedRecording_desc": "Sie haben eine nicht gespeicherte Aufnahme.",
-  "discard": "Verwerfen"
+  "discard": "Verwerfen",
+  "takeScreenshot": "Screenshot aufnehmen",
+  "openImage": "Bild öffnen…",
+  "openImageFailed": "Diese Datei ließ sich nicht als Bild öffnen."
 }

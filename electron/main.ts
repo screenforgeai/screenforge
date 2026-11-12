@@ -481,13 +481,17 @@ app.on('ready', async () => {
   registerUpdaterChannels({
     getMainWindow: () => mainWindow,
   });
-  registerScreenshotChannels({
-    getMainWindow: () => mainWindow,
-    getToolbarWindow: () => toolbarWindow,
-    setToolbarWindow: (window) => {
-      toolbarWindow = window;
+  registerScreenshotChannels(
+    {
+      getMainWindow: () => mainWindow,
+      getToolbarWindow: () => toolbarWindow,
+      setToolbarWindow: (window) => {
+        toolbarWindow = window;
+      },
     },
-  });
+    // Defined below with the capture shortcuts; called only once the app is running.
+    { takeArea: () => takeScreenshot('menu') },
+  );
   registerCaptureShortcutChannels();
   registerWindowChannels({
     getMainWindow: () => mainWindow,
@@ -551,7 +555,7 @@ app.on('ready', async () => {
       toolbarWindow.focus();
     }
   };
-  const takeScreenshot = () => {
+  const takeScreenshot = (trigger: 'shortcut' | 'menu' = 'shortcut') => {
     void takeAreaScreenshot({
       getMainWindow: () => mainWindow,
       getToolbarWindow: () => toolbarWindow,
@@ -564,9 +568,9 @@ app.on('ready', async () => {
       warn: showSystemWarning,
     }).then((result) => {
       if (result === 'taken') {
-        trackEvent('screenshot_taken', { kind: 'area', trigger: 'shortcut' });
+        trackEvent('screenshot_taken', { kind: 'area', trigger });
       } else if (result === 'failed') {
-        trackEvent('screenshot_failed', { source: 'area', trigger: 'shortcut' });
+        trackEvent('screenshot_failed', { source: 'area', trigger });
       }
     });
   };

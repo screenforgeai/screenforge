@@ -49,7 +49,42 @@ import {
   SCREEN_UNIFORMS_GLSL,
 } from './shaders';
 
-type Wall = { url: string } | { inner: string; outer: string };
+type Wall = { url: string } | { inner: string; outer: string } | { canvas: HTMLCanvasElement };
+
+/** A backdrop chosen by the user, as the recorder's frame offers them. */
+export type StudioBackdrop =
+  | { kind: 'image'; url: string }
+  | { kind: 'gradient'; angle: number; stops: { offset: number; color: string }[] }
+  | { kind: 'solid'; color: string };
+
+/** The frame settings the user sets on top of the look. Null keeps the look's own. */
+export interface StudioFrame {
+  /** Space around the screenshot, as a share of the output (0..0.4). */
+  padding: number | null;
+  /** Corner radius in px at 1080p. */
+  radiusPx: number | null;
+  /** Shadow strength 0..1. */
+  shadowStr: number | null;
+}
+
+/** A CSS-style linear gradient (angle: 0 = to top, 90 = to right), painted into a canvas. */
+const paintGradient = (angle: number, stops: { offset: number; color: string }[]) => {
+  const canvas = Object.assign(document.createElement('canvas'), { width: 640, height: 400 });
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const a = (angle * Math.PI) / 180;
+    const half = (Math.abs(640 * Math.sin(a)) + Math.abs(400 * Math.cos(a))) / 2;
+    const dx = Math.sin(a) * half;
+    const dy = -Math.cos(a) * half;
+    const g = ctx.createLinearGradient(320 - dx, 200 - dy, 320 + dx, 200 + dy);
+    for (const stop of stops) {
+      g.addColorStop(stop.offset, stop.color);
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 640, 400);
+  }
+  return canvas;
+};
 const STUDIO_WALLS: Record<
   Exclude<StudioWallId, 'night' | 'ventura' | 'sequoia' | 'shadeshifter'>,
   Wall
@@ -297,6 +332,10 @@ export class StudioRenderer {
   private focusRange = 0;
   /** Light strength as a share of the look's own. */
   private lightPower = 1;
+  /** The user's backdrop and frame, or null for the look's own. */
+  private backdrop: Wall | null = null;
+  private canvasWallTex: THREE.CanvasTexture | null = null;
+  private frame: StudioFrame = { padding: null, radiusPx: null, shadowStr: null };
   /** The user's blur strength and light size (0..1), or null for the look's own. */
   private blurAmount: number | null = null;
   private lightSize: number | null = null;
@@ -666,6 +705,7 @@ export class StudioRenderer {
     }
     this.screenTex?.dispose();
     this.envTex?.dispose();
+    this.canvasWallTex?.dispose();
     this.pmrem.dispose();
     for (const rt of [this.keyRT, this.frontRT, this.blurRT, this.shadowRT, this.shadowRTBlur]) {
       rt.dispose();
@@ -794,6 +834,49 @@ export class StudioRenderer {
     this.invalidate();
   }
 
+  /** The wall behind the screenshot: a wallpaper, a gradient or a colour, or null for the look's. */
+  setBackdrop(backdrop: StudioBackdrop | null): void {
+    let wall: Wall | null = null;
+    if (backdrop?.kind === 'image') {
+      wall = { url: backdrop.url };
+    } else if (backdrop?.kind === 'gradient') {
+      wall = { canvas: paintGradient(backdrop.angle, backdrop.stops) };
+    } else if (backdrop?.kind === 'solid') {
+      // A colour wall still falls off a little toward the edges, as a lit studio wall does.
+      const outer = new THREE.Color(backdrop.color).multiplyScalar(0.55);
+      wall = { inner: backdrop.color, outer: `#${outer.getHexString()}` };
+    }
+    this.canvasWallTex?.dispose();
+    this.canvasWallTex =
+      wall && 'canvas' in wall
+        ? Object.assign(new THREE.CanvasTexture(wall.canvas), { colorSpace: THREE.SRGBColorSpace })
+        : null;
+    this.backdrop = wall;
+    this.applyBg();
+    this.rebuildEnv();
+  }
+
+  /** Padding, corner radius and shadow on top of the look. */
+  setFrame(frame: StudioFrame): void {
+    const prev = this.frame;
+    this.frame = { ...frame };
+    if (frame.radiusPx !== prev.radiusPx) {
+      this.buildPanel();
+    }
+    if (frame.padding !== prev.padding) {
+      this.placeCamera(false);
+    }
+    this.invalidate();
+  }
+
+  private currentWall(): Wall {
+    return this.backdrop ?? wallFor(this.s.wall);
+  }
+
+  private shadowStrength(): number {
+    return this.frame.shadowStr ?? this.s.shadowStr;
+  }
+
   /** A screen-canvas pixel as a point in the scene, on the screenshot's face. */
   private imagePointToWorld(x: number, y: number): THREE.Vector3 | null {
     const face = this.face;
@@ -848,8 +931,29 @@ export class StudioRenderer {
   }
 
   private lookRadius(): number {
+    return this.ownRadius(this.s.camera);
+  }
+
+  /**
+   * The camera's own distance for a look. Straight-on with a padding set, it is the distance
+   * at which the screenshot fills the output less that padding on its tighter side.
+   */
+  private ownRadius(id: StudioCameraId): number {
+    const c = CAMERAS[id];
+    if (id === 'straight' && this.frame.padding !== null) {
+      const { halfWidth = PANEL_W / 2, halfHeight = 1 } = this.panel.userData as {
+        halfWidth?: number;
+        halfHeight?: number;
+      };
+      const tan = Math.tan(THREE.MathUtils.degToRad(c.fov / 2));
+      const fill = THREE.MathUtils.clamp(1 - 2 * this.frame.padding, 0.25, 1);
+      return Math.max(
+        halfHeight / (tan * fill),
+        halfWidth / (tan * Math.max(this.camera.aspect, 0.1) * fill),
+      );
+    }
     const fit = Math.max(1, REFERENCE_ASPECT / Math.max(this.camera.aspect, 0.1));
-    return BASE_RADIUS * CAMERAS[this.s.camera].dist * fit;
+    return BASE_RADIUS * c.dist * fit;
   }
 
   /** Light handle position (fractions of the output), or null for the look's own light. */
@@ -958,7 +1062,8 @@ export class StudioRenderer {
     this.mirror.visible = this.floorShadow.visible = s.floor;
     ((this.mirror.material as THREE.ShaderMaterial).uniforms.strength as THREE.IUniform).value =
       s.mirrorStr;
-    (this.floorShadow.material as THREE.MeshBasicMaterial).opacity = 0.4 + 0.5 * s.shadowStr;
+    (this.floorShadow.material as THREE.MeshBasicMaterial).opacity =
+      0.4 + 0.5 * this.shadowStrength();
 
     this.bokeh.enabled = s.dof;
     this.bloom.enabled = s.glow;
@@ -993,7 +1098,7 @@ export class StudioRenderer {
     let texture = this.wallTextures.get(url);
     if (!texture) {
       texture = new THREE.TextureLoader().load(url, (loaded) => {
-        const wall = wallFor(this.s.wall);
+        const wall = this.currentWall();
         if (!this.disposed && 'url' in wall && wall.url === url) {
           const image = loaded.image as HTMLImageElement;
           this.bgUniforms.uBgAspect.value = image.width / image.height;
@@ -1008,8 +1113,12 @@ export class StudioRenderer {
   }
 
   private applyBg(): void {
-    const wall = wallFor(this.s.wall);
-    if ('url' in wall) {
+    const wall = this.currentWall();
+    if ('canvas' in wall && this.canvasWallTex) {
+      this.bgUniforms.uMode.value = 1;
+      this.bgUniforms.tBg.value = this.canvasWallTex;
+      this.bgUniforms.uBgAspect.value = wall.canvas.width / wall.canvas.height;
+    } else if ('url' in wall) {
       const texture = this.wallTexture(wall.url);
       this.bgUniforms.uMode.value = 1;
       this.bgUniforms.tBg.value = texture;
@@ -1017,11 +1126,12 @@ export class StudioRenderer {
       if (image?.width) {
         this.bgUniforms.uBgAspect.value = image.width / image.height;
       }
-    } else {
+    } else if ('inner' in wall) {
       this.bgUniforms.uMode.value = 0;
       this.bgUniforms.cInner.value.set(wall.inner);
       this.bgUniforms.cOuter.value.set(wall.outer);
     }
+    this.invalidate();
   }
 
   /** Paint the backdrop into a small canvas (drawn tiny, it comes out soft when stretched). */
@@ -1030,8 +1140,10 @@ export class StudioRenderer {
     if (!ctx) {
       return false;
     }
-    const wall = wallFor(this.s.wall);
-    if ('url' in wall) {
+    const wall = this.currentWall();
+    if ('canvas' in wall) {
+      ctx.drawImage(wall.canvas, 0, 0, target.width, target.height);
+    } else if ('url' in wall) {
       const image = this.wallTexture(wall.url).image as HTMLImageElement | undefined;
       if (!image?.width) {
         return false;
@@ -1178,7 +1290,7 @@ export class StudioRenderer {
     const aspect = Math.min(3, Math.max(0.4, this.media.w / this.media.h));
     const h = aspect >= 1 ? PANEL_W / aspect : 2.6;
     const pw = aspect >= 1 ? PANEL_W : h * aspect;
-    const r = (s.radiusPx / 1080) * h * 1.25;
+    const r = ((this.frame.radiusPx ?? s.radiusPx) / 1080) * h * 1.25;
     const depth = 0.006 + s.thick * 0.08;
     const bevel = Math.min(depth / 2 - 0.0005, 0.014);
     for (const part of this.panelParts) {
@@ -1271,8 +1383,9 @@ export class StudioRenderer {
       this.panelTarget.y,
       this.panelTarget.z - Math.max(0.14 + s.lift * 1.6, edgeBack),
     );
-    this.catcherUniforms.uKeyOpacity.value = s.shadowStr * (1 - 0.3 * s.lift);
-    this.catcherUniforms.uAmbient.value = s.shadowStr * 0.45;
+    const shadow = this.shadowStrength();
+    this.catcherUniforms.uKeyOpacity.value = shadow * (1 - 0.3 * s.lift);
+    this.catcherUniforms.uAmbient.value = shadow * 0.45;
     this.catcherUniforms.uGlow.value = s.screenGlow * 2.5;
     this.placeKey();
   }
@@ -1282,8 +1395,7 @@ export class StudioRenderer {
   /** The look's camera, turned and zoomed by the user; never below the floor or inside the panel. */
   private sphericalFor(id: StudioCameraId): THREE.Spherical {
     const c = CAMERAS[id];
-    const fit = Math.max(1, REFERENCE_ASPECT / Math.max(this.camera.aspect, 0.1));
-    const own = BASE_RADIUS * c.dist * fit;
+    const own = this.ownRadius(id);
     const radius = Math.max(own * this.zoom, Math.min(own, this.panelReach() * 1.15));
     const elevation = THREE.MathUtils.clamp(c.el + this.orbit.y, -0.02, 1.35);
     return new THREE.Spherical(radius, Math.PI / 2 - elevation, c.az + this.orbit.x);
