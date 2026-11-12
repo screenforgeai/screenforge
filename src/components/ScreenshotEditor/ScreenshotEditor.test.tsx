@@ -56,12 +56,12 @@ vi.mock('src/lib/effects/frame', async (importOriginal) => {
 
 const capture: ScreenshotCapture = {
   kind: 'area',
-  dataUrl: 'data:image/png;base64,SOURCE',
+  imageUrl: 'blob:screenforge/source',
   width: 800,
   height: 600,
 };
 
-const OUTPUT = 'data:image/png;base64,OUTPUT';
+const OUTPUT = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
 const noopContext = () =>
   new Proxy(
@@ -110,7 +110,9 @@ beforeEach(() => {
   vi.stubGlobal('Image', LoadingImage);
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() =>
     noopContext()) as unknown as HTMLCanvasElement['getContext']);
-  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(OUTPUT);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb) =>
+    cb(new Blob([OUTPUT], { type: 'image/png' })),
+  );
   window.screenforge = {
     saveScreenshot: vi.fn().mockResolvedValue('/Users/me/Pictures/Screenforge/shot.png'),
     copyScreenshotToClipboard: vi.fn().mockResolvedValue(undefined),

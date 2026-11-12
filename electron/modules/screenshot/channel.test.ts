@@ -20,7 +20,7 @@ vi.mock('./service', () => serviceMock);
 
 import { registerScreenshotChannels } from './channel';
 
-const capture = { kind: 'display', dataUrl: 'data:image/png;base64,AAAA', width: 10, height: 10 };
+const capture = { kind: 'display', png: new Uint8Array([1, 2, 3]), width: 10, height: 10 };
 
 function makeWindow(destroyed = false) {
   return {

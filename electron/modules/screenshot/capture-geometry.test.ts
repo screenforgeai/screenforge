@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   areaToImageRect,
+  areaToScreenRect,
   fitWithin,
   getCaptureThumbnailSize,
   getDisplayPixelSize,
@@ -188,5 +189,42 @@ describe('fitWithin', () => {
       width: 800,
       height: 600,
     });
+  });
+});
+
+describe('areaToScreenRect', () => {
+  const at = (x: number, y: number, width: number, height: number) => ({
+    bounds: { x, y, width, height },
+    size: { width, height },
+  });
+
+  it('offsets a display-relative area by the display origin', () => {
+    expect(
+      areaToScreenRect({ x: 10, y: 20, width: 300, height: 200 }, at(0, 0, 1440, 900)),
+    ).toEqual({ x: 10, y: 20, width: 300, height: 200 });
+    expect(
+      areaToScreenRect({ x: 10, y: 20, width: 300, height: 200 }, at(-1920, -200, 1920, 1080)),
+    ).toEqual({ x: -1910, y: -180, width: 300, height: 200 });
+  });
+
+  it('rounds the edges to whole points', () => {
+    expect(
+      areaToScreenRect({ x: 10.4, y: 20.6, width: 99.4, height: 50.2 }, at(0, 0, 1440, 900)),
+    ).toEqual({ x: 10, y: 21, width: 100, height: 50 });
+  });
+
+  it('clamps an area that spills past the display edge', () => {
+    expect(
+      areaToScreenRect({ x: 1400, y: -10, width: 100, height: 50 }, at(100, 0, 1440, 900)),
+    ).toEqual({ x: 1500, y: 0, width: 40, height: 40 });
+  });
+
+  it('returns null for an empty area', () => {
+    expect(
+      areaToScreenRect({ x: 5, y: 5, width: 0.2, height: 10 }, at(0, 0, 1440, 900)),
+    ).toBeNull();
+    expect(
+      areaToScreenRect({ x: 2000, y: 5, width: 10, height: 10 }, at(0, 0, 1440, 900)),
+    ).toBeNull();
   });
 });

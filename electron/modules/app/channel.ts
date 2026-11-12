@@ -71,7 +71,7 @@ export function registerAppChannels(): void {
   listenChannel<[FeedbackSubmission]>(CH.app.SUBMIT_FEEDBACK, (feedback) => {
     submitFeedback(feedback);
   });
-  handleChannel<[string], string>(CH.app.SAVE_SCREENSHOT, (dataUrl) => saveScreenshot(dataUrl));
+  handleChannel<[Uint8Array], string>(CH.app.SAVE_SCREENSHOT, (png) => saveScreenshot(png));
   handleChannel<[string, string], { filePath: string; duration: number }>(
     CH.music.SAVE,
     (srcPath, projectId) => saveMusic(srcPath, projectId),

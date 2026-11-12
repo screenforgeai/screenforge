@@ -40,6 +40,7 @@ import {
   FLAT_STUDIO,
   canvasPointFromImage,
   clientToCanvasPoint,
+  getPreviewRect,
   getScreenshotGeometry,
   imagePointFromCanvas,
   renderScreenshot,
@@ -55,6 +56,7 @@ import {
   imageStats,
   type StudioPoint,
 } from 'src/lib/screenshot/studio';
+import { canvasToPng } from 'src/lib/screenshot/png';
 import type { WindowBarPage } from 'src/lib/window-bar';
 import {
   WINDOW_BAR_PLACEHOLDER_TEXT,
@@ -245,14 +247,22 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     () => getStudioOutputSize(capture.width, capture.height, style),
     [capture.height, capture.width, style],
   );
-  const outputWidth = studioOn ? studioSize.width : geometry.canvasWidth;
-  const outputHeight = studioOn ? studioSize.height : geometry.canvasHeight;
-  const display = getContainRect(
-    Math.max(stageSize.width - STAGE_PADDING, 0),
-    Math.max(stageSize.height - STAGE_PADDING, 0),
-    outputWidth,
-    outputHeight,
-  );
+  // The flat frame is never shown larger than one canvas pixel per device pixel (a small
+  // capture stretched to fill the stage looks blurry); the studio renders at the stage's size.
+  const display = studioOn
+    ? getContainRect(
+        Math.max(stageSize.width - STAGE_PADDING, 0),
+        Math.max(stageSize.height - STAGE_PADDING, 0),
+        studioSize.width,
+        studioSize.height,
+      )
+    : getPreviewRect(
+        Math.max(stageSize.width - STAGE_PADDING, 0),
+        Math.max(stageSize.height - STAGE_PADDING, 0),
+        geometry.canvasWidth,
+        geometry.canvasHeight,
+        window.devicePixelRatio,
+      );
   // CSS pixels per canvas pixel.
   const displayScale = display.width / geometry.canvasWidth;
   const imageLum = useMemo(
@@ -263,11 +273,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   useEffect(() => {
     const img = new Image();
     img.onload = () => setImage(img);
-    img.src = capture.dataUrl;
+    img.src = capture.imageUrl;
     return () => {
       img.onload = null;
     };
-  }, [capture.dataUrl]);
+  }, [capture.imageUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -723,7 +733,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
   };
 
-  const renderToDataUrl = async (): Promise<string | null> => {
+  const renderToPng = async (): Promise<Uint8Array | null> => {
     if (!image) {
       return null;
     }
@@ -738,7 +748,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       paintStudioScreen(shapes, null);
       const still = renderer.renderStill(studioSize.width, studioSize.height);
       paintStudioScreen(visibleShapes, selectedId);
-      return still.toDataURL('image/png');
+      return canvasToPng(still);
     }
     if (style.frameEnabled && style.background.type === 'wallpaper') {
       await Promise.all([preloadWallpapersAsync(), preloadCustomWallpaperAsync()]);
@@ -759,7 +769,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       shapes,
       windowBarPage: capturePage(capture),
     });
-    return canvas.toDataURL('image/png');
+    return canvasToPng(canvas);
   };
 
   const exportProps = () => ({
@@ -779,11 +789,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
     setBusy(true);
     try {
-      const dataUrl = await renderToDataUrl();
-      if (!dataUrl) {
+      const png = await renderToPng();
+      if (!png) {
         throw new Error('Nothing to render');
       }
-      await window.screenforge.copyScreenshotToClipboard(dataUrl);
+      await window.screenforge.copyScreenshotToClipboard(png);
       trackEvent('screenshot_copied', exportProps());
       toast.success(t('copied'));
     } catch {
@@ -799,11 +809,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
     setBusy(true);
     try {
-      const dataUrl = await renderToDataUrl();
-      if (!dataUrl) {
+      const png = await renderToPng();
+      if (!png) {
         throw new Error('Nothing to render');
       }
-      const filePath = await window.screenforge.saveScreenshot(dataUrl);
+      const filePath = await window.screenforge.saveScreenshot(png);
       trackEvent('screenshot_saved', exportProps());
       toast.success(t('saved'), {
         action: {
@@ -1131,7 +1141,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
               looksAvailable={!studioFailed}
               onChange={setStyle}
               windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
-              captureImage={capture.dataUrl}
+              captureImage={capture.imageUrl}
               capturePage={capturePage(capture)}
             />
           </PreviewCardProvider>

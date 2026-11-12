@@ -42,5 +42,5 @@ export function registerScreenshotChannels(windows: ScreenshotWindows): void {
     await captureAndOpenEditor(request, windows);
   });
 
-  handleChannel<[string], void>(CH.screenshot.COPY, (dataUrl) => copyImageToClipboard(dataUrl));
+  handleChannel<[Uint8Array], void>(CH.screenshot.COPY, (png) => copyImageToClipboard(png));
 }

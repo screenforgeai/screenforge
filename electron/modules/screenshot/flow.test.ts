@@ -26,7 +26,7 @@ const area = {
   height: 200,
   display: { id: 1, width: 1920, height: 1080 },
 };
-const capture = { kind: 'area', dataUrl: 'data:image/png;base64,AAAA', width: 300, height: 200 };
+const capture = { kind: 'area', png: new Uint8Array([1, 2, 3]), width: 300, height: 200 };
 
 function makeWindow(visible = true) {
   let isVisible = visible;
