@@ -1,7 +1,9 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { toast } from 'sonner';
+import { OPENABLE_IMAGE_TYPES, captureFromImageFile } from 'src/lib/screenshot/open-image';
 import { trackEvent } from 'src/lib/analytics';
 import {
   IconBlur,
@@ -14,6 +16,7 @@ import {
   IconFilm,
   IconMotion,
   IconMusic3,
+  IconCamera,
   IconPhoto,
   IconPlus,
   IconPointer,
@@ -90,6 +93,18 @@ export const WidgetLibrary = () => {
   const [createScenesOpen, setCreateScenesOpen] = useState(false);
   const active = useStore((s) => s.activeWidget);
   const isExporting = useStore((s) => s.isExporting);
+  const openScreenshotEditor = useStore((s) => s.openScreenshotEditor);
+  // "Open image…": a screenshot from disk goes straight to the Screenshot editor.
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const openImageFile = async (file: File) => {
+    const capture = await captureFromImageFile(file);
+    if (!capture) {
+      toast.error(t('openImageFailed'));
+      return;
+    }
+    trackEvent('screenshot_opened', { source: 'file' });
+    openScreenshotEditor(capture);
+  };
 
   const RECORDINGS_ITEM = {
     id: 'recordings' as WidgetTab,
@@ -208,7 +223,6 @@ export const WidgetLibrary = () => {
                   />
                   <span className="text-primary">Record</span>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
                   onClick={() => void importAsNewProject()}
@@ -216,8 +230,38 @@ export const WidgetLibrary = () => {
                   <IconUpload size={11} style={{ position: 'relative', top: '-0.5px' }} />
                   <span>Import video</span>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
+                  onClick={() => void window.screenforge.takeScreenshot().catch(() => undefined)}
+                >
+                  <IconCamera size={11} style={{ position: 'relative', top: '-0.5px' }} />
+                  <span>{t('takeScreenshot')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  <IconUpload size={11} style={{ position: 'relative', top: '-0.5px' }} />
+                  <span>{t('importImage')}</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept={OPENABLE_IMAGE_TYPES.join(',')}
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) {
+                  void openImageFile(file);
+                }
+              }}
+            />
 
             <Tooltip>
               <TooltipTrigger asChild>

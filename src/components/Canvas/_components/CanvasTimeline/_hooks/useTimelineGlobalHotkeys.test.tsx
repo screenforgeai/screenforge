@@ -48,7 +48,7 @@ describe('useTimelineGlobalHotkeys', () => {
     act(() =>
       useStore.getState().openScreenshotEditor({
         kind: 'display',
-        dataUrl: 'data:image/png;base64,x',
+        imageUrl: 'data:image/png;base64,x',
         width: 1,
         height: 1,
       }),
@@ -70,7 +70,7 @@ describe('useTimelineGlobalHotkeys', () => {
     act(() =>
       useStore.getState().openScreenshotEditor({
         kind: 'display',
-        dataUrl: 'data:image/png;base64,x',
+        imageUrl: 'data:image/png;base64,x',
         width: 1,
         height: 1,
       }),

@@ -5,6 +5,7 @@ import {
   MAX_SCREENSHOT_DIMENSION,
   canvasPointFromImage,
   clientToCanvasPoint,
+  getPreviewRect,
   getScreenshotGeometry,
   imagePointFromCanvas,
   renderScreenshot,
@@ -274,5 +275,32 @@ describe('renderScreenshot', () => {
       selectedId: 'step',
     });
     expect(calls.some((c) => c.name === 'setLineDash')).toBe(true);
+  });
+});
+
+describe('getPreviewRect', () => {
+  it('shrinks a large canvas to fit the stage, centred', () => {
+    expect(getPreviewRect(1000, 600, 2880, 1800, 2)).toEqual({
+      x: 20,
+      y: 0,
+      width: 960,
+      height: 600,
+    });
+  });
+
+  it('never enlarges a small capture past one canvas pixel per device pixel', () => {
+    // 600×400 px area on a 2x screen: shown at 300×200 CSS px, i.e. pixel for pixel.
+    expect(getPreviewRect(1000, 600, 600, 400, 2)).toEqual({
+      x: 350,
+      y: 200,
+      width: 300,
+      height: 200,
+    });
+    // On a 1x screen the same capture is shown at its own size.
+    expect(getPreviewRect(1000, 600, 600, 400, 1)).toMatchObject({ width: 600, height: 400 });
+  });
+
+  it('treats a missing device pixel ratio as 1', () => {
+    expect(getPreviewRect(1000, 600, 600, 400, 0)).toMatchObject({ width: 600, height: 400 });
   });
 });

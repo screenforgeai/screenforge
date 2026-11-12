@@ -34,7 +34,16 @@ function isValidCaptureRequest(request: unknown): request is ScreenshotCaptureRe
   );
 }
 
-export function registerScreenshotChannels(windows: ScreenshotWindows): void {
+/** What the main process does for the screenshot channels that are not a plain capture. */
+export type ScreenshotActions = {
+  /** Selects an area and takes a screenshot, exactly as the global shortcut does. */
+  takeArea?: () => void;
+};
+
+export function registerScreenshotChannels(
+  windows: ScreenshotWindows,
+  actions: ScreenshotActions = {},
+): void {
   handleChannel<[ScreenshotCaptureRequest], void>(CH.screenshot.CAPTURE, async (request) => {
     if (!isValidCaptureRequest(request)) {
       throw new Error('Invalid screenshot capture request');
@@ -42,5 +51,9 @@ export function registerScreenshotChannels(windows: ScreenshotWindows): void {
     await captureAndOpenEditor(request, windows);
   });
 
-  handleChannel<[string], void>(CH.screenshot.COPY, (dataUrl) => copyImageToClipboard(dataUrl));
+  handleChannel<[Uint8Array], void>(CH.screenshot.COPY, (png) => copyImageToClipboard(png));
+
+  handleChannel<[], void>(CH.screenshot.TAKE_AREA, () => {
+    actions.takeArea?.();
+  });
 }

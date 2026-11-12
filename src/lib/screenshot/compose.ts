@@ -9,6 +9,7 @@
 import {
   DEFAULT_CROP_RECT,
   drawBackground,
+  getContainRect,
   getFrameGeometry,
   type BackgroundSettings,
 } from 'src/lib/effects/frame';
@@ -44,10 +45,39 @@ import {
 export const MAX_SCREENSHOT_DIMENSION = 8192;
 export const ANNOTATION_FONT_FAMILY = 'Geist, -apple-system, system-ui, sans-serif';
 
+/** A studio look (3D lighting) in place of the flat frame. */
+export interface ScreenshotStudio {
+  /** Id of a look in `STUDIO_LOOKS`, or null for the flat frame. */
+  lookId: string | null;
+  /** Where the screenshot sits: a shift from centre, as fractions of the output's width and height. */
+  offset: { x: number; y: number };
+  /** Depth toward the camera: a share of its distance (0 = the look's own framing). */
+  depth: number;
+  /** The camera's turn around the screenshot (radians), added to the look's own angle. */
+  orbit: { x: number; y: number };
+  /** Camera distance as a share of the look's own (1). */
+  zoom: number;
+  /** The depth-of-field focus point, in capture pixels; null = automatic (the most detailed part). */
+  focus: { x: number; y: number } | null;
+  /** How much stays completely sharp around the focus point, 0..1. */
+  focusRange: number;
+  /** Light strength as a share of the look's own (1). */
+  lightPower: number;
+  /** Blur strength 0..1, or null for the look's own. */
+  blur: number | null;
+  /** Light size 0..1 (larger: softer shadows), or null for the look's own. */
+  lightSize: number | null;
+  /** Light handle position (fractions of the output), or null for the look's own light. */
+  light: { x: number; y: number } | null;
+  /** Behind a wallpaper background, show the look's own studio wall instead of the wallpaper. */
+  studioWall?: boolean;
+}
+
 export interface ScreenshotStyle {
   frameEnabled: boolean;
   aspectRatioId: string;
   background: BackgroundSettings;
+  studio?: ScreenshotStudio;
   /** The window bar over the capture; none when absent or style 'none'. */
   windowBar?: WindowBarSettings;
 }
@@ -60,6 +90,20 @@ export interface ScreenshotWindowInfo {
   /** Image pixels per screen point at capture (2 on Retina); 1 when unknown. */
   scaleFactor: number;
 }
+
+export const FLAT_STUDIO: ScreenshotStudio = {
+  lookId: null,
+  offset: { x: 0, y: 0 },
+  depth: 0,
+  orbit: { x: 0, y: 0 },
+  zoom: 1,
+  focus: null,
+  focusRange: 0,
+  lightPower: 1,
+  blur: null,
+  lightSize: null,
+  light: null,
+};
 
 export interface ScreenshotGeometry {
   canvasWidth: number;
@@ -168,6 +212,28 @@ export function getScreenshotGeometry(
     shadowBlur: shadowOpacity > 0 ? shadowBlur * unit : 0,
     shadowOpacity,
   };
+}
+
+/**
+ * Where the canvas shows on the editor stage (CSS pixels): fitted inside it,
+ * but never larger than one canvas pixel per device pixel. A small area
+ * stretched to fill the stage is resampled by the browser and looks blurry.
+ */
+export function getPreviewRect(
+  stageWidth: number,
+  stageHeight: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  devicePixelRatio: number,
+): Rect {
+  const fit = getContainRect(stageWidth, stageHeight, canvasWidth, canvasHeight);
+  const ratio = devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const width = canvasWidth / ratio;
+  if (fit.width <= width) {
+    return fit;
+  }
+  const height = canvasHeight / ratio;
+  return { x: (stageWidth - width) / 2, y: (stageHeight - height) / 2, width, height };
 }
 
 const barThemeCache = new WeakMap<object, ResolvedWindowBarTheme>();
