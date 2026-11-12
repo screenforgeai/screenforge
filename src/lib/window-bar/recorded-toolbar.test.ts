@@ -12,8 +12,12 @@ import {
 const W = 400;
 const H = 600;
 
-/** A browser window: a still toolbar `toolbar` rows tall with a dark border row, and a page that changes per frame. */
-function frame(seed: number, toolbar = 80, border = true): RgbaFrame {
+/**
+ * A browser window: a still toolbar `toolbar` rows tall with a dark border
+ * row, then `stillPage` rows of page that never change (a heading), then a
+ * page that changes per frame.
+ */
+function frame(seed: number, toolbar = 80, border = true, stillPage = 0): RgbaFrame {
   const data = new Uint8ClampedArray(W * H * 4);
   let s = seed * 9973 + 1;
   const rand = () => ((s = (s * 16807) % 2147483647) / 2147483647) * 255;
@@ -21,10 +25,16 @@ function frame(seed: number, toolbar = 80, border = true): RgbaFrame {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
       let v: number;
-      if (y < toolbar - 1)
-        v = y < 40 ? 222 : 240; // tabs, then the address row
-      else if (y === toolbar - 1) v = border ? 190 : 240;
-      else v = rand();
+      if (y < toolbar - 1) {
+        v = y < 40 ? 222 : 240;
+      } // tabs, then the address row
+      else if (y === toolbar - 1) {
+        v = border ? 190 : 240;
+      } else if (y < toolbar + stillPage) {
+        v = 252;
+      } else {
+        v = rand();
+      }
       data[i] = data[i + 1] = data[i + 2] = v;
       data[i + 3] = 255;
     }
@@ -65,6 +75,18 @@ describe('detectRecordedToolbar', () => {
       detectRecordedToolbar(frames, { displaySurface: 'window', browser: 'safari', scale: 2 })
         .action,
     ).toBe('adjust');
+  });
+  it("crops a known browser's toolbar even when the top of the page holds still too", () => {
+    const still = Array.from({ length: 20 }, (_, i) => frame(i + 1, 80, true, 60));
+    expect(stableBandHeight(still)).toBe(140);
+    expect(
+      detectRecordedToolbar(still, { displaySurface: 'window', browser: 'chrome' }),
+    ).toMatchObject({
+      action: 'crop',
+      cropTop: 80,
+    });
+    // Without knowing the browser, a line short of the band's end is only a guess.
+    expect(detectRecordedToolbar(still, { displaySurface: 'window' }).action).toBe('adjust');
   });
   it('asks when the signals disagree', () => {
     // No border line: the band alone is not enough.

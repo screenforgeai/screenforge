@@ -31,7 +31,9 @@ export function sampleTopBandBrightness(
   sourceHeight: number,
   top = 0,
 ): number | null {
-  if (sourceWidth <= 0 || sourceHeight <= 0) return null;
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    return null;
+  }
   const rows = Math.min(AUTO_THEME_SAMPLE_ROWS, Math.max(1, sourceHeight - top));
   try {
     if (!sampleCanvas) {
@@ -43,8 +45,12 @@ export function sampleTopBandBrightness(
       sampleCanvas.height = AUTO_THEME_SAMPLE_ROWS;
     }
     const ctx = sampleCanvas.getContext('2d', { willReadFrequently: true }) as
-      CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-    if (!ctx) return null;
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null;
+    if (!ctx) {
+      return null;
+    }
     ctx.clearRect(0, 0, SAMPLE_COLUMNS, AUTO_THEME_SAMPLE_ROWS);
     ctx.drawImage(source, 0, top, sourceWidth, rows, 0, 0, SAMPLE_COLUMNS, rows);
     const { data } = ctx.getImageData(0, 0, SAMPLE_COLUMNS, rows);
@@ -77,8 +83,10 @@ export class WindowBarPainter {
     state: WindowBarFrameState,
     sampleFirstFrame: () => number | null,
   ): WindowBarScene | null {
-    if (!hasWindowBar(frame) || geometry.barHeight <= 0) return null;
-    const settings = frame.windowBar!;
+    const settings = frame.windowBar;
+    if (!settings || !hasWindowBar(frame) || geometry.barHeight <= 0) {
+      return null;
+    }
     if (state.pageVisits !== this.visitsRef) {
       this.visitsRef = state.pageVisits;
       this.visits = normalizePageVisits(state.pageVisits);
@@ -101,12 +109,20 @@ export class WindowBarPainter {
     hostTheme: ResolvedWindowBarTheme | null | undefined,
     sample: () => number | null,
   ): ResolvedWindowBarTheme {
-    if (theme !== 'auto') return theme;
-    if (hostTheme) return hostTheme;
-    if (this.decidedTheme) return this.decidedTheme;
+    if (theme !== 'auto') {
+      return theme;
+    }
+    if (hostTheme) {
+      return hostTheme;
+    }
+    if (this.decidedTheme) {
+      return this.decidedTheme;
+    }
     const brightness = sample();
     // Nothing readable yet: light for now, and try again next frame.
-    if (brightness === null) return 'light';
+    if (brightness === null) {
+      return 'light';
+    }
     this.decidedTheme = resolveWindowBarTheme('auto', brightness);
     return this.decidedTheme;
   }

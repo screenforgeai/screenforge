@@ -290,7 +290,8 @@ function fitMedia(
   cropWidth: number,
   cropHeight: number,
 ): { mediaRect: Rect; windowRect: Rect; barHeight: number } {
-  if (!hasWindowBar(frame)) {
+  const barStyle = frame.windowBar?.style ?? 'none';
+  if (barStyle === 'none') {
     const fit = getContainRect(contentRect.width, contentRect.height, cropWidth, cropHeight);
     const mediaRect = {
       x: contentRect.x + fit.x,
@@ -307,7 +308,7 @@ function fitMedia(
     contentRect.height,
     cropWidth,
     cropHeight,
-    frame.windowBar!.style,
+    barStyle,
   );
   return { mediaRect: fit.media, windowRect: fit.window, barHeight: fit.barHeight };
 }

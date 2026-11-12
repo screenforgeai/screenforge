@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { trackEvent } from 'src/lib/analytics';
 import { getInitialPlaybackTime } from 'src/lib/helpers/segments';
-import { IconAppWindow } from 'src/lib/icons';
+import { IconBrowser } from 'src/lib/icons';
 import { DEFAULT_WINDOW_BAR, type WindowBarSettings } from 'src/lib/window-bar';
 import { recordingPageVisits } from 'src/lib/recording/captureSource';
 import {
@@ -46,12 +46,12 @@ export const WindowWidget = () => {
     return (
       <div className="flex h-full min-h-0 flex-col">
         <div className={WIDGET_PANEL_HEADER_CLASS}>
-          <IconAppWindow className="size-4.5" />
+          <IconBrowser className="size-4.5" />
           {t('windowHeader')}
         </div>
 
         <div className={`${WIDGET_EMPTY_STATE_CLASS} flex-1`}>
-          <IconAppWindow size={34} className="text-sf-muted" />
+          <IconBrowser size={34} className="text-sf-muted" />
           <div className={WIDGET_EMPTY_TITLE_CLASS}>{t('noRecordingSelected')}</div>
         </div>
       </div>
@@ -79,7 +79,7 @@ export const WindowWidget = () => {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className={WIDGET_PANEL_HEADER_CLASS}>
-        <IconAppWindow className="size-4.5" />
+        <IconBrowser className="size-4.5" />
         {t('windowHeader')}
       </div>
 

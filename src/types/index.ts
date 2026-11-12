@@ -30,17 +30,31 @@ export type FeedbackSubmission = {
 };
 export type RequestableMediaPermission = 'microphone' | 'camera';
 export type StartupPermissionStatus =
-  'granted' | 'not-determined' | 'denied' | 'restricted' | 'unknown';
+  | 'granted'
+  | 'not-determined'
+  | 'denied'
+  | 'restricted'
+  | 'unknown';
 
 export type StartupPermissionMap = Record<StartupPermission, StartupPermissionStatus>;
 
 // 'available' means a newer version exists that the user installs themselves
 // (Linux, where the app can't update itself).
 export type UpdaterStatus =
-  'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'ready' | 'error';
+  | 'disabled'
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'ready'
+  | 'error';
 
 export type UpdaterDisabledReason =
-  'not_packaged' | 'unsupported' | 'not_implemented' | 'missing_feed';
+  | 'not_packaged'
+  | 'unsupported'
+  | 'not_implemented'
+  | 'missing_feed';
 
 export interface UpdaterState {
   currentVersion: string;
@@ -62,10 +76,13 @@ export type CaptureBackend = 'native' | 'ffmpeg-x11' | 'wayland-portal' | 'unsup
 
 /** Why system (desktop) audio can't be recorded alongside the screen here. */
 export type SystemAudioUnsupportedReason =
-  'macos-too-old' | 'linux-not-supported' | 'platform-not-supported';
+  | 'macos-too-old'
+  | 'linux-not-supported'
+  | 'platform-not-supported';
 
 export type SystemAudioSupport =
-  { supported: true } | { supported: false; reason: SystemAudioUnsupportedReason };
+  | { supported: true }
+  | { supported: false; reason: SystemAudioUnsupportedReason };
 
 /** Why a recording had to stop on its own (sent to the toolbar). */
 export type RecordingSourceLostReason = 'display-removed';

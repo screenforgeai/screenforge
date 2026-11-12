@@ -65,8 +65,9 @@ export function normalizePageVisits(visits: PageVisit[] | null | undefined): Pag
   const out: PageVisit[] = [];
   for (const visit of sorted) {
     const previous = out[out.length - 1];
-    if (previous && previous.url === visit.url && (previous.title ?? '') === (visit.title ?? ''))
+    if (previous && previous.url === visit.url && (previous.title ?? '') === (visit.title ?? '')) {
       continue;
+    }
     out.push(visit);
   }
   return out;
@@ -92,11 +93,16 @@ export function pageAtTime(
 ): PageAtTime {
   let index = -1;
   for (let i = 0; i < visits.length; i++) {
-    if (index === -1 || (visits[i]?.t ?? Infinity) <= t) index = i;
-    else break;
+    if (index === -1 || (visits[i]?.t ?? Infinity) <= t) {
+      index = i;
+    } else {
+      break;
+    }
   }
   const current = visits[index];
-  if (!current) return { page: null, previous: null, mix: 1 };
+  if (!current) {
+    return { page: null, previous: null, mix: 1 };
+  }
   const since = t - current.t;
   const previous = visits[index - 1];
   if (!previous || fadeSeconds <= 0 || since >= fadeSeconds) {

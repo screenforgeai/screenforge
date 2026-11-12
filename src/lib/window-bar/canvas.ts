@@ -73,10 +73,14 @@ function drawOp(ctx: Ctx2D, op: WindowBarOp): void {
  * output size. Rounded window corners are the caller's clip.
  */
 export function drawWindowBar(ctx: Ctx2D, scene: WindowBarScene, x = 0, y = 0, scale = 1): void {
-  if (scene.height <= 0) return;
+  if (scene.height <= 0) {
+    return;
+  }
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(scale, scale);
-  for (const op of scene.ops) drawOp(ctx, op);
+  for (const op of scene.ops) {
+    drawOp(ctx, op);
+  }
   ctx.restore();
 }

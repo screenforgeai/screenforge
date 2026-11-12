@@ -2,12 +2,14 @@
  * Finding (and cropping) the real browser toolbar in someone's own screen
  * recording, so our bar replaces it rather than stacking on top of it.
  *
- * Two signals have to agree before anything is cropped by itself:
+ * The toolbar's bottom edge is found in two steps:
  *   1. a stable band: the rows at the top that barely change across the
  *      recording (a toolbar holds still while the page under it moves);
  *   2. a line: the strongest near-full-width horizontal edge inside that
  *      band (the toolbar's bottom border).
- * When the browser is known, its usual toolbar height is a third check.
+ * Two signals then have to agree before anything is cropped by itself: the
+ * line and the browser's usual toolbar height when the browser is known,
+ * or else the line and the band's end.
  * Anything short of agreement is a suggestion the person confirms ("Adjust
  * crop"), never a silent crop.
  */
@@ -105,7 +107,9 @@ function luma(data: ArrayLike<number>, i: number): number {
 /** Rows from the top whose content holds still across `frames`; null when it never settles or never moves. */
 export function stableBandHeight(frames: RgbaFrame[]): number | null {
   const first = frames[0];
-  if (!first || frames.length < 2) return null;
+  if (!first || frames.length < 2) {
+    return null;
+  }
   const { width, height } = first;
   const step = columnStep(width);
   const maxRow = Math.floor(height * MAX_BAND_SHARE);
@@ -116,9 +120,12 @@ export function stableBandHeight(frames: RgbaFrame[]): number | null {
     for (let f = 1; f < frames.length; f++) {
       const a = frames[f - 1];
       const b = frames[f];
-      if (!a || !b) continue;
-      if (a.width !== width || b.width !== width || a.height !== height || b.height !== height)
+      if (!a || !b) {
         continue;
+      }
+      if (a.width !== width || b.width !== width || a.height !== height || b.height !== height) {
+        continue;
+      }
       let sum = 0;
       for (let x = 0; x < width; x += step) {
         const i = (y * width + x) * 4;
@@ -127,8 +134,12 @@ export function stableBandHeight(frames: RgbaFrame[]): number | null {
       change += sum / columns;
       pairs++;
     }
-    if (pairs === 0) return null;
-    if (change / pairs > STABLE_ROW_CHANGE) return y === 0 ? null : y;
+    if (pairs === 0) {
+      return null;
+    }
+    if (change / pairs > STABLE_ROW_CHANGE) {
+      return y === 0 ? null : y;
+    }
   }
   // Everything near the top held still: a static recording says nothing.
   return null;
@@ -170,9 +181,13 @@ export function strongestHorizontalLine(frame: RgbaFrame, maxRow: number): numbe
       bestScore = score;
     }
   }
-  if (bestRow < 0) return null;
+  if (bestRow < 0) {
+    return null;
+  }
   // The band ends on the line: crop everything down to and including it.
-  if (bestRow === last) return last + 1;
+  if (bestRow === last) {
+    return last + 1;
+  }
   // A thin divider has its other side right below it; a plain edge doesn't.
   const below = edgeAt(bestRow + 1);
   return below.coverage >= LINE_COVERAGE ? bestRow + 1 : bestRow;
@@ -186,9 +201,13 @@ function priorAgrees(cropTop: number, browser: KnownBrowser, scale: number): boo
 
 /** Pick ~`count` evenly spaced sample times across a recording `duration` seconds long. */
 export function toolbarSampleTimes(duration: number, count = 20): number[] {
-  if (!(duration > 0)) return [0];
+  if (!(duration > 0)) {
+    return [0];
+  }
   const times: number[] = [];
-  for (let i = 0; i < count; i++) times.push((duration * (i + 0.5)) / count);
+  for (let i = 0; i < count; i++) {
+    times.push((duration * (i + 0.5)) / count);
+  }
   return times;
 }
 
@@ -204,19 +223,29 @@ export function detectRecordedToolbar(
     signals: { stableBand: null, line: null, priorAgrees: null },
   });
   // A tab capture has no toolbar in it; a whole screen gets no window bar.
-  if (displaySurface === 'browser') return none(true);
-  if (displaySurface === 'monitor') return none(false);
+  if (displaySurface === 'browser') {
+    return none(true);
+  }
+  if (displaySurface === 'monitor') {
+    return none(false);
+  }
   const first = frames[0];
-  if (mode === 'off' || !first) return none(true);
+  if (mode === 'off' || !first) {
+    return none(true);
+  }
 
   const { height } = first;
   const band = stableBandHeight(frames);
   const line = strongestHorizontalLine(first, band === null ? height * MAX_BAND_SHARE : band - 1);
   const tolerance = Math.max(3, Math.round(height * 0.006));
-  const signalsAgree = band !== null && line !== null && Math.abs(line - band) <= tolerance;
   const guess = line ?? band ?? 0;
-  const prior = browser && guess > 0 ? priorAgrees(guess, browser, scale) : null;
-  const agree = signalsAgree && prior !== false;
+  // Two signals have to agree. With the browser known, the line must sit
+  // where that browser's toolbar ends (the page's own top may hold still
+  // too, so the line can be well inside the still band). Without it, the
+  // line has to be the band's own end.
+  const prior = browser && line !== null ? priorAgrees(line, browser, scale) : null;
+  const agree =
+    line !== null && (prior !== null ? prior : band !== null && Math.abs(line - band) <= tolerance);
 
   return {
     action:

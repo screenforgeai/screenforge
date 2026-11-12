@@ -174,7 +174,14 @@ export interface EditableStorePatch {
 }
 
 export type TimelineLayerId =
-  'video' | 'audio' | 'zoom' | 'camera' | 'mask' | 'text' | 'music' | 'motion';
+  | 'video'
+  | 'audio'
+  | 'zoom'
+  | 'camera'
+  | 'mask'
+  | 'text'
+  | 'music'
+  | 'motion';
 
 export interface AppStore extends EditorSessionState {
   scenes: Scene[];

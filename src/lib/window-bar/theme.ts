@@ -14,7 +14,9 @@ export function topBandBrightness(
   rows: number = AUTO_THEME_SAMPLE_ROWS,
 ): number | null {
   const band = Math.min(height, Math.max(0, Math.round(rows)));
-  if (width <= 0 || band <= 0) return null;
+  if (width <= 0 || band <= 0) {
+    return null;
+  }
   let total = 0;
   const count = width * band;
   for (let i = 0; i < count; i++) {
@@ -33,8 +35,11 @@ export function resolveWindowBarTheme(
   theme: WindowBarTheme,
   brightness: number | null | undefined,
 ): ResolvedWindowBarTheme {
-  if (theme === 'light' || theme === 'dark') return theme;
-  if (brightness === null || brightness === undefined || !Number.isFinite(brightness))
+  if (theme === 'light' || theme === 'dark') {
+    return theme;
+  }
+  if (brightness === null || brightness === undefined || !Number.isFinite(brightness)) {
     return 'light';
+  }
   return brightness > 0.5 ? 'light' : 'dark';
 }

@@ -296,7 +296,9 @@ export const frameEffect: Effect<null> = {
         { pageVisits: recordingPageVisits(state.recordingResult) },
         () => {
           const source = renderContext.videoSource;
-          if (!source?.ready) return null;
+          if (!source?.ready) {
+            return null;
+          }
           return sampleTopBandBrightness(
             source.source,
             source.width,
@@ -305,7 +307,9 @@ export const frameEffect: Effect<null> = {
           );
         },
       );
-      if (bar) drawWindowBar(ctx, bar, windowRect.x, windowRect.y);
+      if (bar) {
+        drawWindowBar(ctx, bar, windowRect.x, windowRect.y);
+      }
       ctx.restore();
     };
   },

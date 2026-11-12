@@ -273,16 +273,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       selectedId,
       windowBarPage: capturePage(capture),
     });
-  }, [
-    capture.height,
-    capture.width,
-    geometry,
-    image,
-    selectedId,
-    style,
-    visibleShapes,
-    wallpapersReady,
-  ]);
+  }, [capture, geometry, image, selectedId, style, visibleShapes, wallpapersReady]);
 
   const toImagePoint = (e: { clientX: number; clientY: number }): Point | null => {
     const canvas = canvasRef.current;

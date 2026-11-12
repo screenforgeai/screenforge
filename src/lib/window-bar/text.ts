@@ -23,8 +23,12 @@ export const ELLIPSIS = '…';
 
 function advance(char: string): number {
   const code = char.codePointAt(0) ?? 32;
-  if (code >= 32 && code <= 126) return INTER_500_ADVANCES[code - 32] ?? OTHER_ADVANCE;
-  if (char === ELLIPSIS) return ELLIPSIS_ADVANCE;
+  if (code >= 32 && code <= 126) {
+    return INTER_500_ADVANCES[code - 32] ?? OTHER_ADVANCE;
+  }
+  if (char === ELLIPSIS) {
+    return ELLIPSIS_ADVANCE;
+  }
   if (code >= 0x1100 && /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|[\u{20000}-\u{3FFFD}]/u.test(char)) {
     return WIDE_ADVANCE;
   }
@@ -34,7 +38,9 @@ function advance(char: string): number {
 /** How wide `text` draws in Inter 500 at `size` px. */
 export function measureText(text: string, size: number): number {
   let total = 0;
-  for (const char of text) total += advance(char);
+  for (const char of text) {
+    total += advance(char);
+  }
   return (total * size) / 1000;
 }
 
@@ -51,7 +57,9 @@ function cutMiddle(chars: string[], keepStart: number, keepEnd: number): string 
  */
 function fitMiddle(text: string, maxWidth: number, size: number): string {
   const chars = Array.from(text);
-  if (measureText(text, size) <= maxWidth) return text;
+  if (measureText(text, size) <= maxWidth) {
+    return text;
+  }
   let best = '';
   for (let keep = chars.length - 1; keep >= 0; keep--) {
     const start = Math.ceil(keep / 2);
@@ -66,12 +74,18 @@ function fitMiddle(text: string, maxWidth: number, size: number): string {
 
 /** The longest end cut of `text` that fits `maxWidth` ("Quarterly rev…"). */
 export function fitEnd(text: string, maxWidth: number, size: number): string {
-  if (measureText(text, size) <= maxWidth) return text;
+  if (measureText(text, size) <= maxWidth) {
+    return text;
+  }
   const chars = Array.from(text);
   for (let keep = chars.length - 1; keep >= 0; keep--) {
     const candidate = chars.slice(0, keep).join('').trimEnd() + ELLIPSIS;
-    if (keep === 0) return measureText(ELLIPSIS, size) <= maxWidth ? ELLIPSIS : '';
-    if (measureText(candidate, size) <= maxWidth) return candidate;
+    if (keep === 0) {
+      return measureText(ELLIPSIS, size) <= maxWidth ? ELLIPSIS : '';
+    }
+    if (measureText(candidate, size) <= maxWidth) {
+      return candidate;
+    }
   }
   return '';
 }
@@ -83,7 +97,9 @@ export function fitEnd(text: string, maxWidth: number, size: number): string {
  * the middle.
  */
 export function fitAddress(text: string, maxWidth: number, size: number): string {
-  if (measureText(text, size) <= maxWidth) return text;
+  if (measureText(text, size) <= maxWidth) {
+    return text;
+  }
   const slash = text.indexOf('/');
   if (slash > 0) {
     const domain = text.slice(0, slash);
@@ -94,7 +110,9 @@ export function fitAddress(text: string, maxWidth: number, size: number): string
     const last = segments[segments.length - 1];
     if (last !== undefined && segments.length > 1) {
       const short = `${domain}/${ELLIPSIS}/${last}`;
-      if (measureText(short, size) <= maxWidth) return short;
+      if (measureText(short, size) <= maxWidth) {
+        return short;
+      }
     }
   }
   return fitMiddle(text, maxWidth, size);

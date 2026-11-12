@@ -15,7 +15,7 @@ import {
   IconMotion,
   IconMusic3,
   IconPhoto,
-  IconAppWindow,
+  IconBrowser,
   IconPlus,
   IconPointer,
   IconPlayerRecord,
@@ -102,7 +102,7 @@ export const WidgetLibrary = () => {
 
   const EFFECT_NAV_ITEMS: { id: WidgetTab; icon: React.ReactNode; label: string }[] = [
     { id: 'frame', icon: <IconPhoto className="size-5" />, label: t('frame') },
-    { id: 'window', icon: <IconAppWindow className="size-5" />, label: t('window') },
+    { id: 'window', icon: <IconBrowser className="size-5" />, label: t('window') },
     { id: 'video', icon: <IconFilm className="size-5" />, label: t('video') },
     { id: 'zoom', icon: <IconZoom className="size-5" />, label: t('zoom') },
     { id: 'motion', icon: <IconMotion className="size-5" />, label: t('motion') },

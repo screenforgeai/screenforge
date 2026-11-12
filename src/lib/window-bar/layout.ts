@@ -106,7 +106,9 @@ const CLOSE_ICON = 'M0 0l10 10M10 0L0 10';
 
 /** How tall the bar is over a window `width` wide: its base height scaled by width/1280, kept to 24–72. */
 export function windowBarHeight(style: WindowBarStyle, width: number): number {
-  if (style === 'none') return 0;
+  if (style === 'none') {
+    return 0;
+  }
   const base = BASE_BAR_HEIGHT[style];
   return Math.min(
     MAX_BAR_HEIGHT,
@@ -124,7 +126,9 @@ interface Ctx {
 }
 
 function textOp(c: Ctx, x: number, text: string, align: 'left' | 'center', alpha: number): void {
-  if (!text || alpha <= 0) return;
+  if (!text || alpha <= 0) {
+    return;
+  }
   const size = 12 * c.k;
   c.ops.push({
     kind: 'text',
@@ -139,7 +143,9 @@ function textOp(c: Ctx, x: number, text: string, align: 'left' | 'center', alpha
 }
 
 function lockOp(c: Ctx, x: number, alpha: number): void {
-  if (alpha <= 0) return;
+  if (alpha <= 0) {
+    return;
+  }
   const size = 10 * c.k;
   c.ops.push({
     kind: 'icon',
@@ -165,15 +171,21 @@ function labelOps(
   alpha: number,
   fit: (text: string, width: number, size: number) => string,
 ): void {
-  if (alpha <= 0) return;
+  if (alpha <= 0) {
+    return;
+  }
   const size = 12 * c.k;
   const lockSpace = lock ? 16 * c.k : 0;
   const fitted = text ? fit(text, Math.max(0, maxWidth - lockSpace), size) : '';
   // No words, no lock: an empty address box stays empty.
-  if (!fitted) return;
+  if (!fitted) {
+    return;
+  }
   const groupWidth = lockSpace + measureText(fitted, size);
   const left = align === 'center' ? x - groupWidth / 2 : x;
-  if (lock) lockOp(c, left, alpha);
+  if (lock) {
+    lockOp(c, left, alpha);
+  }
   textOp(c, left + lockSpace, fitted, 'left', alpha);
 }
 
@@ -223,10 +235,14 @@ function dotsOps(c: Ctx): number {
 function pages(input: WindowBarLayoutInput): { text: string; alpha: number }[] {
   const mix = input.previousPage ? Math.min(1, Math.max(0, input.mix ?? 1)) : 1;
   const current = { text: textFor(input, input.page), alpha: mix };
-  if (mix >= 1) return [current];
+  if (mix >= 1) {
+    return [current];
+  }
   const previous = { text: textFor(input, input.previousPage), alpha: 1 - mix };
   // The same words on both pages don't fade.
-  if (previous.text === current.text) return [{ text: current.text, alpha: 1 }];
+  if (previous.text === current.text) {
+    return [{ text: current.text, alpha: 1 }];
+  }
   return [previous, current];
 }
 
@@ -250,7 +266,9 @@ function fitFor(
 
 export function layoutWindowBar(input: WindowBarLayoutInput): WindowBarScene {
   const { settings, width } = input;
-  if (settings.style === 'none' || width <= 0) return { width, height: 0, ops: [] };
+  if (settings.style === 'none' || width <= 0) {
+    return { width, height: 0, ops: [] };
+  }
 
   const height = windowBarHeight(settings.style, width);
   const k = height / BASE_BAR_HEIGHT[settings.style];
@@ -289,7 +307,9 @@ export function layoutWindowBar(input: WindowBarLayoutInput): WindowBarScene {
 
   if (settings.style === 'mac') {
     const dotsRight = dotsOps(c);
-    if (!hasCenter) return { width, height, ops: c.ops };
+    if (!hasCenter) {
+      return { width, height, ops: c.ops };
+    }
     if (input.compact) {
       // Centered in the bar, kept clear of the dots on both sides.
       const room = width - 2 * (dotsRight + 8 * k);

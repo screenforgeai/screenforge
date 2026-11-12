@@ -64,8 +64,8 @@ describe('WindowBarPainter', () => {
     ];
     const at = (t: number) =>
       painter
-        .sceneAt(frame, geometry, t, { pageVisits: visits, windowBarTheme: 'light' }, () => null)!
-        .ops.filter((op) => op.kind === 'text')
+        .sceneAt(frame, geometry, t, { pageVisits: visits, windowBarTheme: 'light' }, () => null)
+        ?.ops.filter((op) => op.kind === 'text')
         .map((op) => op.kind === 'text' && op.text);
     expect(at(1)).toEqual(['a.com/one']);
     expect(at(4)).toEqual(['a.com/two']);
