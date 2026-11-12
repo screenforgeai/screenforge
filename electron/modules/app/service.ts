@@ -19,6 +19,7 @@ import {
 import log, { getLogFilePath, writeRendererDiagnostic } from '../../lib/logger';
 import { trackEvent } from '../../lib/telemetry';
 import { activateX11Window } from '../../lib/x11-activate-window';
+import { isPng } from '../../lib/png';
 import {
   getMacScreenPermissionStatus,
   getSources,
@@ -390,14 +391,16 @@ export async function focusWindow(target: WindowFocusTarget): Promise<void> {
   });
 }
 
-export async function saveScreenshot(dataUrl: string): Promise<string> {
+export async function saveScreenshot(png: Uint8Array): Promise<string> {
+  // Renderer input: written as-is, so make sure it really is a PNG.
+  if (!isPng(png)) {
+    throw new Error('Not a PNG image');
+  }
   const picturesPath = app.getPath('pictures');
   const dir = path.join(picturesPath, 'Screenforge');
   await fs.mkdir(dir, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-  const data = Buffer.from(base64, 'base64');
 
   // Two saves in the same second (a preview frame, then its annotated copy)
   // must not overwrite each other: 'wx' fails on an existing name, so count up.
@@ -405,7 +408,7 @@ export async function saveScreenshot(dataUrl: string): Promise<string> {
     const suffix = attempt === 0 ? '' : `-${attempt}`;
     const filePath = path.join(dir, `screenshot-${timestamp}${suffix}.png`);
     try {
-      await fs.writeFile(filePath, data, { flag: 'wx' });
+      await fs.writeFile(filePath, png, { flag: 'wx' });
       return filePath;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {

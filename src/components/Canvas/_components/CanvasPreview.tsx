@@ -18,6 +18,7 @@ import { MaskOverlayEditor } from './MaskOverlayEditor';
 import { TextOverlayEditor } from './TextOverlayEditor';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { playShutterSound } from 'src/lib/screenshot/shutter-sound';
+import { canvasToPng, createPngUrl } from 'src/lib/screenshot/png';
 
 interface Props {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -134,8 +135,9 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
       setIsFlashing(true);
       setTimeout(() => setIsFlashing(false), 180);
 
-      const dataUrl = canvas.toDataURL('image/png', 1.0);
       const { width, height } = canvas;
+      // toBlob snapshots the canvas now and encodes without blocking the UI.
+      const pngPromise = canvasToPng(canvas);
 
       const thumb = document.createElement('canvas');
       const ratio = canvas.width / Math.max(canvas.height, 1);
@@ -145,10 +147,13 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
       const thumbUrl = thumb.toDataURL('image/jpeg', 0.8);
 
       try {
-        const filePath = await window.screenforge.saveScreenshot(dataUrl);
+        const png = await pngPromise;
+        const filePath = await window.screenforge.saveScreenshot(png);
         trackEvent('screenshot_captured', { source });
         const openInEditor = () => {
-          useStore.getState().openScreenshotEditor({ kind: 'frame', dataUrl, width, height });
+          useStore
+            .getState()
+            .openScreenshotEditor({ kind: 'frame', imageUrl: createPngUrl(png), width, height });
           trackEvent('screenshot_editor_opened', { kind: 'frame' });
         };
         toast.custom(

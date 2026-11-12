@@ -51,7 +51,7 @@ export const appBridge = {
     CH.app.CAPTURE_EXCEPTION,
   ),
   submitFeedback: createSendBridge<[FeedbackSubmission]>(CH.app.SUBMIT_FEEDBACK),
-  saveScreenshot: createInvokeBridge<[string], string>(CH.app.SAVE_SCREENSHOT),
+  saveScreenshot: createInvokeBridge<[Uint8Array], string>(CH.app.SAVE_SCREENSHOT),
   saveMusic: createInvokeBridge<[string, string], { filePath: string; duration: number }>(
     CH.music.SAVE,
   ),

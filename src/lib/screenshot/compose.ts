@@ -9,6 +9,7 @@
 import {
   DEFAULT_CROP_RECT,
   drawBackground,
+  getContainRect,
   getFrameGeometry,
   type BackgroundSettings,
 } from 'src/lib/effects/frame';
@@ -113,6 +114,28 @@ export function getScreenshotGeometry(
     shadowBlur: shadowOpacity > 0 ? shadowBlur * unit : 0,
     shadowOpacity,
   };
+}
+
+/**
+ * Where the canvas shows on the editor stage (CSS pixels): fitted inside it,
+ * but never larger than one canvas pixel per device pixel. A small area
+ * stretched to fill the stage is resampled by the browser and looks blurry.
+ */
+export function getPreviewRect(
+  stageWidth: number,
+  stageHeight: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  devicePixelRatio: number,
+): Rect {
+  const fit = getContainRect(stageWidth, stageHeight, canvasWidth, canvasHeight);
+  const ratio = devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const width = canvasWidth / ratio;
+  if (fit.width <= width) {
+    return fit;
+  }
+  const height = canvasHeight / ratio;
+  return { x: (stageWidth - width) / 2, y: (stageHeight - height) / 2, width, height };
 }
 
 export function canvasPointFromImage(p: Point, g: ScreenshotGeometry): Point {

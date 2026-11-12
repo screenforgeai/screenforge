@@ -12,6 +12,7 @@ import { trackEvent } from '../lib/analytics';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
 import { DEFAULT_CAMERA_SETTINGS } from './defaults';
 import { cloneMotionClips } from '../lib/animation/motionClips';
+import { releaseImageUrl } from '../lib/screenshot/png';
 
 export type {
   AppStore,
@@ -438,8 +439,18 @@ export const useStore = create<AppStore>((set, get) => {
       })),
     setFocusMode: (v) => set({ focusMode: v }),
     setIsExporting: (v) => set({ isExporting: v }),
-    openScreenshotEditor: (capture) => set({ screenshotCapture: capture }),
-    closeScreenshotEditor: () => set({ screenshotCapture: null }),
+    // The editor owns its capture's blob: URL, so let go of it once nothing shows it.
+    openScreenshotEditor: (capture) => {
+      const previous = get().screenshotCapture;
+      if (previous && previous.imageUrl !== capture.imageUrl) {
+        releaseImageUrl(previous.imageUrl);
+      }
+      set({ screenshotCapture: capture });
+    },
+    closeScreenshotEditor: () => {
+      releaseImageUrl(get().screenshotCapture?.imageUrl);
+      set({ screenshotCapture: null });
+    },
     setIsCropEditing: (v) => set({ isCropEditing: v }),
     setLayerHidden: (layer, hidden) =>
       set((state) => ({ hiddenLayers: { ...state.hiddenLayers, [layer]: hidden } })),

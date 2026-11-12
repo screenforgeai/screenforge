@@ -116,12 +116,20 @@ export interface ScreenshotCaptureRequest {
   area?: SelectedArea | null;
 }
 
+/** A still as the main process sends it: PNG bytes, never base64. */
+export interface ScreenshotCaptureData {
+  kind: ScreenshotCaptureKind;
+  png: Uint8Array;
+  width: number;
+  height: number;
+}
+
 /** A still image handed to the Screenshot editor. */
 export interface ScreenshotCapture {
   /** Where it came from: a live capture, or the editor's current preview frame. */
   kind: ScreenshotCaptureKind | 'frame';
-  /** PNG data URL. */
-  dataUrl: string;
+  /** PNG URL: a blob: URL (revoked when the editor lets go of it) or a data: URL. */
+  imageUrl: string;
   width: number;
   height: number;
 }
@@ -767,10 +775,11 @@ export interface ScreenforgeAPI {
   identifyUser: (profile: { name?: string; email?: string }) => void;
   captureException: (error: SerializedError, properties?: Record<string, unknown>) => void;
   submitFeedback: (feedback: FeedbackSubmission) => void;
-  saveScreenshot: (dataUrl: string) => Promise<string>;
+  /** Writes PNG bytes to Pictures/Screenforge; resolves with the file path. */
+  saveScreenshot: (png: Uint8Array) => Promise<string>;
   captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<void>;
-  copyScreenshotToClipboard: (dataUrl: string) => Promise<void>;
-  onScreenshotCaptured: (cb: (capture: ScreenshotCapture) => void) => () => void;
+  copyScreenshotToClipboard: (png: Uint8Array) => Promise<void>;
+  onScreenshotCaptured: (cb: (capture: ScreenshotCaptureData) => void) => () => void;
   minimizeToDock: () => void;
   quitApp: () => void;
   toggleTeleprompter: () => void;

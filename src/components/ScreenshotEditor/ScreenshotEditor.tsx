@@ -13,7 +13,6 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
 import {
   DEFAULT_BACKGROUND,
-  getContainRect,
   preloadCustomWallpaperAsync,
   preloadWallpapersAsync,
 } from 'src/lib/effects/frame';
@@ -39,11 +38,13 @@ import {
 import {
   canvasPointFromImage,
   clientToCanvasPoint,
+  getPreviewRect,
   getScreenshotGeometry,
   imagePointFromCanvas,
   renderScreenshot,
   type ScreenshotStyle,
 } from 'src/lib/screenshot/compose';
+import { canvasToPng } from 'src/lib/screenshot/png';
 import { trackEvent } from 'src/lib/analytics';
 import {
   IconArrowBackUp,
@@ -161,11 +162,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     () => getScreenshotGeometry(capture.width, capture.height, style),
     [capture.height, capture.width, style],
   );
-  const display = getContainRect(
+  const display = getPreviewRect(
     Math.max(stageSize.width - STAGE_PADDING, 0),
     Math.max(stageSize.height - STAGE_PADDING, 0),
     geometry.canvasWidth,
     geometry.canvasHeight,
+    window.devicePixelRatio,
   );
   // CSS pixels per canvas pixel.
   const displayScale = display.width / geometry.canvasWidth;
@@ -173,11 +175,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   useEffect(() => {
     const img = new Image();
     img.onload = () => setImage(img);
-    img.src = capture.dataUrl;
+    img.src = capture.imageUrl;
     return () => {
       img.onload = null;
     };
-  }, [capture.dataUrl]);
+  }, [capture.imageUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -416,7 +418,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
   };
 
-  const renderToDataUrl = async (): Promise<string | null> => {
+  const renderToPng = async (): Promise<Uint8Array | null> => {
     if (!image) {
       return null;
     }
@@ -443,7 +445,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       geometry,
       shapes,
     });
-    return canvas.toDataURL('image/png');
+    return canvasToPng(canvas);
   };
 
   const exportProps = () => ({
@@ -462,11 +464,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
     setBusy(true);
     try {
-      const dataUrl = await renderToDataUrl();
-      if (!dataUrl) {
+      const png = await renderToPng();
+      if (!png) {
         throw new Error('Nothing to render');
       }
-      await window.screenforge.copyScreenshotToClipboard(dataUrl);
+      await window.screenforge.copyScreenshotToClipboard(png);
       trackEvent('screenshot_copied', exportProps());
       toast.success(t('copied'));
     } catch {
@@ -482,11 +484,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
     setBusy(true);
     try {
-      const dataUrl = await renderToDataUrl();
-      if (!dataUrl) {
+      const png = await renderToPng();
+      if (!png) {
         throw new Error('Nothing to render');
       }
-      const filePath = await window.screenforge.saveScreenshot(dataUrl);
+      const filePath = await window.screenforge.saveScreenshot(png);
       trackEvent('screenshot_saved', exportProps());
       toast.success(t('saved'), {
         action: {

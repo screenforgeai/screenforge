@@ -14,6 +14,7 @@ import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
 import { WhatsNewOnLaunch } from './components/WhatsNew/WhatsNewOnLaunch';
 import { playShutterSound } from './lib/screenshot/shutter-sound';
+import { createPngUrl } from './lib/screenshot/png';
 import { ScreenshotEditor } from './components/ScreenshotEditor';
 import { trackEvent } from './lib/analytics';
 import { getAppendPlacement } from './lib/recording/appendPlacement';
@@ -324,11 +325,11 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   }, [loadRecordingSession, incrementRecordingCount, setActiveWidget, beginNewRecording]);
 
   useEffect(() => {
-    return window.screenforge.onScreenshotCaptured((capture) => {
+    return window.screenforge.onScreenshotCaptured(({ png, ...capture }) => {
       // Same shutter as the preview's camera button. Played here, not in the
       // toolbar, because the toolbar window is gone by the time a capture lands.
       playShutterSound();
-      openScreenshotEditor(capture);
+      openScreenshotEditor({ ...capture, imageUrl: createPngUrl(png) });
       trackEvent('screenshot_editor_opened', { kind: capture.kind });
     });
   }, [openScreenshotEditor]);
@@ -361,7 +362,7 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
       </main>
       {screenshotCapture && (
         <ScreenshotEditor
-          key={screenshotCapture.dataUrl}
+          key={screenshotCapture.imageUrl}
           capture={screenshotCapture}
           onClose={closeScreenshotEditor}
         />
