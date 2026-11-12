@@ -322,7 +322,6 @@ export const ScreenshotStylePanel = ({
           barOn && (
             <WindowBarControls
               value={windowBar}
-              dividerClassName="border-sf-border"
               onChange={(_label, patch) =>
                 onChange({ ...style, windowBar: { ...windowBar, ...patch } }, groupRef.current)
               }

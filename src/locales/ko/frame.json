@@ -23,6 +23,7 @@
   "direction": "방향",
   "windowHeader": "창",
   "windowBar": "창 막대",
+  "windowStyleLabel": "스타일",
   "windowThemeLabel": "테마",
   "windowTitle": "제목",
   "windowAddress": "주소",

@@ -23,6 +23,7 @@
   "direction": "Direction",
   "windowHeader": "Fenêtre",
   "windowBar": "Barre de fenêtre",
+  "windowStyleLabel": "Style",
   "windowThemeLabel": "Thème",
   "windowTitle": "Titre",
   "windowAddress": "Adresse",
