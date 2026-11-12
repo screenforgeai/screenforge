@@ -43,7 +43,6 @@
     "light": "Clair",
     "dark": "Sombre"
   },
-  "windowBarCropped": "Pas de barre de fenêtre sur une capture recadrée : une barre de fenêtre entière sur une partie de l’écran ne rend pas bien.",
   "recordedBar": "Barre enregistrée",
   "adjustCrop": "Ajuster le recadrage",
   "recordedBarMode": {

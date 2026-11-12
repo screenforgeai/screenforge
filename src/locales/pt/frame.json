@@ -43,7 +43,6 @@
     "light": "Claro",
     "dark": "Escuro"
   },
-  "windowBarCropped": "Sem barra de janela numa captura recortada: uma barra de janela inteira sobre parte da tela fica estranha.",
   "recordedBar": "Barra gravada",
   "adjustCrop": "Ajustar recorte",
   "recordedBarMode": {

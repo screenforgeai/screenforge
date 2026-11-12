@@ -95,7 +95,6 @@ describe('getScreenshotGeometry with a window bar', () => {
   it('writes a 1x capture at 2x, the bar above the image, sized for the window in points', () => {
     const g = getScreenshotGeometry(1280, 800, withBar(false), undefined, {
       scaleFactor: 1,
-      cropped: false,
     });
     expect(g.canvasWidth).toBe(2560);
     expect(g.scale).toBe(2);
@@ -108,7 +107,6 @@ describe('getScreenshotGeometry with a window bar', () => {
   it('keeps a Retina capture at its own pixels', () => {
     const g = getScreenshotGeometry(2560, 1600, withBar(false), undefined, {
       scaleFactor: 2,
-      cropped: false,
     });
     expect(g.scale).toBe(1);
     expect(g.windowPoints).toBe(1280);
@@ -118,17 +116,20 @@ describe('getScreenshotGeometry with a window bar', () => {
   it('wraps bar and page in the frame as one window', () => {
     const g = getScreenshotGeometry(1280, 800, withBar(true), undefined, {
       scaleFactor: 2,
-      cropped: false,
     });
     expect(g.windowRect.height).toBeCloseTo(g.mediaRect.height + g.barHeight);
     expect(g.mediaRect.y).toBeCloseTo(g.windowRect.y + g.barHeight);
   });
 
-  it('draws no bar on a cropped capture, and leaves its size alone', () => {
-    const g = getScreenshotGeometry(800, 600, withBar(false), undefined, {
-      scaleFactor: 1,
-      cropped: true,
-    });
+  it('draws a bar on a cropped capture too, when one is picked', () => {
+    // An area or a preview frame gets whatever bar the person chooses.
+    const g = getScreenshotGeometry(800, 600, withBar(false), undefined, { scaleFactor: 1 });
+    expect(g.barHeight).toBeGreaterThan(0);
+    expect(g.canvasHeight).toBeCloseTo(1200 + g.barHeight);
+  });
+
+  it('leaves a capture without a bar at its own size', () => {
+    const g = getScreenshotGeometry(800, 600, unframed, undefined, { scaleFactor: 1 });
     expect(g).toMatchObject({ canvasWidth: 800, canvasHeight: 600, barHeight: 0 });
   });
 });

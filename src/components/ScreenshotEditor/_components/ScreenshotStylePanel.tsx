@@ -41,8 +41,6 @@ const BACKGROUND_TYPES: Exclude<BackgroundType, 'blur'>[] = ['wallpaper', 'gradi
 type Props = {
   style: ScreenshotStyle;
   presets: StylePreset[];
-  /** False for a cropped capture (an area, a preview frame): no whole-window bar on those. */
-  windowBarAvailable: boolean;
   /** What the bar's text starts as: the captured window's title, or a placeholder. */
   windowBarText: string;
   /** The capture itself, for the window bar's hover previews. */
@@ -60,7 +58,6 @@ export const ScreenshotStylePanel = ({
   style,
   presets,
   onChange,
-  windowBarAvailable,
   windowBarText,
   captureImage,
   capturePage,
@@ -333,26 +330,22 @@ export const ScreenshotStylePanel = ({
 
       <div className="flex flex-col gap-4 border-t border-sf-border pt-4">
         <div className={WIDGET_SECTION_HEADING_CLASS}>{tFrame('windowBar')}</div>
-        {windowBarAvailable ? (
-          <WindowBarControls
-            value={windowBar}
-            previewStyle={previewStyle}
-            onChange={(_label, patch) =>
-              onChange(
-                { ...style, windowBar: { ...windowBar, ...patch, enabled: true } },
-                groupRef.current,
-              )
-            }
-            onTextEditStart={() => {
-              groupRef.current = nextGroup('windowText');
-            }}
-            onTextEditEnd={() => {
-              groupRef.current = undefined;
-            }}
-          />
-        ) : (
-          <p className="text-xs leading-snug text-sf-muted">{tFrame('windowBarCropped')}</p>
-        )}
+        <WindowBarControls
+          value={windowBar}
+          previewStyle={previewStyle}
+          onChange={(_label, patch) =>
+            onChange(
+              { ...style, windowBar: { ...windowBar, ...patch, enabled: true } },
+              groupRef.current,
+            )
+          }
+          onTextEditStart={() => {
+            groupRef.current = nextGroup('windowText');
+          }}
+          onTextEditEnd={() => {
+            groupRef.current = undefined;
+          }}
+        />
       </div>
     </div>
   );
