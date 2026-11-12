@@ -23,6 +23,8 @@ import {
 } from 'src/lib/ui';
 import { cn } from 'src/lib/utils';
 import { WIDGET_SECTION_HEADING_CLASS } from 'src/components/layout';
+import { WindowBarControls } from 'src/components/WindowBarControls';
+import { DEFAULT_WINDOW_BAR } from 'src/lib/window-bar';
 import type { StylePreset } from 'src/types';
 
 const BACKGROUND_TYPES: Exclude<BackgroundType, 'blur'>[] = ['wallpaper', 'gradient', 'solid'];
@@ -30,6 +32,8 @@ const BACKGROUND_TYPES: Exclude<BackgroundType, 'blur'>[] = ['wallpaper', 'gradi
 type Props = {
   style: ScreenshotStyle;
   presets: StylePreset[];
+  /** False for a cropped capture (an area, a preview frame): no whole-window bar on those. */
+  windowBarAvailable: boolean;
   /** `group`: changes sharing one (a slider drag, one colour pick) undo as a single step. */
   onChange: (style: ScreenshotStyle, group?: string) => void;
 };
@@ -37,7 +41,7 @@ type Props = {
 let groupCounter = 0;
 const nextGroup = (name: string) => `${name}-${++groupCounter}`;
 
-export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
+export const ScreenshotStylePanel = ({ style, presets, onChange, windowBarAvailable }: Props) => {
   const { t } = useTranslation('screenshot');
   const { t: tFrame } = useTranslation('frame');
   const solidInputRef = useRef<HTMLInputElement>(null);
@@ -84,7 +88,11 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
               onValueChange={(id) => {
                 const preset = presets.find((item) => item.id === id);
                 if (preset) {
-                  onChange({ ...style, background: { ...preset.background } });
+                  onChange({
+                    ...style,
+                    background: { ...preset.background },
+                    ...(preset.windowBar && { windowBar: { ...preset.windowBar } }),
+                  });
                 }
               }}
             >
@@ -274,6 +282,32 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
           </div>
         </>
       )}
+
+      <div className="flex flex-col gap-4 border-t border-sf-border pt-4">
+        <div className={WIDGET_SECTION_HEADING_CLASS}>{tFrame('windowBar')}</div>
+        {windowBarAvailable ? (
+          <WindowBarControls
+            value={{ ...DEFAULT_WINDOW_BAR, ...style.windowBar }}
+            // A screenshot has the window's title, never its address.
+            hasAddress={false}
+            dividerClassName="border-sf-border"
+            onChange={(_label, patch) =>
+              onChange(
+                { ...style, windowBar: { ...DEFAULT_WINDOW_BAR, ...style.windowBar, ...patch } },
+                groupRef.current,
+              )
+            }
+            onTextEditStart={() => {
+              groupRef.current = nextGroup('windowText');
+            }}
+            onTextEditEnd={() => {
+              groupRef.current = undefined;
+            }}
+          />
+        ) : (
+          <p className="text-xs leading-snug text-sf-muted">{tFrame('windowBarCropped')}</p>
+        )}
+      </div>
     </div>
   );
 };

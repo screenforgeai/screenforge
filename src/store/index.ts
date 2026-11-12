@@ -432,15 +432,19 @@ export const useStore = create<AppStore>((set, get) => {
       set((s) => ({ musicClips: clips.map((c) => ({ ...c })), editVersion: s.editVersion + 1 })),
     setMaskClips: (clips) => set({ maskClips: clips.map((c) => ({ ...c })) }),
     setActiveWidget: (tab) =>
-      set(() => ({
+      set((s) => ({
         activeWidget: tab,
-        ...(tab !== 'frame' ? { isCropEditing: false } : {}),
+        // Crop editing belongs to the widget that opened it (Frame's box, Window's toolbar line).
+        ...(tab !== (s.cropEditTarget === 'recordedBar' ? 'window' : 'frame')
+          ? { isCropEditing: false }
+          : {}),
       })),
     setFocusMode: (v) => set({ focusMode: v }),
     setIsExporting: (v) => set({ isExporting: v }),
     openScreenshotEditor: (capture) => set({ screenshotCapture: capture }),
     closeScreenshotEditor: () => set({ screenshotCapture: null }),
-    setIsCropEditing: (v) => set({ isCropEditing: v }),
+    setIsCropEditing: (v, target = 'frame') =>
+      set(v ? { isCropEditing: true, cropEditTarget: target } : { isCropEditing: false }),
     setLayerHidden: (layer, hidden) =>
       set((state) => ({ hiddenLayers: { ...state.hiddenLayers, [layer]: hidden } })),
     setIsAppendMode: (v) => set({ isAppendMode: v }),

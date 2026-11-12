@@ -5,6 +5,7 @@ import type {
   StoredProjectLike,
 } from '../../../types';
 import type { BackgroundSettings, CropRect, FrameSettings } from './index';
+import { fitWindowWithBar } from '../../window-bar/geometry';
 import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CURSOR_SETTINGS,
@@ -143,6 +144,8 @@ export function cloneFrameSettings(frame: FrameSettings): FrameSettings {
     aspectRatioId: frame.aspectRatioId,
     cropRect: { ...frame.cropRect },
     background: { ...frame.background },
+    ...(frame.windowBar && { windowBar: { ...frame.windowBar } }),
+    ...(frame.recordedBar && { recordedBar: { ...frame.recordedBar } }),
   };
 }
 
@@ -262,7 +265,51 @@ export interface FrameGeometry {
   aspectRatio: number;
   contentRect: Rect;
   cropRectPixels: Rect;
+  /** The recording itself (the page, under any window bar). */
   mediaRect: Rect;
+  /** The whole window: the window bar plus mediaRect. Equals mediaRect with no bar. */
+  windowRect: Rect;
+  /** Window bar height in canvas px; 0 with no bar. */
+  barHeight: number;
+}
+
+/** Whether a frame draws a window bar. */
+export function hasWindowBar(frame: Pick<FrameSettings, 'windowBar'>): boolean {
+  return !!frame.windowBar && frame.windowBar.style !== 'none';
+}
+
+/** Vertical (9:16) frames get the compact bar: dots and domain only. */
+export function isCompactWindowBar(frame: Pick<FrameSettings, 'aspectRatioId'>): boolean {
+  return frame.aspectRatioId === '9:16';
+}
+
+/** The window (bar + recording) contained in a content box. */
+function fitMedia(
+  frame: FrameSettings,
+  contentRect: Rect,
+  cropWidth: number,
+  cropHeight: number,
+): { mediaRect: Rect; windowRect: Rect; barHeight: number } {
+  if (!hasWindowBar(frame)) {
+    const fit = getContainRect(contentRect.width, contentRect.height, cropWidth, cropHeight);
+    const mediaRect = {
+      x: contentRect.x + fit.x,
+      y: contentRect.y + fit.y,
+      width: fit.width,
+      height: fit.height,
+    };
+    return { mediaRect, windowRect: { ...mediaRect }, barHeight: 0 };
+  }
+  const fit = fitWindowWithBar(
+    contentRect.x,
+    contentRect.y,
+    contentRect.width,
+    contentRect.height,
+    cropWidth,
+    cropHeight,
+    frame.windowBar!.style,
+  );
+  return { mediaRect: fit.media, windowRect: fit.window, barHeight: fit.barHeight };
 }
 
 export function getFrameGeometry(
@@ -291,25 +338,13 @@ export function getFrameGeometry(
     width: canvasWidth * (1 - padding),
     height: canvasHeight * (1 - padding),
   };
-  const mediaWithinContent = getContainRect(
-    contentRect.width,
-    contentRect.height,
-    cropRectPixels.width,
-    cropRectPixels.height,
-  );
-
   return {
     canvasWidth,
     canvasHeight,
     aspectRatio,
     contentRect,
     cropRectPixels,
-    mediaRect: {
-      x: contentRect.x + mediaWithinContent.x,
-      y: contentRect.y + mediaWithinContent.y,
-      width: mediaWithinContent.width,
-      height: mediaWithinContent.height,
-    },
+    ...fitMedia(frame, contentRect, cropRectPixels.width, cropRectPixels.height),
   };
 }
 
@@ -351,21 +386,11 @@ export function getFrameGeometryForPanel(
     contentW = panelWidth * (1 - padding);
     contentH = panelHeight * (1 - padding);
   }
-  const mediaWithinContent = getContainRect(
-    contentW,
-    contentH,
-    base.cropRectPixels.width,
-    base.cropRectPixels.height,
-  );
+  const contentRect = { x: contentX, y: contentY, width: contentW, height: contentH };
   return {
     ...base,
-    contentRect: { x: contentX, y: contentY, width: contentW, height: contentH },
-    mediaRect: {
-      x: contentX + mediaWithinContent.x,
-      y: contentY + mediaWithinContent.y,
-      width: mediaWithinContent.width,
-      height: mediaWithinContent.height,
-    },
+    contentRect,
+    ...fitMedia(frame, contentRect, base.cropRectPixels.width, base.cropRectPixels.height),
   };
 }
 
@@ -410,6 +435,8 @@ export function normalizeFrameSettings(
       sourceHeight,
     ),
     background,
+    ...(frame?.windowBar && { windowBar: { ...frame.windowBar } }),
+    ...(frame?.recordedBar && { recordedBar: { ...frame.recordedBar } }),
   };
 }
 

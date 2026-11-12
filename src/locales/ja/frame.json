@@ -1,1 +1,77 @@
-{ "header": "フレーム", "noRecordingSelected": "録画が選択されていません。", "background": "背景", "wallpaper": "壁紙", "solid": "単色", "padding": "パディング", "cornerRadius": "角丸", "frame": "フレーム", "crop": "トリミング", "applied": "適用済み", "reset": "リセット", "done": "完了", "editCrop": "トリミングを編集", "shadow": "シャドウ", "blur": "ブラー", "opacity": "不透明度", "from": "開始", "to": "終了", "pickColor": "色を選択", "startColor": "開始色", "endColor": "終了色", "direction": "方向" }
+{
+  "header": "フレーム",
+  "noRecordingSelected": "録画が選択されていません。",
+  "background": "背景",
+  "wallpaper": "壁紙",
+  "solid": "単色",
+  "padding": "パディング",
+  "cornerRadius": "角丸",
+  "frame": "フレーム",
+  "crop": "トリミング",
+  "applied": "適用済み",
+  "reset": "リセット",
+  "done": "完了",
+  "editCrop": "トリミングを編集",
+  "shadow": "シャドウ",
+  "blur": "ブラー",
+  "opacity": "不透明度",
+  "from": "開始",
+  "to": "終了",
+  "pickColor": "色を選択",
+  "startColor": "開始色",
+  "endColor": "終了色",
+  "direction": "方向",
+  "windowHeader": "ウィンドウ",
+  "windowBar": "ウィンドウバー",
+  "windowThemeLabel": "テーマ",
+  "windowCenter": "中央",
+  "windowTitle": "タイトル",
+  "windowStyle": {
+    "none": "なし",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "ブラウザ"
+  },
+  "windowTheme": {
+    "auto": "自動",
+    "light": "ライト",
+    "dark": "ダーク"
+  },
+  "windowCenterOption": {
+    "url": "ライブURL",
+    "domain": "ドメインのみ",
+    "title": "ページタイトル",
+    "custom": "カスタムテキスト",
+    "none": "なし"
+  },
+  "windowCenterSample": {
+    "url": "app.example.com/projects/q3-launch",
+    "domain": "app.example.com",
+    "title": "Q3 ローンチ",
+    "custom": "すべてのページで同じテキスト"
+  },
+  "windowCenterEmpty": {
+    "mac": "3つのボタンだけ",
+    "windows": "ウィンドウボタンだけ",
+    "browser": "空のアドレス欄"
+  },
+  "windowCustomText": "カスタムテキスト",
+  "windowCustomPlaceholder": "製品名やキャッチコピー…",
+  "windowNoAddress": "Screenforge はまだこの録画のアドレスを読み取れないため、ライブURL とドメインのみでは欄が空になります。ページタイトルかカスタムテキストを使ってください。",
+  "windowBarCropped": "切り抜いたキャプチャにはウィンドウバーを付けません。画面の一部にウィンドウ全体のバーを付けると不自然になるためです。",
+  "recordedBar": "録画されたツールバー",
+  "adjustCrop": "切り抜きを調整",
+  "recordedBarMode": {
+    "auto": "自動",
+    "manual": "手動",
+    "off": "オフ"
+  },
+  "recordedBarStatus": {
+    "detecting": "ブラウザのツールバーを探しています…",
+    "crop": "ブラウザのツールバーを見つけて切り取りました。",
+    "adjust": "ツールバーらしきものがありますが、境目がはっきりしません。切り抜きを調整して確認してください。",
+    "none": "この録画にブラウザのツールバーは見つかりませんでした。",
+    "manual": "上から {{rows}} 行を切り取っています。",
+    "off": "録画されたツールバーを残します。"
+  }
+}

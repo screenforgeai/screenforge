@@ -30,31 +30,17 @@ export type FeedbackSubmission = {
 };
 export type RequestableMediaPermission = 'microphone' | 'camera';
 export type StartupPermissionStatus =
-  | 'granted'
-  | 'not-determined'
-  | 'denied'
-  | 'restricted'
-  | 'unknown';
+  'granted' | 'not-determined' | 'denied' | 'restricted' | 'unknown';
 
 export type StartupPermissionMap = Record<StartupPermission, StartupPermissionStatus>;
 
 // 'available' means a newer version exists that the user installs themselves
 // (Linux, where the app can't update itself).
 export type UpdaterStatus =
-  | 'disabled'
-  | 'idle'
-  | 'checking'
-  | 'available'
-  | 'downloading'
-  | 'downloaded'
-  | 'ready'
-  | 'error';
+  'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'ready' | 'error';
 
 export type UpdaterDisabledReason =
-  | 'not_packaged'
-  | 'unsupported'
-  | 'not_implemented'
-  | 'missing_feed';
+  'not_packaged' | 'unsupported' | 'not_implemented' | 'missing_feed';
 
 export interface UpdaterState {
   currentVersion: string;
@@ -76,13 +62,10 @@ export type CaptureBackend = 'native' | 'ffmpeg-x11' | 'wayland-portal' | 'unsup
 
 /** Why system (desktop) audio can't be recorded alongside the screen here. */
 export type SystemAudioUnsupportedReason =
-  | 'macos-too-old'
-  | 'linux-not-supported'
-  | 'platform-not-supported';
+  'macos-too-old' | 'linux-not-supported' | 'platform-not-supported';
 
 export type SystemAudioSupport =
-  | { supported: true }
-  | { supported: false; reason: SystemAudioUnsupportedReason };
+  { supported: true } | { supported: false; reason: SystemAudioUnsupportedReason };
 
 /** Why a recording had to stop on its own (sent to the toolbar). */
 export type RecordingSourceLostReason = 'display-removed';
@@ -124,6 +107,11 @@ export interface ScreenshotCapture {
   dataUrl: string;
   width: number;
   height: number;
+  /** The captured window's app and title at the moment of capture, for its window bar. */
+  appName?: string;
+  windowTitle?: string;
+  /** Image pixels per screen point (2 on a Retina display); 1 when unknown. */
+  scaleFactor?: number;
 }
 
 export interface WindowFocusTarget {
@@ -203,6 +191,23 @@ export interface ConcatRecordingsOptions {
   target?: RecordingArea;
 }
 
+/**
+ * What was recorded, as picked at the start: the window bar uses it to tell
+ * a browser window (whose real toolbar should be cropped off) from a whole
+ * screen, and to show the page's title.
+ */
+export interface RecordingCaptureSource {
+  kind: 'display' | 'window' | 'area';
+  /**
+   * Wayland's screen-share picker: getDisplayMedia's displaySurface, which
+   * says whether the person shared a tab, a window or a whole screen.
+   */
+  displaySurface?: 'browser' | 'window' | 'monitor';
+  /** The recorded window's app ("Google Chrome") and title, when known. */
+  appName?: string;
+  windowTitle?: string;
+}
+
 export interface RecordingResult {
   filePath: string;
   mouseData: CursorEvent[];
@@ -215,6 +220,8 @@ export interface RecordingResult {
   audioPath?: string;
   cameraPath?: string;
   isImported?: boolean; // true for user-imported videos (no native cursor data)
+  /** Absent on recordings made before it was kept, and on imports. */
+  captureSource?: RecordingCaptureSource;
 }
 
 export interface ProjectCursorSettings {
@@ -522,6 +529,8 @@ export interface StylePreset {
   name: string;
   savedAt: string;
   background: import('../lib/effects/frame').BackgroundSettings;
+  /** The window bar; absent on presets saved before it existed. */
+  windowBar?: import('../lib/window-bar').WindowBarSettings;
   cursor: ProjectCursorSettings;
   camera: ProjectCameraSettings;
   keyboard: ProjectKeyboardSettings;

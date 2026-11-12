@@ -9,8 +9,9 @@
  *   ├── shadowShape        — blurred preview shadow
  *   └── videoContainer     (masked to contentRect)
  *       ├── bgRepaintSprite — same background drawn inside content rect
- *       └── mediaContainer  (masked to mediaRect)
- *           └── videoSprite — source video, positioned to implement crop
+ *       └── mediaContainer  (masked to windowRect: bar + page)
+ *           ├── videoSprite — source video, positioned to implement crop
+ *           └── windowBarSprite — the window bar, over the top of the page
  *
  * The shadow is rendered as a separate blurred shape behind videoContainer so
  * the recorded screen pixels do not pass through a filter render texture.
@@ -53,6 +54,9 @@ import type { MediaSegment, ZoomClip } from '../../../types/timeline';
 import type { FrameGeometry } from './analyze';
 import { resolveCameraAtTime } from '../camera/layout';
 import { interpolateCamera } from '../zoom/render';
+import { WindowBarPainter, sampleTopBandBrightness } from './window-bar';
+import { recordingPageVisits } from '../../recording/captureSource';
+import { drawWindowBar } from '../../window-bar/canvas';
 
 // ── Clip-boundary fade ────────────────────────────────────────────────────────
 
@@ -318,7 +322,30 @@ export const framePixiEffect: PixiEffect<null> = {
     mediaMask.label = RECORDING_MASK_LABEL;
     mediaContainer.mask = mediaMask;
 
-    mediaContainer.addChild(videoSprite, mediaMask);
+    // ── Window bar ──────────────────────────────────────────────────────────
+    // Drawn as vectors onto its own canvas at the size it shows on screen
+    // (zoom included), so it is never an upscaled bitmap, then uploaded only
+    // when its pixels change (a page change crossfade, a zoom step).
+    const windowBar = new WindowBarPainter();
+    const windowBarCanvas = document.createElement('canvas');
+    windowBarCanvas.width = 1;
+    windowBarCanvas.height = 1;
+    const windowBarCtx = windowBarCanvas.getContext('2d');
+    let windowBarSource: CanvasSource | null = null;
+    const windowBarSprite = new Sprite();
+    windowBarSprite.eventMode = 'none';
+    windowBarSprite.visible = false;
+    let lastWindowBarKey = '';
+    // A web font that finishes loading after the first draw must redraw the bar.
+    let fontsLoaded = 0;
+    const onFontsLoaded = (): void => {
+      fontsLoaded++;
+    };
+    if (typeof document !== 'undefined' && document.fonts) {
+      document.fonts.addEventListener('loadingdone', onFontsLoaded);
+    }
+
+    mediaContainer.addChild(videoSprite, windowBarSprite, mediaMask);
 
     // ── Background repaint inside media rect ───────────────────────────────
     // Background redrawn only within mediaRect (not the full contentRect) so the
@@ -457,6 +484,7 @@ export const framePixiEffect: PixiEffect<null> = {
 
     // ── Updater ──────────────────────────────────────────────────────────────
     return (t, dt, renderContext: RenderContext) => {
+      const renderState = useStore.getState();
       // Single getState() call — reading all required fields at once avoids
       // redundant Zustand store accesses inside a hot 60fps path.
       const {
@@ -468,7 +496,7 @@ export const framePixiEffect: PixiEffect<null> = {
         camera,
         cameraClips,
         zoomClips,
-      } = useStore.getState();
+      } = renderState;
 
       // Freeze to the full source during editing so the Pixi canvas matches the
       // overlay (which always positions itself against the full source). Using
@@ -556,6 +584,8 @@ export const framePixiEffect: PixiEffect<null> = {
             const toCR = cachedGeom.contentRect;
             const fromMR = lastPanelGeom.mediaRect;
             const toMR = cachedGeom.mediaRect;
+            const fromWR = lastPanelGeom.windowRect;
+            const toWR = cachedGeom.windowRect;
             contentGeom = {
               ...cachedGeom,
               contentRect: {
@@ -570,6 +600,15 @@ export const framePixiEffect: PixiEffect<null> = {
                 width: fromMR.width + (toMR.width - fromMR.width) * fadeAlpha,
                 height: fromMR.height + (toMR.height - fromMR.height) * fadeAlpha,
               },
+              windowRect: {
+                x: fromWR.x + (toWR.x - fromWR.x) * fadeAlpha,
+                y: fromWR.y + (toWR.y - fromWR.y) * fadeAlpha,
+                width: fromWR.width + (toWR.width - fromWR.width) * fadeAlpha,
+                height: fromWR.height + (toWR.height - fromWR.height) * fadeAlpha,
+              },
+              barHeight:
+                lastPanelGeom.barHeight +
+                (cachedGeom.barHeight - lastPanelGeom.barHeight) * fadeAlpha,
             };
           } else {
             lastPanelGeom = null;
@@ -579,7 +618,7 @@ export const framePixiEffect: PixiEffect<null> = {
         lastPanelGeom = null;
         screenRectFadeElapsed = 0;
       }
-      const { contentRect, cropRectPixels, mediaRect } = contentGeom;
+      const { contentRect, cropRectPixels, mediaRect, windowRect } = contentGeom;
 
       // For background rendering, use the frame geometry's canvas dimensions, NOT the
       // renderer dimensions. During export the renderer is sized to the standard encoder
@@ -610,9 +649,11 @@ export const framePixiEffect: PixiEffect<null> = {
         0,
         Math.min(scaledRadius, contentRect.width / 2, contentRect.height / 2),
       );
+      // Radius and shadow wrap the whole window (bar + page); windowRect is
+      // mediaRect itself when there is no bar.
       const mediaRadius = Math.max(
         0,
-        Math.min(scaledRadius, mediaRect.width / 2, mediaRect.height / 2),
+        Math.min(scaledRadius, windowRect.width / 2, windowRect.height / 2),
       );
 
       // ── Update video texture from renderContext ──────────────────────────
@@ -1049,27 +1090,78 @@ export const framePixiEffect: PixiEffect<null> = {
         videoSprite.height = scene.sourceHeight * scaleY;
       }
 
+      // ── Window bar ───────────────────────────────────────────────────────
+      const barScene = windowBarCtx
+        ? windowBar.sceneAt(
+            effectiveFrame,
+            contentGeom,
+            timelineT,
+            { pageVisits: recordingPageVisits(renderState.recordingResult) },
+            () =>
+              videoSrc?.ready && videoSrc.source
+                ? sampleTopBandBrightness(
+                    videoSrc.source,
+                    videoSrc.width,
+                    videoSrc.height,
+                    cropRectPixels.y,
+                  )
+                : null,
+          )
+        : null;
+      windowBarSprite.visible = !!barScene && !videoHidden;
+      if (barScene && windowBarCtx && !videoHidden) {
+        // Pixels per bar unit: the renderer's resolution times the zoom (in
+        // half steps), so a zoomed-in bar is redrawn sharp, not stretched.
+        const zoomStep = Math.max(1, Math.ceil(Math.abs(scene.cameraContainer.scale.x) * 2) / 2);
+        const pixelScale = Math.min(4, (scene.app.renderer.resolution || 1) * zoomStep);
+        const pw = Math.max(1, Math.ceil(barScene.width * pixelScale));
+        const ph = Math.max(1, Math.ceil(barScene.height * pixelScale));
+        const barKey = `${pw}x${ph}|${pixelScale}|${fontsLoaded}|${JSON.stringify(barScene.ops)}`;
+        if (barKey !== lastWindowBarKey) {
+          const resized = windowBarCanvas.width !== pw || windowBarCanvas.height !== ph;
+          if (resized) {
+            windowBarCanvas.width = pw;
+            windowBarCanvas.height = ph;
+          }
+          windowBarCtx.setTransform(1, 0, 0, 1, 0, 0);
+          windowBarCtx.clearRect(0, 0, pw, ph);
+          drawWindowBar(windowBarCtx, barScene, 0, 0, pixelScale);
+          if (!windowBarSource || resized) {
+            windowBarSource?.destroy();
+            windowBarSource = new CanvasSource({ resource: windowBarCanvas });
+            windowBarSprite.texture = new Texture({ source: windowBarSource });
+          } else {
+            windowBarSource.update();
+          }
+          lastWindowBarKey = barKey;
+        }
+        windowBarSprite.x = windowRect.x;
+        windowBarSprite.y = windowRect.y;
+        windowBarSprite.width = barScene.width;
+        windowBarSprite.height = barScene.height;
+      }
+
       // ── Media mask + BgRepaint mask (share the same geometry) ────────────
       // Only redrawn when geometry changes — e.g. user adjusts padding or corner
       // radius. During playback this is static, so we skip 3 GPU buffer uploads/frame.
-      const mediaMaskKey = `${mediaRect.x}|${mediaRect.y}|${mediaRect.width}|${mediaRect.height}|${mediaRadius}`;
+      const mediaMaskKey = `${windowRect.x}|${windowRect.y}|${windowRect.width}|${windowRect.height}|${mediaRadius}`;
       if (mediaMaskKey !== lastMediaMaskKey) {
         mediaMask.clear();
         mediaMask.roundRect(
-          mediaRect.x,
-          mediaRect.y,
-          mediaRect.width,
-          mediaRect.height,
+          windowRect.x,
+          windowRect.y,
+          windowRect.width,
+          windowRect.height,
           mediaRadius,
         );
         mediaMask.fill(0xffffff);
         // BgRepaint mask shares the same rect — update together.
         bgRepaintMask.clear();
         bgRepaintMask.roundRect(
-          mediaRect.x,
-          mediaRect.y,
-          mediaRect.width,
-          mediaRect.height,
+          windowRect.x,
+          windowRect.y,
+          windowRect.width,
+          windowRect.height,
           mediaRadius,
         );
         bgRepaintMask.fill(0xffffff);
@@ -1095,10 +1187,10 @@ export const framePixiEffect: PixiEffect<null> = {
       const shadowKey = [
         shadowBlur,
         shadowOpacity,
-        mediaRect.x,
-        mediaRect.y,
-        mediaRect.width,
-        mediaRect.height,
+        windowRect.x,
+        windowRect.y,
+        windowRect.width,
+        windowRect.height,
         mediaRadius,
         ch,
       ].join('|');
@@ -1115,7 +1207,7 @@ export const framePixiEffect: PixiEffect<null> = {
           shadowShape.x = baseShadowX;
           shadowShape.y = baseShadowY;
           shadowShape
-            .roundRect(mediaRect.x, mediaRect.y, mediaRect.width, mediaRect.height, mediaRadius)
+            .roundRect(windowRect.x, windowRect.y, windowRect.width, windowRect.height, mediaRadius)
             .fill(0x000000);
           shadowShape.filters = [shadowBlurFilter];
         } else {

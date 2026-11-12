@@ -44,6 +44,8 @@ import {
   renderScreenshot,
   type ScreenshotStyle,
 } from 'src/lib/screenshot/compose';
+import type { WindowBarPage } from 'src/lib/window-bar';
+import { pageTitleFromWindowTitle } from 'src/lib/recording/captureSource';
 import { trackEvent } from 'src/lib/analytics';
 import {
   IconArrowBackUp,
@@ -124,8 +126,23 @@ const initialStyle = (capture: ScreenshotCapture): ScreenshotStyle => {
     frameEnabled: capture.kind !== 'frame',
     aspectRatioId: 'original',
     background: { ...(recordingResult ? frame.background : DEFAULT_BACKGROUND) },
+    // The project's window bar, for a capture of a window or screen (a preview
+    // frame already has the project's bar drawn into it).
+    ...(recordingResult &&
+      frame.windowBar &&
+      capture.kind !== 'frame' && { windowBar: { ...frame.windowBar } }),
   };
 };
+
+/** A cropped capture (an area, or a preview frame) gets no whole-window bar. */
+const isCroppedCapture = (capture: ScreenshotCapture) =>
+  capture.kind === 'area' || capture.kind === 'frame';
+
+/** The page a capture shows, for its window bar: the window's title at the moment of capture. */
+const capturePage = (capture: ScreenshotCapture): WindowBarPage | null =>
+  capture.windowTitle
+    ? { title: pageTitleFromWindowTitle(capture.windowTitle, capture.appName) }
+    : null;
 
 export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const { t } = useTranslation('screenshot');
@@ -158,8 +175,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     [capture.height, capture.width, color],
   );
   const geometry = useMemo(
-    () => getScreenshotGeometry(capture.width, capture.height, style),
-    [capture.height, capture.width, style],
+    () =>
+      getScreenshotGeometry(capture.width, capture.height, style, undefined, {
+        scaleFactor: capture.scaleFactor ?? 1,
+        cropped: isCroppedCapture(capture),
+      }),
+    [capture, style],
   );
   const display = getContainRect(
     Math.max(stageSize.width - STAGE_PADDING, 0),
@@ -250,6 +271,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       geometry,
       shapes: visibleShapes,
       selectedId,
+      windowBarPage: capturePage(capture),
     });
   }, [
     capture.height,
@@ -442,6 +464,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       style,
       geometry,
       shapes,
+      windowBarPage: capturePage(capture),
     });
     return canvas.toDataURL('image/png');
   };
@@ -716,7 +739,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
             {t('style')}
           </div>
-          <ScreenshotStylePanel style={style} presets={presets} onChange={setStyle} />
+          <ScreenshotStylePanel
+            style={style}
+            presets={presets}
+            onChange={setStyle}
+            windowBarAvailable={!isCroppedCapture(capture)}
+          />
         </aside>
       </div>
     </div>

@@ -1,1 +1,77 @@
-{ "header": "Cadre", "noRecordingSelected": "Aucun enregistrement sélectionné.", "background": "Arrière-plan", "wallpaper": "Fond d'écran", "solid": "Uni", "padding": "Rembourrage", "cornerRadius": "Rayon des coins", "frame": "Cadre", "crop": "Recadrer", "applied": "Appliqué", "reset": "Réinitialiser", "done": "Terminé", "editCrop": "Modifier le recadrage", "shadow": "Ombre", "blur": "Flou", "opacity": "Opacité", "from": "De", "to": "À", "pickColor": "Choisir une couleur", "startColor": "Couleur de début", "endColor": "Couleur de fin", "direction": "Direction" }
+{
+  "header": "Cadre",
+  "noRecordingSelected": "Aucun enregistrement sélectionné.",
+  "background": "Arrière-plan",
+  "wallpaper": "Fond d'écran",
+  "solid": "Uni",
+  "padding": "Rembourrage",
+  "cornerRadius": "Rayon des coins",
+  "frame": "Cadre",
+  "crop": "Recadrer",
+  "applied": "Appliqué",
+  "reset": "Réinitialiser",
+  "done": "Terminé",
+  "editCrop": "Modifier le recadrage",
+  "shadow": "Ombre",
+  "blur": "Flou",
+  "opacity": "Opacité",
+  "from": "De",
+  "to": "À",
+  "pickColor": "Choisir une couleur",
+  "startColor": "Couleur de début",
+  "endColor": "Couleur de fin",
+  "direction": "Direction",
+  "windowHeader": "Fenêtre",
+  "windowBar": "Barre de fenêtre",
+  "windowThemeLabel": "Thème",
+  "windowCenter": "Centre",
+  "windowTitle": "Titre",
+  "windowStyle": {
+    "none": "Aucune",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "Navigateur"
+  },
+  "windowTheme": {
+    "auto": "Auto",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
+  "windowCenterOption": {
+    "url": "URL en direct",
+    "domain": "Domaine seul",
+    "title": "Titre de la page",
+    "custom": "Texte personnalisé",
+    "none": "Rien"
+  },
+  "windowCenterSample": {
+    "url": "app.example.com/projects/q3-launch",
+    "domain": "app.example.com",
+    "title": "Lancement T3",
+    "custom": "Le même texte sur chaque page"
+  },
+  "windowCenterEmpty": {
+    "mac": "Juste les trois points",
+    "windows": "Juste les boutons de fenêtre",
+    "browser": "Une barre d’adresse vide"
+  },
+  "windowCustomText": "Texte personnalisé",
+  "windowCustomPlaceholder": "Votre produit, un slogan…",
+  "windowNoAddress": "Screenforge ne sait pas encore lire l’adresse de cet enregistrement : URL en direct et Domaine laissent la case vide. Titre de la page ou Texte personnalisé la remplissent.",
+  "windowBarCropped": "Pas de barre de fenêtre sur une capture recadrée : une barre de fenêtre entière sur une partie de l’écran ne rend pas bien.",
+  "recordedBar": "Barre enregistrée",
+  "adjustCrop": "Ajuster le recadrage",
+  "recordedBarMode": {
+    "auto": "Auto",
+    "manual": "Manuel",
+    "off": "Non"
+  },
+  "recordedBarStatus": {
+    "detecting": "Recherche de la barre du navigateur…",
+    "crop": "Barre du navigateur trouvée et recadrée.",
+    "adjust": "Une barre semble présente, mais sa limite est incertaine. Ajustez le recadrage pour vérifier.",
+    "none": "Aucune barre de navigateur dans cet enregistrement.",
+    "manual": "Recadrage des {{rows}} premières lignes.",
+    "off": "La barre enregistrée est conservée."
+  }
+}

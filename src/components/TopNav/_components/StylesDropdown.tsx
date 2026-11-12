@@ -17,6 +17,7 @@ import {
 import { useStore } from '../../../store';
 import type { CaptionAppearance, StylePreset } from '../../../types';
 import { normalizeCursorClickSound } from '../../../lib/effects/cursor/audio';
+import { DEFAULT_WINDOW_BAR } from '../../../lib/window-bar';
 import {
   normalizeCursorClickEffect,
   normalizeCursorEffect,
@@ -99,7 +100,12 @@ export const StylesDropdown = () => {
     setOpen(false);
     toast.success(`"${preset.name}" applied`);
     commitEdit('Apply style preset', (state) => ({
-      frame: { ...state.frame, background: preset.background },
+      frame: {
+        ...state.frame,
+        background: preset.background,
+        // Presets saved before the window bar existed leave the current one alone.
+        ...(preset.windowBar && { windowBar: { ...preset.windowBar } }),
+      },
       cursorEnabled: preset.cursor.enabled,
       cursorStyle: normalizeCursorStyle(preset.cursor.style),
       cursorClickEffect: normalizeCursorClickEffect(preset.cursor.clickEffect),
@@ -182,6 +188,7 @@ export const StylesDropdown = () => {
         name,
         savedAt: new Date().toISOString(),
         background: frame.background,
+        windowBar: { ...DEFAULT_WINDOW_BAR, ...frame.windowBar },
         cursor: {
           enabled: cursorEnabled,
           style: cursorStyle,

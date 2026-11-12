@@ -6,6 +6,7 @@
   "cursor": "Cursor",
   "keyboard": "Keyboard",
   "frame": "Frame",
+  "window": "Window",
   "camera": "Camera",
   "mask": "Privacy Mask",
   "captions": "Captions",

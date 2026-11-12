@@ -52,6 +52,8 @@ export const FrameCropOverlay = ({
   const currentTime = useStore((s) => s.currentTime);
   const frame = useStore((s) => s.frame);
   const commitEdit = useStore((s) => s.commitEdit);
+  // The Window widget's recorded-toolbar line, rather than the Frame widget's crop box.
+  const editsToolbarLine = useStore((s) => s.cropEditTarget === 'recordedBar');
   const beginHistoryGroup = useStore((s) => s.beginHistoryGroup);
   const endHistoryGroup = useStore((s) => s.endHistoryGroup);
 
@@ -191,6 +193,15 @@ export const FrameCropOverlay = ({
       frame: {
         ...state.frame,
         cropRect: nextRect,
+        // The toolbar line is the crop's top edge: keep the two in step.
+        ...(editsToolbarLine &&
+          state.frame.recordedBar && {
+            recordedBar: {
+              ...state.frame.recordedBar,
+              mode: 'manual' as const,
+              cropTop: Math.round(nextRect.y * resolvedSourceHeight),
+            },
+          }),
       },
     }));
   };
@@ -285,6 +296,91 @@ export const FrameCropOverlay = ({
 
   if (!recordingResult) {
     return null;
+  }
+
+  if (editsToolbarLine) {
+    return (
+      <div
+        className="absolute inset-0 z-10 select-none rounded-[inherit]"
+        style={{ cursor: isDragging ? 'ns-resize' : undefined }}
+      >
+        <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/45 px-2.5 py-1 text-[11px] text-white/80">
+          Drag the line to the bottom of the recorded toolbar
+        </div>
+        <div
+          ref={sourceBoundsRef}
+          className="absolute"
+          style={{
+            left: sourceDisplayRect.x,
+            top: sourceDisplayRect.y,
+            width: sourceDisplayRect.width,
+            height: sourceDisplayRect.height,
+          }}
+        >
+          <video
+            ref={overlayVideoRef}
+            src={createScreenforgeFileUrl(recordingResult.filePath)}
+            className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+            muted
+            preload="metadata"
+          />
+          {/* What gets cropped off: the recorded toolbar above the line. */}
+          <div
+            className="pointer-events-none absolute left-0 top-0 w-full bg-black/60"
+            style={{ height: `${cropOverlayRect.y * 100}%` }}
+          />
+          <div
+            role="slider"
+            aria-label="Recorded toolbar crop line"
+            aria-orientation="vertical"
+            aria-valuemin={0}
+            aria-valuemax={resolvedSourceHeight}
+            aria-valuenow={Math.round(cropOverlayRect.y * resolvedSourceHeight)}
+            tabIndex={0}
+            className="group absolute left-0 h-4 w-full -translate-y-1/2 cursor-ns-resize"
+            style={{ top: `${cropOverlayRect.y * 100}%`, touchAction: 'none' }}
+            onPointerDown={(event) => {
+              const point = getPointerSourcePoint(event.clientX, event.clientY);
+              startInteraction(
+                event,
+                {
+                  type: 'resize',
+                  handle: 'n',
+                  startRect: frame.cropRect,
+                  startPointerSourceX: point.x,
+                  startPointerSourceY: point.y,
+                },
+                'recorded-bar-line',
+                'Move recorded toolbar crop',
+              );
+            }}
+            onKeyDown={(event) => {
+              const step = event.shiftKey ? 10 : 1;
+              const delta = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+              if (!delta) {
+                return;
+              }
+              event.preventDefault();
+              const top = Math.max(0, frame.cropRect.y * resolvedSourceHeight + delta);
+              updateCropRect(
+                'Move recorded toolbar crop',
+                resizeCropRectFromHandle(
+                  frame.cropRect,
+                  'n',
+                  0,
+                  top,
+                  resolvedSourceWidth,
+                  resolvedSourceHeight,
+                ),
+              );
+            }}
+          >
+            <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-sf-primary shadow-[0_0_0_1px_rgba(0,0,0,0.45)] group-focus-visible:h-0.5" />
+            <div className="absolute left-1/2 top-1/2 h-2 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 bg-sf-primary" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
