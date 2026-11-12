@@ -197,7 +197,7 @@ export const STUDIO_LOOKS: readonly StudioLook[] = [
     envInt: 0.9,
     lightSize: 0.5,
     bgRefl: 0.3,
-    reflect: 0.3,
+    reflect: 0.08,
     tilt: 0,
     shadowStr: 0.6,
     screenGlow: 0.2,
@@ -205,10 +205,16 @@ export const STUDIO_LOOKS: readonly StudioLook[] = [
     dofAmt: 0.85,
     bloomMode: 'colour',
     lean: 0,
-    vignette: 0.55,
+    // The lab's grade, kept straight-on: a deep vignette and the top of the screen sinking
+    // into shadow, so the screenshot reads as lit in a dark room rather than glowing flat.
+    // The glass reflects little (reflect, above): facing the camera it would mirror the soft
+    // boxes in front of it as a grey haze over the whole screen.
+    vignette: 0.7,
     fisheye: 0.12,
-    fringe: 0.2,
-    screenFade: 0,
+    fringe: 0.3,
+    screenFade: 0.6,
+    fadeAngle: 90,
+    fadeSoft: 0.65,
     lcd: 1,
     screenGain: 'auto',
   }),

@@ -119,6 +119,16 @@ describe('getStudioLook', () => {
     expect(macro?.settings.lean).toBe(0);
     expect(macro?.settings.camera).toBe('straight');
     expect(macro?.settings.dof).toBe(true);
+    // Graded like the lab's macro even straight-on: the top of the screen sinks into shadow, and
+    // the glass barely mirrors the lights in front of it (straight-on that reads as a grey haze).
+    expect(macro?.settings).toMatchObject({
+      reflect: 0.08,
+      screenFade: 0.6,
+      fadeAngle: 90,
+      fadeSoft: 0.65,
+      vignette: 0.7,
+      fringe: 0.3,
+    });
     expect(getStudioLook('night-glow')?.settings.lean).toBe(0);
   });
 });

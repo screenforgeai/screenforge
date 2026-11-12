@@ -222,46 +222,28 @@ describe('ScreenshotEditor', () => {
       expect(screen.queryByRole('button', { name: /macro/i })).not.toBeInTheDocument();
       expect(screen.getByRole('combobox', { name: /aspect ratio/i })).toHaveTextContent('16:9');
       expect(renderer.setFrame).toHaveBeenLastCalledWith(expect.objectContaining({ radiusPx: 0 }));
-      expect(renderer.setBackdrop).toHaveBeenCalled();
       expect(screen.getByText(/click to focus/i)).toBeInTheDocument();
       // The handles introduce themselves.
       expect(screen.getByText('Focus')).toBeInTheDocument();
       expect(screen.getByText('Light')).toBeInTheDocument();
     });
 
-    it('paints the chosen background behind the screenshot', async () => {
+    it('opens on the dark studio wall, and paints a chosen background behind the screenshot', async () => {
       const user = userEvent.setup();
       const renderer = await opened();
+      // The macro lens's own wall to start: no backdrop of the editor's.
+      const wall = screen.getByRole('button', { name: /^studio$/i });
+      expect(wall).toHaveAttribute('aria-pressed', 'true');
+      expect(renderer.setBackdrop).toHaveBeenLastCalledWith(null);
+      // Wallpaper or a solid colour; no gradients.
+      expect(screen.queryByRole('radio', { name: /^gradient$/i })).not.toBeInTheDocument();
       await user.click(screen.getByRole('radio', { name: /^solid$/i }));
       await waitFor(() =>
         expect(renderer.setBackdrop).toHaveBeenLastCalledWith(
           expect.objectContaining({ kind: 'solid' }),
         ),
       );
-      await user.click(screen.getByRole('radio', { name: /^wallpaper$/i }));
-      await waitFor(() =>
-        expect(renderer.setBackdrop).toHaveBeenLastCalledWith(
-          expect.objectContaining({ kind: 'image' }),
-        ),
-      );
-    });
-
-    it("offers the macro lens's own dark studio wall among the wallpapers", async () => {
-      const user = userEvent.setup();
-      const renderer = await opened();
-      const wall = screen.getByRole('button', { name: /^studio$/i });
-      expect(wall).toHaveAttribute('aria-pressed', 'false');
-      await user.click(wall);
-      // No backdrop of its own: the renderer goes back to the look's wall.
-      await waitFor(() => expect(renderer.setBackdrop).toHaveBeenLastCalledWith(null));
-      expect(wall).toHaveAttribute('aria-pressed', 'true');
-      // A gradient still takes over, and the wallpaper tab comes back to the studio wall.
-      await user.click(screen.getByRole('radio', { name: /^gradient$/i }));
-      await waitFor(() =>
-        expect(renderer.setBackdrop).toHaveBeenLastCalledWith(
-          expect.objectContaining({ kind: 'gradient' }),
-        ),
-      );
+      // Back on the wallpapers, the studio wall is still the pick.
       await user.click(screen.getByRole('radio', { name: /^wallpaper$/i }));
       await waitFor(() => expect(renderer.setBackdrop).toHaveBeenLastCalledWith(null));
       // Picking a wallpaper leaves the studio wall.

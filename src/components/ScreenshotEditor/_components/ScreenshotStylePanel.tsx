@@ -2,7 +2,6 @@ import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ASPECT_RATIO_PRESETS,
-  GRADIENT_PRESETS,
   WALLPAPER_PRESETS,
   type BackgroundSettings,
   type BackgroundType,
@@ -36,7 +35,7 @@ import {
 import { WindowBarPreviewStage } from 'src/components/WindowBarPreviewStage';
 import type { StylePreset } from 'src/types';
 
-const BACKGROUND_TYPES: Exclude<BackgroundType, 'blur'>[] = ['wallpaper', 'gradient', 'solid'];
+const BACKGROUND_TYPES: Exclude<BackgroundType, 'blur' | 'gradient'>[] = ['wallpaper', 'solid'];
 
 type Props = {
   style: ScreenshotStyle;
@@ -114,8 +113,7 @@ export const ScreenshotStylePanel = ({
       ...(style.studio ? { studio: { ...style.studio, studioWall: index === null } } : {}),
     });
 
-  const backgroundLabel = (type: Exclude<BackgroundType, 'blur'>) =>
-    type === 'gradient' ? t('gradient') : tFrame(type);
+  const backgroundLabel = (type: (typeof BACKGROUND_TYPES)[number]) => tFrame(type);
 
   const studio = style.studio ?? FLAT_STUDIO;
   const studioWall = studio.lookId !== null && studio.studioWall === true;
@@ -218,33 +216,6 @@ export const ScreenshotStylePanel = ({
                 draggable={false}
               />
             </button>
-          ))}
-        </div>
-      )}
-
-      {background.type === 'gradient' && (
-        <div className="grid grid-cols-5 gap-1.5">
-          {GRADIENT_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              title={preset.label}
-              aria-label={preset.label}
-              aria-pressed={background.gradientPresetId === preset.id}
-              className={cn(
-                'cursor-pointer rounded-md border-2 transition-all active:scale-[0.95]',
-                background.gradientPresetId === preset.id
-                  ? 'border-sf-border-lt'
-                  : 'border-transparent hover:border-sf-border-lt',
-              )}
-              style={{
-                aspectRatio: '1',
-                background: `linear-gradient(${preset.angle}deg, ${preset.stops
-                  .map((stop) => `${stop.color} ${stop.offset * 100}%`)
-                  .join(', ')})`,
-              }}
-              onClick={() => patchBackground({ gradientPresetId: preset.id })}
-            />
           ))}
         </div>
       )}

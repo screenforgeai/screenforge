@@ -193,12 +193,16 @@ const initialStyle = (capture: ScreenshotCapture): ScreenshotStyle => {
   return {
     // A preview frame already carries the project's frame; don't wrap it twice.
     frameEnabled: capture.kind !== 'frame',
-    // Every screenshot starts in the studio, through the macro lens; the canvas is the only control.
-    studio: { ...FLAT_STUDIO, lookId: 'macro' },
+    // Every screenshot starts in the studio, through the macro lens, on its dark studio wall.
+    studio: { ...FLAT_STUDIO, lookId: 'macro', studioWall: true },
     // 16:9 to start: ready for a slide, a post or a page header.
     aspectRatioId: '16:9',
-    // The recorder's backdrop, with square corners to start with.
-    background: { ...(recordingResult ? frame.background : DEFAULT_BACKGROUND), cornerRadius: 0 },
+    // The recorder's padding and wallpaper (for when the studio can't start), with square corners.
+    background: {
+      ...(recordingResult ? frame.background : DEFAULT_BACKGROUND),
+      type: 'wallpaper',
+      cornerRadius: 0,
+    },
     // The project's window bar to start with; a preview frame already has it
     // drawn in, so it starts without one (any capture can still pick a bar).
     ...(recordingResult &&
@@ -514,7 +518,8 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     return pose;
   }, [display.height, display.width, drag, studio]);
 
-  useEffect(() => {
+  // Before paint, so a drag reaches the camera in the frame it happens, not the one after.
+  useLayoutEffect(() => {
     const renderer = studioRef.current;
     if (!renderer) {
       return;
