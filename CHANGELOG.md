@@ -1,5 +1,19 @@
 # screenforge
 
+## 0.9.0
+
+### Minor Changes
+
+- 46ac82a: Take a screenshot from any app with Option+Shift+S on macOS (Alt+Shift+S on Windows and Linux): drag over an area, or press Enter for the whole screen, and it opens in the Screenshot editor. Option+Shift+R (Alt+Shift+R) opens the toolbar ready to record. The menu bar icon has a new Take Screenshot item, the toolbar's tooltips and the Keyboard Shortcuts dialog list both shortcuts, and arrow keys nudge a selected area (hold Shift to move it faster). If another app already uses one of these shortcuts, Screenforge leaves it alone and doesn't show it.
+- 120c2c3: The Mouse click sound is now a real recorded mouse button, pressed and released, and a second recorded option, Mouse 2, joins it. Trackpad and Soft are unchanged. Pop and Tick are gone; projects that used them now open with Soft.
+- ffacda6: Add a window bar: a Mac, Windows or browser-style bar drawn over the top of your recording. Pick a style under Window bar in the Frame panel (hover a style to preview it), choose its theme (Auto matches the page), and type what it shows (it starts with the recorded page's title; an address gets the lock icon). Frame's corners and shadow wrap the bar and the page as one window, and the bar zooms with it. Screenshots can get the same bar, drawn sharp at 2x, whatever was captured. When you record a browser window and turn the bar on, Screenforge looks for the browser's own toolbar and crops it off when it's sure, so the two bars don't stack. Otherwise it asks you to adjust the crop, and you can drag the crop line yourself or turn it off. Style presets now save the window bar too.
+
+### Patch Changes
+
+- a89c732: Area recordings now open the moment you stop, at any length. They used to be trimmed to the area first, which took about half the recording's length and failed after 15 seconds, so area recordings longer than about 45 seconds never opened. The editor now crops to exactly the area you selected, and you can adjust it afterwards in Frame. Auto zoom and the zoom position picker now aim correctly in any cropped recording.
+- 7aa8aeb: Click sounds no longer sound hollow or "zappy" on trackpad taps. Tap-to-click reports the release a few milliseconds after the press, which played the click twice almost on top of itself; releases that close to their press are now skipped, so a tap sounds like a single click.
+- 96ef01f: The What's new dialog is easier to read: each new feature gets its own heading with the details below it, fixes are listed compactly with the first few shown and the rest a click away, and a Full changelog link opens every release on the website.
+
 ## 0.8.0
 
 ### Minor Changes
