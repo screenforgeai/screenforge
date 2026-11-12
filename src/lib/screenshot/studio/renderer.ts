@@ -289,6 +289,12 @@ export class StudioRenderer {
   /** The user's turn of the camera around the screenshot (radians) and its zoom (1 = the look's). */
   private orbit: StudioPoint = { x: 0, y: 0 };
   private zoom = 1;
+  /** Focus point on the screen (screen-canvas pixels): chosen, else automatic, else the centre. */
+  private focus: { x: number; y: number } | null = null;
+  private autoFocus: { x: number; y: number } | null = null;
+  private focusRange = 0;
+  /** Light strength as a share of the look's own. */
+  private lightPower = 1;
   private handle: StudioPoint | null = null;
   private width = 1;
   private height = 1;
@@ -582,6 +588,7 @@ export class StudioRenderer {
     const bokehUniforms = this.bokeh.uniforms as Record<string, THREE.IUniform>;
     bokehUniforms.uFringe = { value: 0 };
     bokehUniforms.uRim = { value: 1.2 };
+    bokehUniforms.uRange = { value: 0 };
     const bokehMaterial = new THREE.ShaderMaterial({
       defines: { DEPTH_PACKING: 1, PERSPECTIVE_CAMERA: 1 },
       uniforms: bokehUniforms,
@@ -731,6 +738,56 @@ export class StudioRenderer {
     this.invalidate();
   }
 
+  /**
+   * Depth of field: what is sharp. `focus` is a point on the screen (screen-canvas pixels) the
+   * user chose, `auto` the one picked from the screenshot's detail; `range` (0..1) widens the
+   * area around it that stays completely sharp.
+   */
+  setFocus(
+    focus: { x: number; y: number } | null,
+    auto: { x: number; y: number } | null,
+    range: number,
+  ): void {
+    this.focus = focus ? { ...focus } : null;
+    this.autoFocus = auto ? { ...auto } : null;
+    this.focusRange = range;
+    this.invalidate();
+  }
+
+  /** Where depth of field is focused now (screen-canvas pixels), chosen or automatic. */
+  getFocusPoint(): { x: number; y: number } {
+    return this.focus ?? this.autoFocus ?? { x: this.media.w / 2, y: this.media.h / 2 };
+  }
+
+  /** Light strength as a share of the look's own (key light and reflections together). */
+  setLightPower(power: number): void {
+    if (power === this.lightPower) {
+      return;
+    }
+    this.lightPower = power;
+    this.applyEnv();
+  }
+
+  /** A screen-canvas pixel as a point in the scene, on the screenshot's face. */
+  private imagePointToWorld(x: number, y: number): THREE.Vector3 | null {
+    const face = this.face;
+    const texture = this.screenTex;
+    if (!face || !texture) {
+      return null;
+    }
+    this.updatePanelTransform();
+    this.panel.updateMatrixWorld(true);
+    const fu = (x / this.media.w - texture.offset.x) / texture.repeat.x;
+    const fv = (1 - y / this.media.h - texture.offset.y) / texture.repeat.y;
+    const { halfWidth = 1, halfHeight = 1 } = this.panel.userData as {
+      halfWidth?: number;
+      halfHeight?: number;
+    };
+    return face.localToWorld(
+      new THREE.Vector3((fu - 0.5) * 2 * halfWidth, (fv - 0.5) * 2 * halfHeight, 0),
+    );
+  }
+
   /** The closest the screenshot may come for the current look without reaching the lens. */
   maxDepth(): number {
     return Math.max(0, 1 - this.panelReach() / this.sphericalFor(this.s.camera).radius);
@@ -805,23 +862,11 @@ export class StudioRenderer {
 
   /** Where a screenshot pixel lands on the output (fractions, 0,0 = top left). */
   projectImagePoint(x: number, y: number): StudioPoint | null {
-    const face = this.face;
-    const texture = this.screenTex;
-    if (!face || !texture) {
+    const world = this.imagePointToWorld(x, y);
+    if (!world) {
       return null;
     }
-    this.updatePanelTransform();
-    this.panel.updateMatrixWorld(true);
     this.camera.updateMatrixWorld();
-    const fu = (x / this.media.w - texture.offset.x) / texture.repeat.x;
-    const fv = (1 - y / this.media.h - texture.offset.y) / texture.repeat.y;
-    const { halfWidth = 1, halfHeight = 1 } = this.panel.userData as {
-      halfWidth?: number;
-      halfHeight?: number;
-    };
-    const world = face.localToWorld(
-      new THREE.Vector3((fu - 0.5) * 2 * halfWidth, (fv - 0.5) * 2 * halfHeight, 0),
-    );
     const ndc = world.project(this.camera);
     const target = new THREE.Vector2(ndc.x * 0.5 + 0.5, ndc.y * 0.5 + 0.5);
     // Undo the fish eye: find the output uv the lens maps onto this point.
@@ -1064,12 +1109,12 @@ export class StudioRenderer {
     for (const m of this.envMats) {
       m.envMapRotation.set(0, rot, 0);
       const boost = m.userData.isScreen ? 0.4 + 1.2 * s.reflect : 1;
-      m.envMapIntensity = (m.userData.envBase as number) * s.envInt * boost;
+      m.envMapIntensity = (m.userData.envBase as number) * s.envInt * this.lightPower * boost;
       if (m.userData.isScreen) {
         m.clearcoat = s.reflect;
       }
     }
-    this.key.intensity = LIGHTS[s.light].key * s.envInt;
+    this.key.intensity = LIGHTS[s.light].key * s.envInt * this.lightPower;
     this.invalidate();
   }
 
@@ -1405,7 +1450,13 @@ export class StudioRenderer {
     this.bg.position.copy(this.camera.position);
     if (this.s.dof) {
       const u = this.bokeh.uniforms as Record<string, THREE.IUniform>;
-      u.focus.value = this.camera.position.distanceTo(this.panelTarget);
+      // Focus is the focus point's depth along the camera's view, as the lens blur measures it.
+      const point = this.getFocusPoint();
+      const world = this.imagePointToWorld(point.x, point.y) ?? this.panelTarget.clone();
+      this.camera.updateMatrixWorld();
+      u.focus.value = Math.max(-world.applyMatrix4(this.camera.matrixWorldInverse).z, 0.05);
+      // Sharp area: up to 40% of the focus distance either side stays completely sharp.
+      u.uRange.value = this.focusRange * (u.focus.value as number) * 0.4;
       u.aperture.value = this.s.dofAmt * 0.12;
       u.maxblur.value = 0.003 + this.s.dofAmt * 0.028;
       u.uFringe.value = this.s.fringe * 0.08;

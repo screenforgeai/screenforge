@@ -62,3 +62,14 @@ export const MAX_ZOOM = 2.5;
 /** Zoom after a wheel step: the distance is scaled, so each notch feels the same. */
 export const zoomAfterWheel = (zoom: number, deltaY: number): number =>
   clamp(zoom * Math.exp(deltaY * WHEEL_RATE), MIN_ZOOM, MAX_ZOOM);
+
+/** Sharp area around the focus point, 0..1 (0 = only the focus plane is sharp). */
+export const focusRangeAfterWheel = (range: number, deltaY: number): number =>
+  clamp(range - deltaY * 0.001, 0, 1);
+
+/** Light strength as a share of the look's own (1). */
+export const MIN_LIGHT_POWER = 0.4;
+export const MAX_LIGHT_POWER = 2;
+
+export const lightPowerAfterWheel = (power: number, deltaY: number): number =>
+  clamp(power * Math.exp(-deltaY * WHEEL_RATE), MIN_LIGHT_POWER, MAX_LIGHT_POWER);

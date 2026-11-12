@@ -5,11 +5,15 @@ import {
   MAX_ORBIT_DOWN,
   MAX_ORBIT_UP,
   MAX_ORBIT_X,
+  MAX_LIGHT_POWER,
   MAX_ZOOM,
   MIN_DEPTH,
+  MIN_LIGHT_POWER,
   MIN_ZOOM,
   clampOffset,
   depthAfterWheel,
+  focusRangeAfterWheel,
+  lightPowerAfterWheel,
   orbitAfterDrag,
   zoomAfterWheel,
 } from './pose';
@@ -74,5 +78,23 @@ describe('zoomAfterWheel', () => {
     expect(zoomAfterWheel(zoomAfterWheel(1, -240), 240)).toBeCloseTo(1, 6);
     expect(zoomAfterWheel(1, -100000)).toBe(MIN_ZOOM);
     expect(zoomAfterWheel(1, 100000)).toBe(MAX_ZOOM);
+  });
+});
+
+describe('focusRangeAfterWheel', () => {
+  it('widens the sharp area on scroll up and narrows it on scroll down, within 0..1', () => {
+    expect(focusRangeAfterWheel(0.2, -100)).toBeGreaterThan(0.2);
+    expect(focusRangeAfterWheel(0.2, 100)).toBeLessThan(0.2);
+    expect(focusRangeAfterWheel(0, 1000)).toBe(0);
+    expect(focusRangeAfterWheel(1, -1000)).toBe(1);
+  });
+});
+
+describe('lightPowerAfterWheel', () => {
+  it('brightens on scroll up and dims on scroll down, within its range', () => {
+    expect(lightPowerAfterWheel(1, -100)).toBeGreaterThan(1);
+    expect(lightPowerAfterWheel(1, 100)).toBeLessThan(1);
+    expect(lightPowerAfterWheel(1, -100000)).toBe(MAX_LIGHT_POWER);
+    expect(lightPowerAfterWheel(1, 100000)).toBe(MIN_LIGHT_POWER);
   });
 });

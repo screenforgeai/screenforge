@@ -9,7 +9,12 @@ vi.mock('src/lib/analytics', () => ({ trackEvent: vi.fn() }));
 // WebGL is not available in jsdom; a stand-in renderer records what the editor asks of it.
 const studio = vi.hoisted(() => ({
   fail: false,
+  /** Where the fake renderer says a screenshot point lands on the canvas (fractions). */
+  project: null as { x: number; y: number } | null,
   instances: [] as {
+    settings: { lean: number; dof: boolean };
+    setFocus: ReturnType<typeof vi.fn>;
+    setLightPower: ReturnType<typeof vi.fn>;
     start: () => void;
     renderStill: (w: number, h: number) => HTMLCanvasElement;
     setScreen: (...args: unknown[]) => void;
@@ -33,15 +38,20 @@ vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
     maxDepth = vi.fn(() => 0.85);
     setView = vi.fn();
     minZoom = vi.fn(() => 0.35);
-    pickImagePoint = vi.fn(() => null);
-    projectImagePoint = vi.fn(() => null);
+    setFocus = vi.fn();
+    setLightPower = vi.fn();
+    getFocusPoint = vi.fn(() => ({ x: 400, y: 300 }));
+    pickImagePoint = vi.fn((): { x: number; y: number } | null => null);
+    projectImagePoint = vi.fn(() => studio.project);
+    settings: { lean: number; dof: boolean };
     renderStill = vi.fn((width: number, height: number) =>
       Object.assign(document.createElement('canvas'), { width, height }),
     );
-    constructor() {
+    constructor(_canvas: HTMLCanvasElement, settings: { lean: number; dof: boolean }) {
       if (studio.fail) {
         throw new Error('Studio looks need WebGL 2');
       }
+      this.settings = settings;
       studio.instances.push(this);
     }
   }
@@ -110,6 +120,10 @@ class LoadingImage {
 const presets: StylePreset[] = [];
 
 beforeEach(() => {
+  // The tests outside 'studio' cover the flat frame: the editor's fallback without WebGL 2.
+  studio.fail = true;
+  studio.project = null;
+  studio.instances.length = 0;
   vi.stubGlobal('Image', LoadingImage);
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() =>
     noopContext()) as unknown as HTMLCanvasElement['getContext']);
@@ -140,73 +154,24 @@ const renderEditor = async (onClose = vi.fn()) => {
 };
 
 describe('ScreenshotEditor', () => {
-  describe('studio looks', () => {
+  describe('studio', () => {
     beforeEach(() => {
       studio.fail = false;
-      studio.instances.length = 0;
     });
 
-    it('starts flat, with the looks offered beside it', async () => {
-      await renderEditor();
-      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-      expect(screen.getByRole('button', { name: /macro/i })).toHaveAttribute(
-        'aria-pressed',
-        'false',
-      );
-      expect(studio.instances).toHaveLength(0);
-    });
-
-    it('renders a picked look in the studio and exports the studio still', async () => {
-      const user = userEvent.setup();
-      await renderEditor();
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      await waitFor(() => expect(studio.instances).toHaveLength(1));
-      const renderer = studio.instances[0];
-      expect(renderer.start).toHaveBeenCalled();
-      await waitFor(() => expect(renderer.setScreen).toHaveBeenCalled());
-      // The flat frame's own controls give way to the look.
-      expect(screen.queryByRole('switch', { name: /^frame$/i })).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: /^copy$/i }));
-      await waitFor(() => expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalled());
-      expect(renderer.renderStill).toHaveBeenCalled();
-    });
-
-    it('keeps one undo step when the active look or the light handle is just clicked', async () => {
-      const user = userEvent.setup();
-      await renderEditor();
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      await waitFor(() => expect(studio.instances).toHaveLength(1));
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
-      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+    // jsdom lays nothing out: give every element (the stage too) a real size.
+    const withLayout = () =>
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
         left: 0,
         top: 0,
-        width: 800,
-        height: 500,
-        right: 800,
-        bottom: 500,
+        width: 848,
+        height: 548,
+        right: 848,
+        bottom: 548,
         x: 0,
         y: 0,
         toJSON: () => ({}),
       });
-      const handle = screen.getByRole('button', { name: /light position/i });
-      handle.setPointerCapture = vi.fn();
-      fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
-      fireEvent.pointerUp(handle, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
-      fireEvent.doubleClick(handle);
-      // A single Undo goes all the way back to Flat: none of the clicks above was recorded.
-      await user.click(screen.getByRole('button', { name: /^undo$/i }));
-      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-      expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
-    });
-
     const studioCanvas = () => {
       const canvas = document.querySelector('canvas') as HTMLCanvasElement;
       vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
@@ -223,38 +188,100 @@ describe('ScreenshotEditor', () => {
       canvas.setPointerCapture = vi.fn();
       return canvas;
     };
+    const press = (el: Element, x: number, y: number) =>
+      fireEvent.pointerDown(el, { button: 0, pointerId: 1, clientX: x, clientY: y });
+    const release = (el: Element, x: number, y: number) =>
+      fireEvent.pointerUp(el, { button: 0, pointerId: 1, clientX: x, clientY: y });
     const drag = (canvas: HTMLCanvasElement, from: [number, number], to: [number, number]) => {
+      press(canvas, ...from);
+      fireEvent.pointerMove(canvas, { button: 0, pointerId: 1, clientX: to[0], clientY: to[1] });
+      release(canvas, ...to);
+    };
+    const opened = async () => {
+      await renderEditor();
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      return studio.instances[0];
+    };
+
+    it('opens every screenshot through the macro lens, with no style panel', async () => {
+      const renderer = await opened();
+      expect(renderer.settings.lean).toBe(58);
+      expect(renderer.settings.dof).toBe(true);
+      expect(renderer.start).toHaveBeenCalled();
+      expect(screen.queryByText(/^style$/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('switch', { name: /^frame$/i })).not.toBeInTheDocument();
+      // The gestures are written on the stage instead.
+      expect(screen.getByText(/click to focus/i)).toBeInTheDocument();
+    });
+
+    it('exports the finished studio still', async () => {
+      const user = userEvent.setup();
+      const renderer = await opened();
+      await waitFor(() => expect(renderer.setScreen).toHaveBeenCalled());
+      await user.click(screen.getByRole('button', { name: /^copy$/i }));
+      await waitFor(() => expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalled());
+      expect(renderer.renderStill).toHaveBeenCalled();
+    });
+
+    it('focuses where the screenshot is clicked, and Alt-click focuses with any tool', async () => {
+      const user = userEvent.setup();
+      const renderer = await opened();
+      const canvas = studioCanvas();
+      const lastFocus = () => renderer.setFocus.mock.calls.at(-1)?.[0];
+      renderer.pickImagePoint.mockReturnValue({ x: 100, y: 80 });
+      press(canvas, 200, 150);
+      release(canvas, 200, 150);
+      await waitFor(() => expect(lastFocus()).toEqual({ x: 100, y: 80 }));
+      // A click with a drawing tool draws nothing, so it focuses too.
+      await user.click(screen.getByRole('button', { name: /^arrow$/i }));
+      renderer.pickImagePoint.mockReturnValue({ x: 300, y: 200 });
+      press(canvas, 300, 200);
+      release(canvas, 300, 200);
+      await waitFor(() => expect(lastFocus()).toEqual({ x: 300, y: 200 }));
+      renderer.pickImagePoint.mockReturnValue({ x: 50, y: 40 });
       fireEvent.pointerDown(canvas, {
         button: 0,
         pointerId: 1,
-        clientX: from[0],
-        clientY: from[1],
+        clientX: 50,
+        clientY: 40,
+        altKey: true,
       });
-      fireEvent.pointerMove(canvas, { button: 0, pointerId: 1, clientX: to[0], clientY: to[1] });
-      fireEvent.pointerUp(canvas, { button: 0, pointerId: 1, clientX: to[0], clientY: to[1] });
-    };
+      await waitFor(() => expect(lastFocus()).toEqual({ x: 50, y: 40 }));
+    });
 
-    // jsdom lays nothing out: give every element (the stage too) a real size.
-    const withLayout = () =>
-      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        width: 848,
-        height: 548,
-        right: 848,
-        bottom: 548,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
+    it('widens the sharp area on scroll over the focus ring, with a readout', async () => {
+      studio.project = { x: 0.5, y: 0.5 };
+      const renderer = await opened();
+      const ring = await screen.findByRole('button', { name: /focus point/i });
+      fireEvent.wheel(ring, { deltaY: -100 });
+      fireEvent.wheel(ring, { deltaY: -100 });
+      await waitFor(() => expect(renderer.setFocus.mock.calls.at(-1)?.[2]).toBeCloseTo(0.2, 5));
+      expect(screen.getByText('Sharp area 20%')).toBeInTheDocument();
+    });
 
-    it('turns the camera on a drag off the screenshot, and zooms on scroll', async () => {
+    it('brightens the light on scroll over the sun, and a double-click resets it', async () => {
+      const renderer = await opened();
+      const sun = screen.getByRole('button', { name: /^light$/i });
+      fireEvent.wheel(sun, { deltaY: -100 });
+      await waitFor(() => expect(renderer.setLightPower.mock.calls.at(-1)?.[0]).toBeGreaterThan(1));
+      expect(screen.getByText(/^Light \d+%$/)).toBeInTheDocument();
+      fireEvent.doubleClick(sun);
+      await waitFor(() => expect(renderer.setLightPower.mock.calls.at(-1)?.[0]).toBe(1));
+    });
+
+    it('a plain click on the sun changes nothing and adds no undo step', async () => {
       withLayout();
-      const user = userEvent.setup();
-      await renderEditor();
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      await waitFor(() => expect(studio.instances).toHaveLength(1));
-      const renderer = studio.instances[0];
+      await opened();
+      const sun = screen.getByRole('button', { name: /^light$/i });
+      sun.setPointerCapture = vi.fn();
+      press(sun, 10, 10);
+      release(sun, 10, 10);
+      expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
+    });
+
+    it('turns the camera on a drag, zooms on scroll, and a double-click on empty space resets it', async () => {
+      withLayout();
+      const renderer = await opened();
       const canvas = studioCanvas();
       const lastView = () =>
         renderer.setView.mock.calls.at(-1) as [{ x: number; y: number }, number];
@@ -264,15 +291,13 @@ describe('ScreenshotEditor', () => {
       expect(renderer.setOffset.mock.calls.at(-1)?.[0]).toEqual({ x: 0, y: 0 });
       fireEvent.wheel(canvas, { deltaY: -100 });
       await waitFor(() => expect(lastView()[1]).toBeLessThan(1));
+      fireEvent.doubleClick(canvas, { clientX: 5, clientY: 5 });
+      await waitFor(() => expect(lastView()).toEqual([{ x: 0, y: 0 }, 1]));
     });
 
     it('moves the screenshot with Space + drag', async () => {
       withLayout();
-      const user = userEvent.setup();
-      await renderEditor();
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      await waitFor(() => expect(studio.instances).toHaveLength(1));
-      const renderer = studio.instances[0];
+      const renderer = await opened();
       const canvas = studioCanvas();
       fireEvent.keyDown(window, { code: 'Space', key: ' ' });
       drag(canvas, [400, 250], [600, 250]);
@@ -285,97 +310,35 @@ describe('ScreenshotEditor', () => {
 
     it('moves the screenshot in depth with Space + scroll, as one undo step', async () => {
       const user = userEvent.setup();
-      await renderEditor();
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      await waitFor(() => expect(studio.instances).toHaveLength(1));
-      const renderer = studio.instances[0];
+      const renderer = await opened();
       const canvas = document.querySelector('canvas') as HTMLCanvasElement;
       const lastDepth = () => renderer.setOffset.mock.calls.at(-1)?.[1] as number;
       fireEvent.keyDown(window, { code: 'Space', key: ' ' });
       fireEvent.wheel(canvas, { deltaY: -100 });
       fireEvent.wheel(canvas, { deltaY: -100 });
       await waitFor(() => expect(lastDepth()).toBeGreaterThan(0.2));
-      // Scrolling back out goes behind the look's own framing.
       fireEvent.wheel(canvas, { deltaY: 600 });
       await waitFor(() => expect(lastDepth()).toBeLessThan(0));
       fireEvent.keyUp(window, { code: 'Space', key: ' ' });
-      // The whole gesture undoes at once, leaving the look on.
       await user.click(screen.getByRole('button', { name: /^undo$/i }));
       await waitFor(() => expect(lastDepth()).toBe(0));
-      expect(screen.getByRole('button', { name: /night glow/i })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-    });
-
-    it('switches looks on the same renderer', async () => {
-      const user = userEvent.setup();
-      await renderEditor();
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      await waitFor(() => expect(studio.instances).toHaveLength(1));
-      await user.click(screen.getByRole('button', { name: /macro/i }));
-      await waitFor(() => expect(studio.instances[0].setSettings).toHaveBeenCalled());
-      expect(studio.instances).toHaveLength(1);
-    });
-
-    it('stays usable on the flat frame when the studio cannot start', async () => {
-      studio.fail = true;
-      const user = userEvent.setup();
-      const { container } = render(<ScreenshotEditor capture={capture} onClose={vi.fn()} />);
-      await act(async () => {
-        await Promise.resolve();
-      });
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      expect(container.querySelector('canvas')).toBeInTheDocument();
-      // The panel shows what is really on screen, and the looks cannot be picked here.
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
-          'aria-pressed',
-          'true',
-        ),
-      );
-      expect(screen.getByRole('button', { name: /night glow/i })).toBeDisabled();
-      // Undo and redo cannot bring the failed look back into the panel.
-      await user.click(screen.getByRole('button', { name: /^undo$/i }));
-      await user.click(screen.getByRole('button', { name: /^redo$/i }));
-      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-      expect(screen.getByRole('switch', { name: /^frame$/i })).toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: /^copy$/i }));
-      await waitFor(() =>
-        expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalledWith(OUTPUT),
-      );
+      expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
     });
 
     it('maps the pointer through the tilted screen in capture pixels, even past the size cap', async () => {
       // 16384 px wide: the studio's screen canvas is capped at 8192, half the capture's size.
       const big: ScreenshotCapture = { ...capture, width: 16384, height: 8192 };
       const user = userEvent.setup();
-      const { container } = render(<ScreenshotEditor capture={big} onClose={vi.fn()} />);
+      render(<ScreenshotEditor capture={big} onClose={vi.fn()} />);
       await act(async () => {
         await Promise.resolve();
       });
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
       await waitFor(() => expect(studio.instances).toHaveLength(1));
       const renderer = studio.instances[0];
       renderer.pickImagePoint.mockReturnValue({ x: 4096, y: 2048 });
-      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
-      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        width: 800,
-        height: 500,
-        right: 800,
-        bottom: 500,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
-      canvas.setPointerCapture = vi.fn();
+      const canvas = studioCanvas();
       await user.click(screen.getByRole('button', { name: /^text$/i }));
-      fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 250 });
+      press(canvas, 400, 250);
       // The text box is placed at capture pixel (8192, 4096) and shown where that lands on the screen.
       await waitFor(() => expect(renderer.projectImagePoint).toHaveBeenCalledWith(4096, 2048));
       // 100 capture pixels to the right is 50 on the half-size screen: tells the two spaces apart.
@@ -385,37 +348,39 @@ describe('ScreenshotEditor', () => {
 
     it('draws an annotation straight onto the studio screen', async () => {
       const user = userEvent.setup();
-      const { container } = render(<ScreenshotEditor capture={capture} onClose={vi.fn()} />);
-      await act(async () => {
-        await Promise.resolve();
-      });
-      await user.click(screen.getByRole('button', { name: /night glow/i }));
-      await waitFor(() => expect(studio.instances).toHaveLength(1));
-      const renderer = studio.instances[0];
-      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
-      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        width: 800,
-        height: 500,
-        right: 800,
-        bottom: 500,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      });
-      canvas.setPointerCapture = vi.fn();
+      const renderer = await opened();
+      const canvas = studioCanvas();
       await user.click(screen.getByRole('button', { name: /^box$/i }));
       renderer.pickImagePoint.mockReturnValue({ x: 100, y: 100 });
-      fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 200, clientY: 200 });
+      press(canvas, 200, 200);
       renderer.pickImagePoint.mockReturnValue({ x: 400, y: 300 });
       fireEvent.pointerMove(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
-      fireEvent.pointerUp(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+      release(canvas, 400, 300);
       // The new box is selected, so it can be deleted, and it is undoable.
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /delete annotation/i })).toBeEnabled(),
       );
       expect(screen.getByRole('button', { name: /^undo$/i })).toBeEnabled();
+    });
+
+    it('falls back to the flat frame, with its style panel, when the studio cannot start', async () => {
+      studio.fail = true;
+      const user = userEvent.setup();
+      const { container } = render(<ScreenshotEditor capture={capture} onClose={vi.fn()} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(container.querySelector('canvas')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: /macro/i })).toBeDisabled();
+      expect(screen.getByRole('switch', { name: /^frame$/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^copy$/i }));
+      await waitFor(() =>
+        expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalledWith(OUTPUT),
+      );
     });
   });
 

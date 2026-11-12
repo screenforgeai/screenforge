@@ -1,6 +1,7 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { HugeiconsProps, IconSvgElement } from '@hugeicons/react';
 import {
+  Sun03Icon,
   Add01Icon,
   ArrowDown01Icon,
   ArrowLeft01Icon,
@@ -206,3 +207,4 @@ export const IconCopy = createIcon(Copy01Icon, 'IconCopy');
 export const IconDownload = createIcon(Download01Icon, 'IconDownload');
 
 export type { CompatIconProps };
+export const IconSun = createIcon(Sun03Icon, 'IconSun');

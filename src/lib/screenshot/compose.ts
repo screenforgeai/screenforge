@@ -57,6 +57,12 @@ export interface ScreenshotStudio {
   orbit: { x: number; y: number };
   /** Camera distance as a share of the look's own (1). */
   zoom: number;
+  /** The depth-of-field focus point, in capture pixels; null = automatic (the most detailed part). */
+  focus: { x: number; y: number } | null;
+  /** How much stays completely sharp around the focus point, 0..1. */
+  focusRange: number;
+  /** Light strength as a share of the look's own (1). */
+  lightPower: number;
   /** Light handle position (fractions of the output), or null for the look's own light. */
   light: { x: number; y: number } | null;
 }
@@ -85,6 +91,9 @@ export const FLAT_STUDIO: ScreenshotStudio = {
   depth: 0,
   orbit: { x: 0, y: 0 },
   zoom: 1,
+  focus: null,
+  focusRange: 0,
+  lightPower: 1,
   light: null,
 };
 

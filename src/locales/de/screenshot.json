@@ -35,6 +35,12 @@
   "flat": "Flach",
   "studioHint": "Ziehe neben dem Screenshot, um die Kamera zu drehen, und scrolle zum Zoomen. Halte die Leertaste und ziehe, um den Screenshot zu verschieben, oder halte sie und scrolle, um ihn näher zu holen oder wegzuschieben. Ziehe das kleine Licht, um die Lichtrichtung zu ändern.",
   "resetPosition": "Position und Licht zurücksetzen",
-  "lightHandle": "Lichtposition",
-  "studioUnavailable": "Studio-Looks brauchen WebGL 2, das hier nicht verfügbar ist."
+  "lightHandle": "Licht",
+  "studioUnavailable": "Studio-Looks brauchen WebGL 2, das hier nicht verfügbar ist.",
+  "studioGestures": "Klicken zum Scharfstellen · Ziehen zum Drehen · Scrollen zum Zoomen · Leertaste + Ziehen zum Verschieben · Sonne ziehen für neues Licht",
+  "focusRing": "Fokuspunkt",
+  "focusRingTitle": "Auf das ziehen, was scharf sein soll. Scrollen, um den scharfen Bereich zu vergrößern. Doppelklick für automatischen Fokus.",
+  "lightHandleTitle": "Ziehen, um das Licht zu verschieben. Scrollen, um es heller oder dunkler zu machen. Doppelklick zum Zurücksetzen.",
+  "readoutSharpArea": "Scharfer Bereich {{value}} %",
+  "readoutLight": "Licht {{value}} %"
 }

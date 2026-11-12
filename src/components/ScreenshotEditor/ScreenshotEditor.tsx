@@ -50,7 +50,10 @@ import {
   StudioRenderer,
   clampOffset,
   defaultLightHandle,
+  autoFocusPoint,
   depthAfterWheel,
+  focusRangeAfterWheel,
+  lightPowerAfterWheel,
   orbitAfterDrag,
   zoomAfterWheel,
   getStudioLook,
@@ -75,6 +78,7 @@ import {
   IconHash,
   IconHighlighter,
   IconPointer,
+  IconSun,
   IconSquare,
   IconText,
   IconTrash,
@@ -97,8 +101,13 @@ type Drag =
   | { mode: 'move'; id: string; start: Point; current: Point }
   /** Studio: moving the screenshot around the output (client pixels). */
   | { mode: 'pan'; start: Point; current: Point; origin: StudioPoint }
-  /** Studio: turning the camera around the screenshot (client pixels). */
-  | { mode: 'orbit'; start: Point; current: Point; origin: StudioPoint }
+  /**
+   * Studio: turning the camera around the screenshot (client pixels). `tap`: the screenshot
+   * point under the press, which gets the focus if the press never moves.
+   */
+  | { mode: 'orbit'; start: Point; current: Point; origin: StudioPoint; tap: Point | null }
+  /** Studio: dragging the focus ring (capture pixels). */
+  | { mode: 'focus'; current: Point }
   /** Studio: moving the light handle (fractions of the output). */
   | { mode: 'light'; start: StudioPoint; current: StudioPoint };
 
@@ -139,20 +148,28 @@ const STUDIO_MAX_DPR = 2;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-/** Mean brightness of a screenshot, from a small downscaled copy. */
-const measureLuminance = (image: HTMLImageElement): number => {
+/**
+ * From a small downscaled copy of the screenshot: its mean brightness (how the studio exposes
+ * it) and its most detailed part (where the lens focuses until the user picks a spot).
+ */
+const measureImage = (image: HTMLImageElement): { lum: number; focus: StudioPoint } => {
+  const fallback = { lum: 0.5, focus: { x: 0.5, y: 0.5 } };
   try {
-    const canvas = Object.assign(document.createElement('canvas'), { width: 96, height: 60 });
+    const canvas = Object.assign(document.createElement('canvas'), { width: 192, height: 120 });
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) {
-      return 0.5;
+      return fallback;
     }
-    ctx.drawImage(image, 0, 0, 96, 60);
-    return imageStats(ctx.getImageData(0, 0, 96, 60).data).lum;
+    ctx.drawImage(image, 0, 0, 192, 120);
+    const data = ctx.getImageData(0, 0, 192, 120).data;
+    return { lum: imageStats(data).lum, focus: autoFocusPoint(data, 192, 120) };
   } catch {
-    return 0.5;
+    return fallback;
   }
 };
+
+/** How long the little readout ("Light 120%") stays after the last adjustment. */
+const READOUT_MS = 1200;
 
 const newId = () => crypto.randomUUID();
 
@@ -167,6 +184,8 @@ const initialStyle = (capture: ScreenshotCapture): ScreenshotStyle => {
   return {
     // A preview frame already carries the project's frame; don't wrap it twice.
     frameEnabled: capture.kind !== 'frame',
+    // Every screenshot starts in the studio, through the macro lens; the canvas is the only control.
+    studio: { ...FLAT_STUDIO, lookId: 'macro' },
     aspectRatioId: 'original',
     background: { ...(recordingResult ? frame.background : DEFAULT_BACKGROUND) },
     // The project's window bar to start with; a preview frame already has it
@@ -197,7 +216,8 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const { style } = annotations;
   const setStyle = (next: ScreenshotStyle, group?: string) =>
     dispatch({ type: 'setStyle', style: next, group });
-  const [tool, setTool] = useState<AnnotationTool>('arrow');
+  // Select first: a drag turns the camera, a click focuses. Pick a tool to annotate.
+  const [tool, setTool] = useState<AnnotationTool>('select');
   const [color, setColor] = useState<string>(ANNOTATION_COLORS[0]);
   const [rawSelectedId, setSelectedId] = useState<string | null>(null);
   // An undo can take the selected shape away; treat it as deselected then.
@@ -210,6 +230,8 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const [busy, setBusy] = useState(false);
   const [studioFailed, setStudioFailed] = useState(false);
   const [studioReady, setStudioReady] = useState(0);
+  // The renderer has the screenshot: points on it can be placed on the canvas (the focus ring).
+  const [screenShown, setScreenShown] = useState(false);
   const [offScreen, setOffScreen] = useState(false);
   const studioCanvasRef = useRef<HTMLCanvasElement>(null);
   const studioRef = useRef<StudioRenderer | null>(null);
@@ -269,10 +291,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       );
   // CSS pixels per canvas pixel.
   const displayScale = display.width / geometry.canvasWidth;
-  const imageLum = useMemo(
-    () => (studioOn && image ? measureLuminance(image) : 0.5),
+  const measured = useMemo(
+    () => (studioOn && image ? measureImage(image) : { lum: 0.5, focus: { x: 0.5, y: 0.5 } }),
     [image, studioOn],
   );
+  const imageLum = measured.lum;
 
   useEffect(() => {
     const img = new Image();
@@ -379,6 +402,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
         selectedId: selected,
       });
       renderer.setScreen(canvas, canvas.width, canvas.height, imageLum);
+      setScreenShown(true);
     },
     [capture.height, capture.width, flatGeometry, flatStyle, image, imageLum],
   );
@@ -442,6 +466,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       orbit: studio.orbit,
       zoom: studio.zoom,
       light: studio.light,
+      focus: studio.focus,
+      focusRange: studio.focusRange,
+      lightPower: studio.lightPower,
     };
     if (display.width <= 0 || display.height <= 0) {
       return pose;
@@ -468,6 +495,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     if (drag?.mode === 'light') {
       return { ...pose, light: drag.current };
     }
+    if (drag?.mode === 'focus') {
+      return { ...pose, focus: drag.current };
+    }
     return pose;
   }, [display.height, display.width, drag, studio]);
 
@@ -479,7 +509,54 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     renderer.setView(studioPose.orbit, studioPose.zoom);
     renderer.setOffset(studioPose.offset, studioPose.depth);
     renderer.setLightHandle(studioPose.light);
-  }, [studioPose, studioReady]);
+    renderer.setLightPower(studioPose.lightPower);
+    // The renderer's screen is the flat canvas (capped in size): capture pixels → its pixels.
+    const k = flatGeometry.scale;
+    const toScreen = (p: Point) => ({ x: p.x * k, y: p.y * k });
+    renderer.setFocus(
+      studioPose.focus ? toScreen(studioPose.focus) : null,
+      {
+        x: measured.focus.x * flatGeometry.canvasWidth,
+        y: measured.focus.y * flatGeometry.canvasHeight,
+      },
+      studioPose.focusRange,
+    );
+  }, [flatGeometry, measured, studioPose, studioReady]);
+
+  // Where the focus ring sits on the canvas (fractions), following the camera and the screenshot.
+  // A passive effect after the one above, so it reads the renderer's new focus and camera.
+  const [focusAt, setFocusAt] = useState<StudioPoint | null>(null);
+  useEffect(() => {
+    const renderer = studioRef.current;
+    if (!renderer || !look?.settings.dof) {
+      setFocusAt(null);
+      return;
+    }
+    const point = renderer.getFocusPoint();
+    const at = renderer.projectImagePoint(point.x, point.y);
+    setFocusAt((prev) =>
+      prev && at && Math.abs(prev.x - at.x) < 1e-4 && Math.abs(prev.y - at.y) < 1e-4 ? prev : at,
+    );
+  }, [
+    display.height,
+    display.width,
+    flatGeometry,
+    look,
+    measured,
+    screenShown,
+    studioPose,
+    studioReady,
+  ]);
+
+  // A short readout while something is adjusted ("Light 120%"), next to what is being adjusted.
+  const [readout, setReadout] = useState<{ kind: 'focus' | 'light'; text: string } | null>(null);
+  const readoutTimer = useRef<number | undefined>(undefined);
+  const showReadout = (kind: 'focus' | 'light', text: string) => {
+    setReadout({ kind, text });
+    window.clearTimeout(readoutTimer.current);
+    readoutTimer.current = window.setTimeout(() => setReadout(null), READOUT_MS);
+  };
+  useEffect(() => () => window.clearTimeout(readoutTimer.current), []);
 
   // Space held hands the studio to the screenshot: drag moves it, scroll moves it in depth.
   // Without Space, a drag off the screenshot turns the camera and scroll zooms, as in a 3D viewer.
@@ -526,23 +603,38 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
 
   // Scroll (or pinch) over the studio: zoom, or with Space move the screenshot in depth. One
   // gesture is one undo step; the value is tracked here between renders so fast wheels lose nothing.
+  type WheelKind = 'zoom' | 'depth' | 'focusRange' | 'lightPower';
+  const hasFocusRing = focusAt !== null;
   const wheelGesture = useRef<{
     group: string;
     at: number;
-    kind: 'zoom' | 'depth';
+    kind: WheelKind;
     value: number;
   } | null>(null);
-  const handleWheel = useRef<(e: WheelEvent) => void>(() => undefined);
+  // Over the stage: zoom (Space: depth). Over the focus ring: the sharp area. Over the light: its
+  // strength. One gesture is one undo step; the value is tracked between renders so fast wheels
+  // lose nothing.
+  const handleWheel = useRef<(e: WheelEvent, over: 'stage' | 'focus' | 'light') => void>(
+    () => undefined,
+  );
   useLayoutEffect(() => {
-    handleWheel.current = (e: WheelEvent) => {
+    handleWheel.current = (e, over) => {
       const renderer = studioRef.current;
       if (!renderer || drag) {
         return;
       }
       e.preventDefault();
-      const kind = spaceRef.current ? 'depth' : 'zoom';
+      e.stopPropagation();
+      const kind: WheelKind =
+        over === 'focus'
+          ? 'focusRange'
+          : over === 'light'
+            ? 'lightPower'
+            : spaceRef.current
+              ? 'depth'
+              : 'zoom';
       const now = performance.now();
-      const current = kind === 'depth' ? studio.depth : studio.zoom;
+      const current = studio[kind];
       const gesture =
         wheelGesture.current &&
         wheelGesture.current.kind === kind &&
@@ -551,26 +643,42 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           : { group: `studio-${kind}-${now}`, at: now, kind, value: current };
       // Line-based wheels (deltaMode 1) report notches, not pixels.
       const delta = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
-      const value =
-        kind === 'depth'
-          ? Math.min(depthAfterWheel(gesture.value, delta), renderer.maxDepth())
-          : Math.max(zoomAfterWheel(gesture.value, delta), renderer.minZoom());
+      const next = {
+        depth: () => Math.min(depthAfterWheel(gesture.value, delta), renderer.maxDepth()),
+        zoom: () => Math.max(zoomAfterWheel(gesture.value, delta), renderer.minZoom()),
+        focusRange: () => focusRangeAfterWheel(gesture.value, delta),
+        lightPower: () => lightPowerAfterWheel(gesture.value, delta),
+      }[kind];
+      const value = next();
       wheelGesture.current = { ...gesture, at: now, value };
+      if (kind === 'focusRange') {
+        showReadout('focus', t('readoutSharpArea', { value: Math.round(value * 100) }));
+      } else if (kind === 'lightPower') {
+        showReadout('light', t('readoutLight', { value: Math.round(value * 100) }));
+      }
       if (value !== current) {
         setStyle({ ...style, studio: { ...studio, [kind]: value } }, gesture.group);
       }
     };
   });
+  const focusRingRef = useRef<HTMLButtonElement>(null);
+  const lightPuckRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const canvas = studioCanvasRef.current;
-    if (!studioOn || !canvas) {
-      return;
-    }
     // Not React's onWheel: that listener is passive and can't stop the page from zooming.
-    const onWheel = (e: WheelEvent) => handleWheel.current(e);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-    return () => canvas.removeEventListener('wheel', onWheel);
-  }, [studioOn, studioReady]);
+    const listeners: [HTMLElement | null, 'stage' | 'focus' | 'light'][] = [
+      [studioCanvasRef.current, 'stage'],
+      [focusRingRef.current, 'focus'],
+      [lightPuckRef.current, 'light'],
+    ];
+    const bound = listeners
+      .filter((entry): entry is [HTMLElement, 'stage' | 'focus' | 'light'] => !!entry[0])
+      .map(([el, over]) => {
+        const onWheel = (e: WheelEvent) => handleWheel.current(e, over);
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => el.removeEventListener('wheel', onWheel);
+      });
+    return () => bound.forEach((off) => off());
+  }, [studioOn, studioReady, hasFocusRing]);
 
   const lightHandle = studioPose.light ?? (look ? defaultLightHandle(look.settings.envRot) : null);
 
@@ -669,11 +777,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     setDrag({ mode: 'pan', start: at, current: at, origin: studio.offset });
   };
 
-  const startOrbit = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+  const startOrbit = (e: ReactPointerEvent<HTMLCanvasElement>, tap: Point | null) => {
     e.currentTarget.setPointerCapture?.(e.pointerId);
     setSelectedId(null);
     const at = { x: e.clientX, y: e.clientY };
-    setDrag({ mode: 'orbit', start: at, current: at, origin: studio.orbit });
+    setDrag({ mode: 'orbit', start: at, current: at, origin: studio.orbit, tap });
   };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -690,10 +798,17 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       return;
     }
     const point = toImagePoint(e);
+    // Studio, Alt-click (Option-click): focus right there, whatever the tool.
+    if (studioOn && e.altKey) {
+      if (point) {
+        commitStudio({ focus: point });
+      }
+      return;
+    }
     if (!point) {
       // Studio: off the screenshot, a drag turns the camera around it.
       if (studioOn) {
-        startOrbit(e);
+        startOrbit(e, null);
       }
       return;
     }
@@ -712,9 +827,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
 
     switch (tool) {
       case 'select':
-        // Studio: with Select, dragging the screenshot itself turns the camera too.
+        // Studio: with Select, a drag on the screenshot turns the camera; a click focuses there.
         if (studioOn) {
-          startOrbit(e);
+          startOrbit(e, point);
         } else {
           setSelectedId(null);
         }
@@ -743,6 +858,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       setDrag({ ...drag, current: { x: e.clientX, y: e.clientY } });
       return;
     }
+    if (drag?.mode === 'focus') {
+      return; // the ring's own handlers follow it
+    }
     const point = toImagePoint(e);
     if (studioOn && !drag && (point === null) !== offScreen) {
       setOffScreen(point === null);
@@ -768,10 +886,18 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       return;
     }
     if (drag.mode === 'pan' || drag.mode === 'orbit') {
-      if (drag.current.x !== drag.start.x || drag.current.y !== drag.start.y) {
+      const moved = Math.hypot(drag.current.x - drag.start.x, drag.current.y - drag.start.y) > 3;
+      if (moved) {
         commitStudio(
           drag.mode === 'pan' ? { offset: studioPose.offset } : { orbit: studioPose.orbit },
         );
+      } else if (drag.mode === 'orbit' && drag.tap) {
+        // A click, not a drag: focus there, like tapping a camera's screen.
+        commitStudio({ focus: drag.tap });
+      }
+    } else if (drag.mode === 'focus') {
+      if (!studio.focus || drag.current.x !== studio.focus.x || drag.current.y !== studio.focus.y) {
+        commitStudio({ focus: drag.current });
       }
     } else if (drag.mode === 'light') {
       // A plain click on the handle keeps the look's own light (and adds no undo step).
@@ -784,6 +910,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
         dispatch({ type: 'add', shape });
         // Selected straight away, so a colour pick or Delete applies to it.
         setSelectedId(shape.id);
+      } else if (studioOn) {
+        // A click with a drawing tool draws nothing: in the studio it focuses there instead.
+        commitStudio({ focus: drag.start });
       }
     } else {
       const dx = drag.current.x - drag.start.x;
@@ -799,6 +928,15 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const point = toImagePoint(e);
     if (!point) {
+      // Studio: a double-click on empty space puts the camera and the screenshot back.
+      if (studioOn) {
+        commitStudio({
+          offset: FLAT_STUDIO.offset,
+          depth: FLAT_STUDIO.depth,
+          orbit: FLAT_STUDIO.orbit,
+          zoom: FLAT_STUDIO.zoom,
+        });
+      }
       return;
     }
     const id = findShapeAt(annotations.shapes, point, hitTolerance);
@@ -1127,6 +1265,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           ref={stageRef}
           className="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden"
         >
+          {studioOn && (
+            <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] text-sf-muted">
+              {t('studioGestures')}
+            </div>
+          )}
           <div className="relative" style={{ width: display.width, height: display.height }}>
             {studioOn ? (
               // Keyed: a canvas that has held a 2D context can never take a WebGL one.
@@ -1148,12 +1291,62 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
                 {...canvasHandlers}
               />
             )}
+            {studioOn && focusAt && (
+              <button
+                ref={focusRingRef}
+                type="button"
+                aria-label={t('focusRing')}
+                title={t('focusRingTitle')}
+                data-auto={!studioPose.focus}
+                className={cn(
+                  'absolute -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full border-[1.5px] border-white/85 opacity-70 shadow-[0_0_0_1px_rgba(0,0,0,0.3),inset_0_0_0_1px_rgba(0,0,0,0.2)] transition-[opacity,width,height] duration-150 hover:opacity-100 active:cursor-grabbing',
+                  !studioPose.focus && 'border-dashed opacity-50',
+                )}
+                style={{
+                  left: focusAt.x * display.width,
+                  top: focusAt.y * display.height,
+                  width: 26 + studioPose.focusRange * 90,
+                  height: 26 + studioPose.focusRange * 90,
+                }}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) {
+                    return;
+                  }
+                  e.stopPropagation();
+                  e.currentTarget.setPointerCapture?.(e.pointerId);
+                  const point = studioPose.focus ?? toImagePoint(e);
+                  if (point) {
+                    setDrag({ mode: 'focus', current: point });
+                  }
+                }}
+                onPointerMove={(e) => {
+                  if (drag?.mode !== 'focus') {
+                    return;
+                  }
+                  // Off the screenshot the ring keeps its last spot on it.
+                  const point = toImagePoint(e);
+                  if (point) {
+                    setDrag({ mode: 'focus', current: point });
+                  }
+                }}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={() => setDrag(null)}
+                onDoubleClick={() => {
+                  if (studio.focus !== null) {
+                    commitStudio({ focus: null });
+                  }
+                }}
+              >
+                <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
+              </button>
+            )}
             {studioOn && lightHandle && (
               <button
+                ref={lightPuckRef}
                 type="button"
                 aria-label={t('lightHandle')}
-                title={t('lightHandle')}
-                className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full border border-white/70 bg-white/25 opacity-60 shadow-[0_0_0_1px_rgba(0,0,0,0.25),0_0_10px_rgba(255,255,255,0.45)] transition-opacity hover:opacity-100 active:cursor-grabbing"
+                title={t('lightHandleTitle')}
+                className="absolute flex size-7 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full bg-black/25 text-white/90 opacity-70 shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_14px_rgba(255,236,190,0.45)] backdrop-blur-[2px] transition-opacity hover:opacity-100 active:cursor-grabbing"
                 style={{
                   left: clamp(lightHandle.x, 0, 1) * display.width,
                   top: clamp(lightHandle.y, 0, 1) * display.height,
@@ -1181,11 +1374,30 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
                 onPointerUp={handlePointerUp}
                 onPointerCancel={() => setDrag(null)}
                 onDoubleClick={() => {
-                  if (studio.light !== null) {
-                    commitStudio({ light: null });
+                  if (studio.light !== null || studio.lightPower !== 1) {
+                    commitStudio({ light: null, lightPower: 1 });
                   }
                 }}
-              />
+              >
+                <IconSun size={16} />
+              </button>
+            )}
+            {studioOn && readout && (
+              <div
+                className="pointer-events-none absolute -translate-x-1/2 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white"
+                style={(() => {
+                  const at = readout.kind === 'focus' ? focusAt : lightHandle;
+                  const lift = readout.kind === 'focus' ? 13 + studioPose.focusRange * 45 : 14;
+                  return at
+                    ? {
+                        left: clamp(at.x, 0, 1) * display.width,
+                        top: clamp(at.y, 0, 1) * display.height + lift + 6,
+                      }
+                    : { display: 'none' };
+                })()}
+              >
+                {readout.text}
+              </div>
             )}
             {textEdit && textOverlay && (
               <textarea
@@ -1218,27 +1430,29 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           </div>
         </div>
 
-        <aside
-          className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4"
-          // Hover cards (the window bar's styles) sit beside this panel.
-          data-preview-boundary
-        >
-          <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
-            {t('style')}
-          </div>
-          {/* Hover a window bar style for a preview of it. */}
-          <PreviewCardProvider>
-            <ScreenshotStylePanel
-              style={panelStyle}
-              presets={presets}
-              looksAvailable={!studioFailed}
-              onChange={setStyle}
-              windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
-              captureImage={capture.imageUrl}
-              capturePage={capturePage(capture)}
-            />
-          </PreviewCardProvider>
-        </aside>
+        {!studioOn && (
+          <aside
+            className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4"
+            // Hover cards (the window bar's styles) sit beside this panel.
+            data-preview-boundary
+          >
+            <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
+              {t('style')}
+            </div>
+            {/* Hover a window bar style for a preview of it. */}
+            <PreviewCardProvider>
+              <ScreenshotStylePanel
+                style={panelStyle}
+                presets={presets}
+                looksAvailable={!studioFailed}
+                onChange={setStyle}
+                windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
+                captureImage={capture.imageUrl}
+                capturePage={capturePage(capture)}
+              />
+            </PreviewCardProvider>
+          </aside>
+        )}
       </div>
     </div>
   );

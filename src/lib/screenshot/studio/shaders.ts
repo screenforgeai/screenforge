@@ -104,12 +104,13 @@ export const BOKEH_FRAGMENT = `
   varying vec2 vUv;
   uniform sampler2D tColor; uniform sampler2D tDepth;
   uniform float maxblur; uniform float aperture; uniform float nearClip; uniform float farClip; uniform float focus; uniform float aspect;
-  uniform float uFringe; uniform float uRim;
+  uniform float uFringe; uniform float uRim; uniform float uRange;
   #include <packing>
   // Thin lens: blur grows with distance from the focus plane relative to distance from the camera.
   float blurAt(vec2 p) {
     float viewZ = perspectiveDepthToViewZ(unpackRGBAToDepth(texture2D(tDepth, p)), nearClip, farClip);
-    return min(aperture * abs(focus + viewZ) / max(-viewZ, 1e-3), maxblur);
+    // uRange: depth either side of the focus that stays completely sharp (the sharp area).
+    return min(aperture * max(abs(focus + viewZ) - uRange, 0.0) / max(-viewZ, 1e-3), maxblur);
   }
   const int SAMPLES = 64;
   void main() {
