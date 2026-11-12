@@ -150,7 +150,7 @@ export const StudioPuck = ({
             type="button"
             aria-label={action.label}
             tabIndex={open ? 0 : -1}
-            className="absolute flex cursor-pointer items-center justify-center rounded-full text-white/85 transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.34,1.4,0.64,1)] hover:text-white"
+            className="absolute z-10 flex cursor-pointer items-center justify-center rounded-full text-white/85 transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.34,1.4,0.64,1)] hover:text-white"
             style={{
               left: -CHIP / 2,
               top: -CHIP / 2,
@@ -177,7 +177,13 @@ export const StudioPuck = ({
         ref={buttonRef}
         type="button"
         {...buttonProps}
-        className={cn('absolute -translate-x-1/2 -translate-y-1/2', buttonClassName)}
+        className={cn(
+          'absolute -translate-x-1/2 -translate-y-1/2',
+          // An invisible margin around the puck that hovers and grabs it too: easy to find
+          // without landing exactly on it. The options sit above it, so they stay clickable.
+          "before:absolute before:-inset-3.5 before:rounded-full before:content-['']",
+          buttonClassName,
+        )}
         style={{ left: 0, top: 0, width: size, height: size, ...buttonProps.style }}
       >
         {children}
