@@ -641,6 +641,8 @@ export class StudioRenderer {
     bokehUniforms.uRim = { value: 1.2 };
     bokehUniforms.uRange = { value: 0 };
     bokehUniforms.uTexel = { value: new THREE.Vector2(0, 0) }; // set on resize
+    bokehUniforms.uFocusUv = { value: new THREE.Vector2(0.5, 0.5) };
+    bokehUniforms.uFallRadius = { value: 10 };
     const bokehMaterial = new THREE.ShaderMaterial({
       defines: { DEPTH_PACKING: 1, PERSPECTIVE_CAMERA: 1 },
       uniforms: bokehUniforms,
@@ -1599,6 +1601,11 @@ export class StudioRenderer {
       const point = this.getFocusPoint();
       const world = this.imagePointToWorld(point.x, point.y) ?? this.panelTarget.clone();
       this.camera.updateMatrixWorld();
+      // Where the focus point is in the frame, for the fall-off across the screenshot: the sharp
+      // area's radius (a share of the frame's height) grows with the focus range.
+      const onScreen = world.clone().project(this.camera);
+      (u.uFocusUv.value as THREE.Vector2).set((onScreen.x + 1) / 2, (onScreen.y + 1) / 2);
+      u.uFallRadius.value = 0.14 + this.focusRange * 0.6;
       u.focus.value = Math.max(-world.applyMatrix4(this.camera.matrixWorldInverse).z, 0.05);
       // Sharp area: up to 40% of the focus distance either side stays completely sharp.
       u.uRange.value = this.focusRange * (u.focus.value as number) * 0.4;

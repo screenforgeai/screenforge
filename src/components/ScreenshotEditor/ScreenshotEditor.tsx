@@ -245,8 +245,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const [busy, setBusy] = useState(false);
   const [studioFailed, setStudioFailed] = useState(false);
   const [studioReady, setStudioReady] = useState(0);
-  // The renderer has the screenshot: points on it can be placed on the canvas (the focus ring).
-  const [screenShown, setScreenShown] = useState(false);
+  // The size of the screen the renderer has (null until it has one): points on it can be placed
+  // on the canvas (the focus ring), and placed again when it changes (a window bar added).
+  const [screenSize, setScreenSize] = useState<{ width: number; height: number } | null>(null);
   const [offScreen, setOffScreen] = useState(false);
   const studioCanvasRef = useRef<HTMLCanvasElement>(null);
   const studioRef = useRef<StudioRenderer | null>(null);
@@ -277,12 +278,36 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   // The studio's screen: the screenshot at full size, no frame. Independent of the style, so
   // moving the screenshot or picking a look never repaints it.
   const flatStyle = useMemo<ScreenshotStyle>(
-    () => ({ frameEnabled: false, aspectRatioId: 'original', background: DEFAULT_BACKGROUND }),
-    [],
+    () => ({
+      frameEnabled: false,
+      aspectRatioId: 'original',
+      background: DEFAULT_BACKGROUND,
+      windowBar: style.windowBar,
+    }),
+    [style.windowBar],
   );
   const flatGeometry = useMemo(
-    () => getScreenshotGeometry(capture.width, capture.height, flatStyle),
-    [capture.height, capture.width, flatStyle],
+    () =>
+      getScreenshotGeometry(capture.width, capture.height, flatStyle, undefined, {
+        scaleFactor: capture.scaleFactor ?? 1,
+      }),
+    [capture.height, capture.scaleFactor, capture.width, flatStyle],
+  );
+  // The studio's screen is that flat canvas: capped in size, with the window bar (if any) above
+  // the page. Capture pixels ↔ its pixels.
+  const toStudioScreen = useCallback(
+    (p: Point): Point => ({
+      x: flatGeometry.mediaRect.x + p.x * flatGeometry.scale,
+      y: flatGeometry.mediaRect.y + p.y * flatGeometry.scale,
+    }),
+    [flatGeometry],
+  );
+  const fromStudioScreen = useCallback(
+    (p: Point): Point => ({
+      x: (p.x - flatGeometry.mediaRect.x) / flatGeometry.scale,
+      y: (p.y - flatGeometry.mediaRect.y) / flatGeometry.scale,
+    }),
+    [flatGeometry],
   );
   const studioSize = useMemo(
     () => getStudioOutputSize(capture.width, capture.height, style),
@@ -415,11 +440,16 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
         geometry: flatGeometry,
         shapes,
         selectedId: selected,
+        windowBarPage: capturePage(capture),
       });
       renderer.setScreen(canvas, canvas.width, canvas.height, imageLum);
-      setScreenShown(true);
+      setScreenSize((prev) =>
+        prev?.width === canvas.width && prev.height === canvas.height
+          ? prev
+          : { width: canvas.width, height: canvas.height },
+      );
     },
-    [capture.height, capture.width, flatGeometry, flatStyle, image, imageLum],
+    [capture, flatGeometry, flatStyle, image, imageLum],
   );
 
   // One renderer per studio session: created when a look is turned on, freed when it is turned off.
@@ -530,18 +560,15 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     renderer.setLightPower(studioPose.lightPower);
     renderer.setBlurAmount(studioPose.blur);
     renderer.setLightSize(studioPose.lightSize);
-    // The renderer's screen is the flat canvas (capped in size): capture pixels → its pixels.
-    const k = flatGeometry.scale;
-    const toScreen = (p: Point) => ({ x: p.x * k, y: p.y * k });
     renderer.setFocus(
-      studioPose.focus ? toScreen(studioPose.focus) : null,
-      {
-        x: measured.focus.x * flatGeometry.canvasWidth,
-        y: measured.focus.y * flatGeometry.canvasHeight,
-      },
+      studioPose.focus ? toStudioScreen(studioPose.focus) : null,
+      toStudioScreen({
+        x: measured.focus.x * capture.width,
+        y: measured.focus.y * capture.height,
+      }),
       studioPose.focusRange,
     );
-  }, [flatGeometry, measured, studioPose, studioReady]);
+  }, [capture.height, capture.width, measured, studioPose, studioReady, toStudioScreen]);
 
   // The studio's wall: the frame's background (a wallpaper, a gradient or a colour). Only the fields
   // that pick it count, so a padding drag never rebuilds the reflections.
@@ -620,7 +647,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     flatGeometry,
     look,
     measured,
-    screenShown,
+    screenSize,
     studioPose,
     studioReady,
   ]);
@@ -812,12 +839,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       if (!renderer || !rect || rect.width === 0 || rect.height === 0) {
         return null;
       }
-      // The studio's screen is the flat canvas, which is capped in size: back to capture pixels.
       const hit = renderer.pickImagePoint(
         (e.clientX - rect.left) / rect.width,
         (e.clientY - rect.top) / rect.height,
       );
-      return hit ? { x: hit.x / flatGeometry.scale, y: hit.y / flatGeometry.scale } : null;
+      return hit ? fromStudioScreen(hit) : null;
     }
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -1186,10 +1212,10 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       editing?.type === 'text' ? editing.fontSize : getDefaultFontSize(shapeStyle.scale);
     if (studioOn) {
       const renderer = studioRef.current;
-      // Capture pixels → the flat canvas the studio shows.
-      const k = flatGeometry.scale;
-      const at = renderer?.projectImagePoint(textEdit.point.x * k, textEdit.point.y * k);
-      const next = renderer?.projectImagePoint((textEdit.point.x + 100) * k, textEdit.point.y * k);
+      const at0 = toStudioScreen(textEdit.point);
+      const next0 = toStudioScreen({ x: textEdit.point.x + 100, y: textEdit.point.y });
+      const at = renderer?.projectImagePoint(at0.x, at0.y);
+      const next = renderer?.projectImagePoint(next0.x, next0.y);
       if (!at || !next) {
         return null;
       }

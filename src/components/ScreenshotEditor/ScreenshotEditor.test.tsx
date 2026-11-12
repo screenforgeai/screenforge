@@ -19,6 +19,7 @@ const studio = vi.hoisted(() => ({
     setLightSize: ReturnType<typeof vi.fn>;
     setBackdrop: ReturnType<typeof vi.fn>;
     setFrame: ReturnType<typeof vi.fn>;
+    setLightHandle: ReturnType<typeof vi.fn>;
     start: () => void;
     renderStill: (w: number, h: number) => HTMLCanvasElement;
     setScreen: (...args: unknown[]) => void;
@@ -91,9 +92,13 @@ const noopContext = () =>
       get: (_target, key): unknown =>
         key === 'measureText'
           ? () => ({ width: 10 })
-          : key === 'createLinearGradient'
-            ? () => ({ addColorStop: (): void => undefined })
-            : (): void => undefined,
+          : key === 'getImageData'
+            ? (_x: number, _y: number, w: number, h: number) => ({
+                data: new Uint8ClampedArray(Math.max(1, w * h) * 4),
+              })
+            : key === 'createLinearGradient'
+              ? () => ({ addColorStop: (): void => undefined })
+              : (): void => undefined,
       set: () => true,
     },
   );
@@ -359,6 +364,33 @@ describe('ScreenshotEditor', () => {
       press(sun, 10, 10);
       release(sun, 10, 10);
       expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
+    });
+
+    it('puts a window bar on top of the screenshot in the studio', async () => {
+      // The bar is drawn with vector paths, which jsdom does not have.
+      vi.stubGlobal('Path2D', function Path2D(): object {
+        return new Proxy({}, { get: () => (): void => undefined });
+      });
+      const user = userEvent.setup();
+      const renderer = await opened();
+      await waitFor(() => expect(renderer.setScreen).toHaveBeenCalled());
+      const shape = () => {
+        const [, width, height] = (renderer.setScreen as ReturnType<typeof vi.fn>).mock.calls.at(
+          -1,
+        ) as [unknown, number, number];
+        return height / width;
+      };
+      expect(shape()).toBeCloseTo(600 / 800, 3);
+      await user.click(screen.getByRole('radio', { name: /^mac$/i }));
+      // The bar sits above the page, so the studio's screen grows taller.
+      await waitFor(() => expect(shape()).toBeGreaterThan(600 / 800 + 0.01));
+      // The focus ring is placed again on the new screen, not where the old one put it.
+      const order = (fn: ReturnType<typeof vi.fn>) => fn.mock.invocationCallOrder.at(-1) ?? 0;
+      await waitFor(() =>
+        expect(order(renderer.projectImagePoint)).toBeGreaterThan(
+          order(renderer.setScreen as ReturnType<typeof vi.fn>),
+        ),
+      );
     });
 
     it('drags the sun anywhere over the canvas, below the screenshot too', async () => {

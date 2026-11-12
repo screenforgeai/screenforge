@@ -315,6 +315,28 @@ export const ScreenshotStylePanel = ({
     </div>
   );
 
+  const windowBarSection = (
+    <div className="flex flex-col gap-4 border-t border-sf-border pt-4">
+      <div className={WIDGET_SECTION_HEADING_CLASS}>{tFrame('windowBar')}</div>
+      <WindowBarControls
+        value={windowBar}
+        previewStyle={previewStyle}
+        onChange={(_label, patch) =>
+          onChange(
+            { ...style, windowBar: { ...windowBar, ...patch, enabled: true } },
+            groupRef.current,
+          )
+        }
+        onTextEditStart={() => {
+          groupRef.current = nextGroup('windowText');
+        }}
+        onTextEditEnd={() => {
+          groupRef.current = undefined;
+        }}
+      />
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-5">
       {studio.lookId !== null && (
@@ -322,6 +344,7 @@ export const ScreenshotStylePanel = ({
           {aspectRatio}
           {backgroundSection}
           {frameSliders(true)}
+          {windowBarSection}
           <div className="flex flex-col gap-3 border-t border-sf-border pt-4">
             <p className="text-xs leading-relaxed text-sf-muted">{t('studioHint')}</p>
             {moved && (
@@ -347,7 +370,7 @@ export const ScreenshotStylePanel = ({
         </>
       )}
 
-      {/* The flat frame's controls, window bar included: a look replaces all of them. */}
+      {/* The flat frame's own controls: the fallback when the studio can't start. */}
       {studio.lookId === null && (
         <>
           <div className="flex items-center justify-between">
@@ -403,25 +426,7 @@ export const ScreenshotStylePanel = ({
             </>
           )}
 
-          <div className="flex flex-col gap-4 border-t border-sf-border pt-4">
-            <div className={WIDGET_SECTION_HEADING_CLASS}>{tFrame('windowBar')}</div>
-            <WindowBarControls
-              value={windowBar}
-              previewStyle={previewStyle}
-              onChange={(_label, patch) =>
-                onChange(
-                  { ...style, windowBar: { ...windowBar, ...patch, enabled: true } },
-                  groupRef.current,
-                )
-              }
-              onTextEditStart={() => {
-                groupRef.current = nextGroup('windowText');
-              }}
-              onTextEditEnd={() => {
-                groupRef.current = undefined;
-              }}
-            />
-          </div>
+          {windowBarSection}
         </>
       )}
     </div>
