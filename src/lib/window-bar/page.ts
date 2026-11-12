@@ -49,12 +49,24 @@ export function centerText(
   }
 }
 
-/** The lock shows by itself for an address, never on a Windows bar. */
+/** Text that reads as a web address: one word with a dot in its host ("acme.com/q3"). */
+export function looksLikeAddress(text: string | undefined): boolean {
+  const value = (text ?? '').trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  return /^[^\s/]+\.[^\s/.]+(\/\S*)?$/.test(value);
+}
+
+/** The lock shows by itself for an address (typed or live), never on a Windows bar. */
 export function showsLock(
   settings: WindowBarSettings,
   center: WindowBarCenter = settings.center,
 ): boolean {
-  return settings.style !== 'windows' && (center === 'url' || center === 'domain');
+  if (settings.style === 'windows') {
+    return false;
+  }
+  if (center === 'custom') {
+    return looksLikeAddress(settings.customText);
+  }
+  return center === 'url' || center === 'domain';
 }
 
 /** Puts visits in time order and drops a repeat of the page already showing. */

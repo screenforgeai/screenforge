@@ -30,6 +30,7 @@ import {
 } from './annotations';
 import {
   AUTO_THEME_SAMPLE_ROWS,
+  activeBarStyle,
   drawWindowBar,
   layoutWindowBar,
   resolveWindowBarTheme,
@@ -93,7 +94,7 @@ export function getScreenshotGeometry(
 ): ScreenshotGeometry {
   const scaleFactor = window.scaleFactor > 0 ? window.scaleFactor : 1;
   const windowPoints = imageWidth / scaleFactor;
-  const barStyle = !window.cropped && style.windowBar ? style.windowBar.style : 'none';
+  const barStyle = window.cropped ? 'none' : activeBarStyle(style.windowBar);
   // The bar in screenshot pixels, sized for the window's width in points.
   const barPixels = windowBarHeight(barStyle, windowPoints) * scaleFactor;
   // A bar is drawn sharp at 2x, so a 1x capture is written at 2x around it.

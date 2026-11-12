@@ -24,10 +24,9 @@
   "windowHeader": "창",
   "windowBar": "창 막대",
   "windowThemeLabel": "테마",
-  "windowCenter": "가운데",
   "windowTitle": "제목",
+  "windowAddress": "주소",
   "windowStyle": {
-    "none": "없음",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "브라우저"
@@ -37,27 +36,6 @@
     "light": "라이트",
     "dark": "다크"
   },
-  "windowCenterOption": {
-    "url": "실시간 URL",
-    "domain": "도메인만",
-    "title": "페이지 제목",
-    "custom": "사용자 지정 텍스트",
-    "none": "없음"
-  },
-  "windowCenterSample": {
-    "url": "app.example.com/projects/q3-launch",
-    "domain": "app.example.com",
-    "title": "3분기 출시",
-    "custom": "모든 페이지에 같은 텍스트"
-  },
-  "windowCenterEmpty": {
-    "mac": "점 세 개만",
-    "windows": "창 버튼만",
-    "browser": "빈 주소창"
-  },
-  "windowCustomText": "사용자 지정 텍스트",
-  "windowCustomPlaceholder": "제품 이름, 슬로건…",
-  "windowNoAddress": "Screenforge는 아직 이 녹화의 주소를 읽을 수 없어 실시간 URL과 도메인만은 칸을 비워 둡니다. 페이지 제목이나 사용자 지정 텍스트로 채우세요.",
   "windowBarCropped": "잘라낸 캡처에는 창 막대를 넣지 않습니다. 화면 일부에 창 전체 막대를 넣으면 어색해 보입니다.",
   "recordedBar": "녹화된 도구 모음",
   "adjustCrop": "자르기 조정",
@@ -72,6 +50,7 @@
     "adjust": "도구 모음으로 보이지만 끝나는 위치가 확실하지 않습니다. 자르기를 조정해 확인하세요.",
     "none": "이 녹화에서 브라우저 도구 모음을 찾지 못했습니다.",
     "manual": "위쪽 {{rows}}줄을 잘라냅니다.",
-    "off": "녹화된 도구 모음을 유지합니다."
+    "off": "녹화된 도구 모음을 유지합니다.",
+    "barOff": "창 막대를 켜면 잘라냅니다."
   }
 }

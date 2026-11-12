@@ -4,7 +4,7 @@
  * a canvas (editor preview, video export) and `windowBarSvg` writes it as
  * SVG (captures), so all three look the same.
  */
-import { centerText, showsLock, splitUrl } from './page';
+import { centerText, looksLikeAddress, showsLock, splitUrl } from './page';
 import { fitAddress, fitEnd, measureText } from './text';
 import {
   BASE_BAR_HEIGHT,
@@ -22,6 +22,7 @@ import type {
   WindowBarSettings,
   WindowBarStyle,
 } from './types';
+import { activeBarStyle } from './types';
 
 export type WindowBarOp =
   | {
@@ -259,19 +260,23 @@ function textFor(input: WindowBarLayoutInput, page: WindowBarPage | null | undef
 function fitFor(
   input: WindowBarLayoutInput,
 ): (text: string, width: number, size: number) => string {
-  return input.settings.center === 'url' || input.settings.center === 'domain'
-    ? fitAddress
-    : fitEnd;
+  const { center, customText } = input.settings;
+  const address =
+    center === 'url' ||
+    center === 'domain' ||
+    (center === 'custom' && looksLikeAddress(customText));
+  return address ? fitAddress : fitEnd;
 }
 
 export function layoutWindowBar(input: WindowBarLayoutInput): WindowBarScene {
   const { settings, width } = input;
-  if (settings.style === 'none' || width <= 0) {
+  const style = activeBarStyle(settings);
+  if (style === 'none' || width <= 0) {
     return { width, height: 0, ops: [] };
   }
 
-  const height = windowBarHeight(settings.style, width);
-  const k = height / BASE_BAR_HEIGHT[settings.style];
+  const height = windowBarHeight(style, width);
+  const k = height / BASE_BAR_HEIGHT[style];
   const colors = WINDOW_BAR_COLORS[input.theme];
   const c: Ctx = { ops: [], colors, k, height, width };
   const lock = showsLock(settings);

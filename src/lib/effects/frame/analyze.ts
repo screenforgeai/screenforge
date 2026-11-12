@@ -6,6 +6,7 @@ import type {
 } from '../../../types';
 import type { BackgroundSettings, CropRect, FrameSettings } from './index';
 import { fitWindowWithBar } from '../../window-bar/geometry';
+import { activeBarStyle } from '../../window-bar/types';
 import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CURSOR_SETTINGS,
@@ -275,7 +276,7 @@ export interface FrameGeometry {
 
 /** Whether a frame draws a window bar. */
 export function hasWindowBar(frame: Pick<FrameSettings, 'windowBar'>): boolean {
-  return !!frame.windowBar && frame.windowBar.style !== 'none';
+  return activeBarStyle(frame.windowBar) !== 'none';
 }
 
 /** Vertical (9:16) frames get the compact bar: dots and domain only. */
@@ -290,7 +291,7 @@ function fitMedia(
   cropWidth: number,
   cropHeight: number,
 ): { mediaRect: Rect; windowRect: Rect; barHeight: number } {
-  const barStyle = frame.windowBar?.style ?? 'none';
+  const barStyle = activeBarStyle(frame.windowBar);
   if (barStyle === 'none') {
     const fit = getContainRect(contentRect.width, contentRect.height, cropWidth, cropHeight);
     const mediaRect = {

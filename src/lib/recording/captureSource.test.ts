@@ -5,6 +5,7 @@ import {
   knownBrowserOf,
   pageTitleFromWindowTitle,
   recordingPageVisits,
+  windowBarStartText,
 } from './captureSource';
 
 const track = (displaySurface?: string) =>
@@ -60,5 +61,18 @@ describe('recordingPageVisits', () => {
     expect(recordingPageVisits(result({ kind: 'display' }))).toEqual([]);
     expect(recordingPageVisits(result(undefined))).toEqual([]);
     expect(recordingPageVisits(null)).toEqual([]);
+  });
+});
+
+describe('windowBarStartText', () => {
+  it("starts from the window's page title, or a placeholder address", () => {
+    expect(
+      windowBarStartText({
+        captureSource: { kind: 'window', windowTitle: 'Projects - Google Chrome' },
+      } as RecordingResult),
+    ).toBe('Projects');
+    expect(windowBarStartText({ captureSource: { kind: 'display' } } as RecordingResult)).toBe(
+      'yourproduct.com',
+    );
   });
 });

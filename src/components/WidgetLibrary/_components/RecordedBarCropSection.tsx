@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { trackEvent } from 'src/lib/analytics';
 import { getInitialPlaybackTime } from 'src/lib/helpers/segments';
 import type { RecordedBarSettings } from 'src/lib/effects/frame';
-import type { RecordedBarCropMode } from 'src/lib/window-bar';
+import { activeBarStyle, type RecordedBarCropMode } from 'src/lib/window-bar';
 import { applyRecordedBar, recordedBarEligibility } from 'src/lib/recording/recordedBar';
 import { WIDGET_SECTION_HEADING_CLASS } from 'src/components/layout';
 import { Button, ToggleGroup, ToggleGroupItem } from '../../../lib/ui';
@@ -81,13 +81,16 @@ export const RecordedBarCropSection = () => {
     setIsCropEditing(true, 'recordedBar');
   };
 
+  const barOn = activeBarStyle(frame.windowBar) !== 'none';
   const status = !bar
     ? t('recordedBarStatus.detecting')
-    : bar.mode === 'off'
-      ? t('recordedBarStatus.off')
-      : bar.mode === 'manual'
-        ? t('recordedBarStatus.manual', { rows: bar.cropTop })
-        : t(`recordedBarStatus.${bar.detected}`);
+    : !barOn && bar.mode !== 'off'
+      ? t('recordedBarStatus.barOff')
+      : bar.mode === 'off'
+        ? t('recordedBarStatus.off')
+        : bar.mode === 'manual'
+          ? t('recordedBarStatus.manual', { rows: bar.cropTop })
+          : t(`recordedBarStatus.${bar.detected}`);
 
   return (
     <div className="flex flex-col gap-4 border-t border-[#161515] pt-4">

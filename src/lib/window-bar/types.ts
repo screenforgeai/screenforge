@@ -9,6 +9,11 @@ export type WindowBarCenter = 'url' | 'domain' | 'title' | 'custom' | 'none';
 
 /** What a project's frame (and a style preset) stores. */
 export interface WindowBarSettings {
+  /**
+   * Switched off, no bar is drawn and `style` is remembered for when it's
+   * switched back on. Absent means on (presets choose a style of 'none' instead).
+   */
+  enabled?: boolean;
   style: WindowBarStyle;
   theme: WindowBarTheme;
   /** What the address box (Mac, browser) or the title (Windows) shows. */
@@ -23,6 +28,14 @@ export const DEFAULT_WINDOW_BAR: WindowBarSettings = {
   theme: 'auto',
   center: 'url',
 };
+
+/** The style actually drawn: 'none' when there are no settings or the bar is switched off. */
+export function activeBarStyle(settings: WindowBarSettings | null | undefined): WindowBarStyle {
+  if (!settings || settings.enabled === false) {
+    return 'none';
+  }
+  return settings.style;
+}
 
 /** A theme once 'auto' has been decided. */
 export type ResolvedWindowBarTheme = 'light' | 'dark';

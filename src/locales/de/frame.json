@@ -24,10 +24,9 @@
   "windowHeader": "Fenster",
   "windowBar": "Fensterleiste",
   "windowThemeLabel": "Design",
-  "windowCenter": "Mitte",
   "windowTitle": "Titel",
+  "windowAddress": "Adresse",
   "windowStyle": {
-    "none": "Keine",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "Browser"
@@ -37,27 +36,6 @@
     "light": "Hell",
     "dark": "Dunkel"
   },
-  "windowCenterOption": {
-    "url": "Live-URL",
-    "domain": "Nur Domain",
-    "title": "Seitentitel",
-    "custom": "Eigener Text",
-    "none": "Nichts"
-  },
-  "windowCenterSample": {
-    "url": "app.example.com/projects/q3-launch",
-    "domain": "app.example.com",
-    "title": "Q3-Launch",
-    "custom": "Derselbe Text auf jeder Seite"
-  },
-  "windowCenterEmpty": {
-    "mac": "Nur die drei Punkte",
-    "windows": "Nur die Fenstertasten",
-    "browser": "Eine leere Adresszeile"
-  },
-  "windowCustomText": "Eigener Text",
-  "windowCustomPlaceholder": "Dein Produkt, ein Slogan…",
-  "windowNoAddress": "Screenforge kann die Adresse dieser Aufnahme noch nicht lesen, daher lassen Live-URL und Nur Domain das Feld leer. Seitentitel oder Eigener Text füllen es.",
   "windowBarCropped": "Keine Fensterleiste bei einem Ausschnitt: Eine ganze Fensterleiste über einem Teil des Bildschirms sieht falsch aus.",
   "recordedBar": "Aufgenommene Leiste",
   "adjustCrop": "Zuschnitt anpassen",
@@ -72,6 +50,7 @@
     "adjust": "Möglicherweise eine Leiste, aber ihr Ende ist unsicher. Passe den Zuschnitt an, um es zu prüfen.",
     "none": "In dieser Aufnahme wurde keine Browserleiste gefunden.",
     "manual": "Die oberen {{rows}} Zeilen werden abgeschnitten.",
-    "off": "Die aufgenommene Leiste bleibt erhalten."
+    "off": "Die aufgenommene Leiste bleibt erhalten.",
+    "barOff": "Wird abgeschnitten, sobald die Fensterleiste an ist."
   }
 }

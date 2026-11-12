@@ -13,6 +13,8 @@ import {
   resolveWindowBarTheme,
   showsLock,
   splitUrl,
+  activeBarStyle,
+  looksLikeAddress,
   topBandBrightness,
   windowBarHeight,
   windowBarSvg,
@@ -275,5 +277,30 @@ describe('fitWindowWithBar', () => {
     const fit = fitWindowWithBar(0, 0, 1600, 700, 1280, 800, 'none');
     expect(fit.barHeight).toBe(0);
     expect(fit.media.height).toBeCloseTo(700);
+  });
+});
+
+describe('enabled', () => {
+  it('draws no bar while switched off, remembering the style', () => {
+    const off = { ...mac, enabled: false };
+    expect(activeBarStyle(off)).toBe('none');
+    expect(activeBarStyle({ ...off, enabled: true })).toBe('mac');
+    expect(activeBarStyle(mac)).toBe('mac');
+    expect(activeBarStyle(undefined)).toBe('none');
+    expect(layoutWindowBar({ settings: off, theme: 'light', width: 1280, page }).height).toBe(0);
+  });
+});
+
+describe('custom text', () => {
+  it('shows the lock when the text reads as an address', () => {
+    expect(looksLikeAddress('acme.com')).toBe(true);
+    expect(looksLikeAddress('app.acme.com/projects')).toBe(true);
+    expect(looksLikeAddress('Q3 launch – Acme')).toBe(false);
+    expect(looksLikeAddress('Acme')).toBe(false);
+    expect(showsLock({ ...mac, center: 'custom', customText: 'acme.com/q3' })).toBe(true);
+    expect(showsLock({ ...mac, center: 'custom', customText: 'Q3 launch' })).toBe(false);
+    expect(showsLock({ ...mac, style: 'windows', center: 'custom', customText: 'acme.com' })).toBe(
+      false,
+    );
   });
 });

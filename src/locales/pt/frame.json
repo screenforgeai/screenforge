@@ -24,10 +24,9 @@
   "windowHeader": "Janela",
   "windowBar": "Barra da janela",
   "windowThemeLabel": "Tema",
-  "windowCenter": "Centro",
   "windowTitle": "Título",
+  "windowAddress": "Endereço",
   "windowStyle": {
-    "none": "Nenhuma",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "Navegador"
@@ -37,27 +36,6 @@
     "light": "Claro",
     "dark": "Escuro"
   },
-  "windowCenterOption": {
-    "url": "URL ao vivo",
-    "domain": "Só o domínio",
-    "title": "Título da página",
-    "custom": "Texto personalizado",
-    "none": "Nada"
-  },
-  "windowCenterSample": {
-    "url": "app.example.com/projects/q3-launch",
-    "domain": "app.example.com",
-    "title": "Lançamento T3",
-    "custom": "O mesmo texto em todas as páginas"
-  },
-  "windowCenterEmpty": {
-    "mac": "Só os três pontos",
-    "windows": "Só os controles da janela",
-    "browser": "Uma barra de endereço vazia"
-  },
-  "windowCustomText": "Texto personalizado",
-  "windowCustomPlaceholder": "Seu produto, um slogan…",
-  "windowNoAddress": "O Screenforge ainda não consegue ler o endereço desta gravação, então URL ao vivo e Só o domínio deixam a caixa vazia. Título da página ou Texto personalizado a preenchem.",
   "windowBarCropped": "Sem barra de janela numa captura recortada: uma barra de janela inteira sobre parte da tela fica estranha.",
   "recordedBar": "Barra gravada",
   "adjustCrop": "Ajustar recorte",
@@ -72,6 +50,7 @@
     "adjust": "Parece haver uma barra, mas não dá para ter certeza de onde termina. Ajuste o recorte para conferir.",
     "none": "Nenhuma barra de navegador encontrada nesta gravação.",
     "manual": "Recortando as {{rows}} linhas de cima.",
-    "off": "A barra gravada é mantida."
+    "off": "A barra gravada é mantida.",
+    "barOff": "É recortada quando a barra da janela está ligada."
   }
 }

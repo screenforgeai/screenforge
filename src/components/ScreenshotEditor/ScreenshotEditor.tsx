@@ -45,7 +45,10 @@ import {
   type ScreenshotStyle,
 } from 'src/lib/screenshot/compose';
 import type { WindowBarPage } from 'src/lib/window-bar';
-import { pageTitleFromWindowTitle } from 'src/lib/recording/captureSource';
+import {
+  WINDOW_BAR_PLACEHOLDER_TEXT,
+  pageTitleFromWindowTitle,
+} from 'src/lib/recording/captureSource';
 import { trackEvent } from 'src/lib/analytics';
 import {
   IconArrowBackUp,
@@ -735,6 +738,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
             presets={presets}
             onChange={setStyle}
             windowBarAvailable={!isCroppedCapture(capture)}
+            windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
           />
         </aside>
       </div>

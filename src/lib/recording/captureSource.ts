@@ -95,3 +95,15 @@ export function recordingPageVisits(result: RecordingResult | null | undefined):
   pageVisitCache.set(result, visits);
   return visits;
 }
+
+/** What the bar's text starts as when nothing better is known: a placeholder address to replace. */
+export const WINDOW_BAR_PLACEHOLDER_TEXT = 'yourproduct.com';
+
+/**
+ * The text a window bar starts with when it's switched on: the recorded
+ * window's page title when Screenforge read one, else a placeholder address
+ * the person types over.
+ */
+export function windowBarStartText(result: RecordingResult | null | undefined): string {
+  return recordingPageVisits(result)[0]?.title || WINDOW_BAR_PLACEHOLDER_TEXT;
+}

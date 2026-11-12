@@ -5,7 +5,7 @@
  * turns its answer into the frame's crop.
  */
 import type { CropRect, FrameSettings, RecordedBarSettings } from '../effects/frame';
-import type { RecordedBarCropMode } from '../window-bar';
+import { activeBarStyle, type RecordedBarCropMode } from '../window-bar';
 import type { RecordingCaptureSource, RecordingResult } from '../../types/index';
 
 export type RecordedBarEligibility =
@@ -55,8 +55,9 @@ export function cropRectWithTop(crop: CropRect, cropTop: number, sourceHeight: n
 
 /**
  * The frame with the recorded toolbar handled: cropped off at `bar.cropTop`
- * when the mode allows it and detection (or the person) settled on a line;
- * the top edge restored when the mode is Off.
+ * while the window bar is on and the mode allows it (detection, or the
+ * person, settled on a line); the top edge restored when the bar or the
+ * crop is switched off.
  */
 export function applyRecordedBar(
   frame: FrameSettings,
@@ -70,8 +71,11 @@ export function applyRecordedBar(
       ? previous.cropTop / Math.max(sourceHeight, 1)
       : null;
   const ownsTop = ownTop !== null && Math.abs(frame.cropRect.y - ownTop) < 1e-6;
+  // Only crop the real toolbar when the window bar is there to replace it.
+  const barOn = activeBarStyle(frame.windowBar) !== 'none';
   const crops =
-    bar.mode === 'manual' || (bar.mode === 'auto' && bar.detected === 'crop' && bar.cropTop > 0);
+    barOn &&
+    (bar.mode === 'manual' || (bar.mode === 'auto' && bar.detected === 'crop' && bar.cropTop > 0));
   let cropRect = frame.cropRect;
   if (crops && bar.cropTop > 0) {
     cropRect = cropRectWithTop(frame.cropRect, bar.cropTop, sourceHeight);

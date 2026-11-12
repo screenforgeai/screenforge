@@ -24,10 +24,9 @@
   "windowHeader": "Window",
   "windowBar": "Window bar",
   "windowThemeLabel": "Theme",
-  "windowCenter": "Center",
   "windowTitle": "Title",
+  "windowAddress": "Address",
   "windowStyle": {
-    "none": "None",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "Browser"
@@ -37,27 +36,6 @@
     "light": "Light",
     "dark": "Dark"
   },
-  "windowCenterOption": {
-    "url": "Live URL",
-    "domain": "Domain only",
-    "title": "Page title",
-    "custom": "Custom text",
-    "none": "Nothing"
-  },
-  "windowCenterSample": {
-    "url": "app.example.com/projects/q3-launch",
-    "domain": "app.example.com",
-    "title": "Q3 launch",
-    "custom": "The same words on every page"
-  },
-  "windowCenterEmpty": {
-    "mac": "Just the three dots",
-    "windows": "Just the window controls",
-    "browser": "An empty address field"
-  },
-  "windowCustomText": "Custom text",
-  "windowCustomPlaceholder": "Your product, a tagline…",
-  "windowNoAddress": "Screenforge can't read this recording's address yet, so Live URL and Domain leave the box empty. Page title or Custom text fill it.",
   "windowBarCropped": "No window bar on a cropped capture: a whole-window bar on part of the screen looks wrong.",
   "recordedBar": "Recorded toolbar",
   "adjustCrop": "Adjust crop",
@@ -72,6 +50,7 @@
     "adjust": "Found what may be a toolbar but couldn't be sure where it ends. Adjust the crop to check.",
     "none": "No browser toolbar found in this recording.",
     "manual": "Cropping the top {{rows}} rows.",
-    "off": "The recorded toolbar is kept."
+    "off": "The recorded toolbar is kept.",
+    "barOff": "Crops once the window bar is on."
   }
 }

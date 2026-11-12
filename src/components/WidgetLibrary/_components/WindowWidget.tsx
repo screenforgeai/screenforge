@@ -3,8 +3,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { trackEvent } from 'src/lib/analytics';
 import { getInitialPlaybackTime } from 'src/lib/helpers/segments';
 import { IconBrowser } from 'src/lib/icons';
-import { DEFAULT_WINDOW_BAR, type WindowBarSettings } from 'src/lib/window-bar';
-import { recordingPageVisits } from 'src/lib/recording/captureSource';
+import { DEFAULT_WINDOW_BAR, activeBarStyle, type WindowBarSettings } from 'src/lib/window-bar';
+import { windowBarStartText } from 'src/lib/recording/captureSource';
+import { applyRecordedBar } from 'src/lib/recording/recordedBar';
+import type { FrameSettings } from 'src/lib/effects/frame';
 import {
   WIDGET_EMPTY_STATE_CLASS,
   WIDGET_EMPTY_TITLE_CLASS,
@@ -14,11 +16,21 @@ import {
 import { WindowBarControls } from 'src/components/WindowBarControls';
 import { useStore } from '../../../store';
 import { RecordedBarCropSection } from './RecordedBarCropSection';
+import { WidgetEnabledGate } from './WidgetEnabledGate';
+
+/** The frame with a new window bar, the recorded toolbar's crop following it on or off. */
+const withWindowBar = (frame: FrameSettings, windowBar: WindowBarSettings): FrameSettings => {
+  const next = { ...frame, windowBar };
+  return next.recordedBar
+    ? applyRecordedBar(next, next.recordedBar, next.recordedBar.height)
+    : next;
+};
 
 /**
- * The window bar drawn over the recording (and offered to screenshots): a
- * Mac, Windows or browser bar, its theme, and what it shows. Below it, the
- * recorded toolbar crop for the person's own browser recordings.
+ * The window bar drawn over the recording (and offered to screenshots): off
+ * until switched on, then a Mac, Windows or browser bar, its theme, and the
+ * words in the middle. Below it, the recorded toolbar crop for the person's
+ * own browser recordings, which only applies while the bar is on.
  */
 export const WindowWidget = () => {
   const { t } = useTranslation('frame');
@@ -58,46 +70,60 @@ export const WindowWidget = () => {
     );
   }
 
-  const windowBar = { ...DEFAULT_WINDOW_BAR, ...frame.windowBar };
-  // Screenforge knows a window's title, not its address (yet).
-  const hasAddress = recordingPageVisits(recordingResult).some((visit) => visit.url !== '');
+  const enabled = activeBarStyle(frame.windowBar) !== 'none';
+  // What the controls show while switched off: the bar it would turn on as.
+  const windowBar: WindowBarSettings = {
+    ...DEFAULT_WINDOW_BAR,
+    center: 'custom',
+    customText: windowBarStartText(recordingResult),
+    ...frame.windowBar,
+    ...(frame.windowBar?.style === 'none' || !frame.windowBar ? { style: 'mac' as const } : {}),
+  };
 
   const patchWindowBar = (label: string, patch: Partial<WindowBarSettings>) => {
     requestPauseAndSeekTo(getInitialPlaybackTime(mediaSegments));
     commitEdit(label, (state) => ({
-      frame: {
-        ...state.frame,
-        windowBar: { ...DEFAULT_WINDOW_BAR, ...state.frame.windowBar, ...patch },
-      },
+      frame: withWindowBar(state.frame, { ...windowBar, ...state.frame.windowBar, ...patch }),
     }));
     const [property, value] = Object.entries(patch)[0] ?? [];
-    if (property && property !== 'customText') {
+    if (property && property !== 'customText' && property !== 'center') {
       trackEvent('widget_config_changed', { widget: 'window', property, value });
     }
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className={WIDGET_PANEL_HEADER_CLASS}>
-        <IconBrowser className="size-4.5" />
-        {t('windowHeader')}
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col divide-y divide-[#161515] overflow-y-auto px-4 pb-6">
-        <section className="flex flex-col gap-4">
-          <div className={WIDGET_SECTION_HEADING_CLASS}>{t('windowBar')}</div>
-          <WindowBarControls
-            value={windowBar}
-            hasAddress={hasAddress}
-            onChange={patchWindowBar}
-            onTextEditStart={() =>
-              beginHistoryGroup('window-custom-text', 'Change window bar text')
-            }
-            onTextEditEnd={() => endHistoryGroup('window-custom-text')}
-          />
-          <RecordedBarCropSection />
-        </section>
-      </div>
+      <WidgetEnabledGate
+        title={t('windowHeader')}
+        icon={<IconBrowser className="size-4.5" />}
+        enabled={enabled}
+        onToggle={(checked) => {
+          requestPauseAndSeekTo(getInitialPlaybackTime(mediaSegments));
+          commitEdit(checked ? 'Show window bar' : 'Hide window bar', (state) => ({
+            // Switching on starts from what the controls show (Mac, the
+            // page's title or a placeholder address); off keeps it for later.
+            frame: withWindowBar(state.frame, { ...windowBar, enabled: checked }),
+          }));
+          trackEvent('widget_config_changed', {
+            widget: 'window',
+            property: 'enabled',
+            value: checked,
+          });
+        }}
+      >
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-6">
+          <section className="flex flex-col gap-4">
+            <div className={WIDGET_SECTION_HEADING_CLASS}>{t('windowBar')}</div>
+            <WindowBarControls
+              value={windowBar}
+              onChange={patchWindowBar}
+              onTextEditStart={() => beginHistoryGroup('window-bar-text', 'Change window bar text')}
+              onTextEditEnd={() => endHistoryGroup('window-bar-text')}
+            />
+            <RecordedBarCropSection />
+          </section>
+        </div>
+      </WidgetEnabledGate>
     </div>
   );
 };
