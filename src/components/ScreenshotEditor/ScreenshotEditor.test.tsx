@@ -15,6 +15,8 @@ const studio = vi.hoisted(() => ({
     settings: { lean: number; dof: boolean };
     setFocus: ReturnType<typeof vi.fn>;
     setLightPower: ReturnType<typeof vi.fn>;
+    setBlurAmount: ReturnType<typeof vi.fn>;
+    setLightSize: ReturnType<typeof vi.fn>;
     start: () => void;
     renderStill: (w: number, h: number) => HTMLCanvasElement;
     setScreen: (...args: unknown[]) => void;
@@ -40,6 +42,8 @@ vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
     minZoom = vi.fn(() => 0.35);
     setFocus = vi.fn();
     setLightPower = vi.fn();
+    setBlurAmount = vi.fn();
+    setLightSize = vi.fn();
     getFocusPoint = vi.fn(() => ({ x: 400, y: 300 }));
     pickImagePoint = vi.fn((): { x: number; y: number } | null => null);
     projectImagePoint = vi.fn(() => studio.project);
@@ -203,16 +207,55 @@ describe('ScreenshotEditor', () => {
       return studio.instances[0];
     };
 
-    it('opens every screenshot through the macro lens, with no style panel', async () => {
+    it('opens every screenshot through the macro lens, with the looks in the sidebar', async () => {
+      studio.project = { x: 0.5, y: 0.5 };
       const renderer = await opened();
       // Straight-on to start: no lean, depth of field ready for when the camera turns.
       expect(renderer.settings.lean).toBe(0);
       expect(renderer.settings.dof).toBe(true);
       expect(renderer.start).toHaveBeenCalled();
-      expect(screen.queryByText(/^style$/i)).not.toBeInTheDocument();
-      expect(screen.queryByRole('switch', { name: /^frame$/i })).not.toBeInTheDocument();
-      // The gestures are written on the stage instead.
+      expect(screen.getByRole('button', { name: /macro/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
       expect(screen.getByText(/click to focus/i)).toBeInTheDocument();
+      // The handles introduce themselves.
+      expect(screen.getByText('Focus')).toBeInTheDocument();
+      expect(screen.getByText('Light')).toBeInTheDocument();
+    });
+
+    it('hovering the focus ring offers a wider sharp area and more or less blur', async () => {
+      studio.project = { x: 0.5, y: 0.5 };
+      const user = userEvent.setup();
+      const renderer = await opened();
+      await user.hover(await screen.findByRole('button', { name: /focus point/i }));
+      await user.hover(screen.getByRole('button', { name: /wider sharp area/i }));
+      // The option says what it does.
+      expect(screen.getAllByText('Wider sharp area').length).toBeGreaterThan(0);
+      await user.click(screen.getByRole('button', { name: /wider sharp area/i }));
+      await waitFor(() => expect(renderer.setFocus.mock.calls.at(-1)?.[2]).toBeCloseTo(0.1, 5));
+      await user.click(screen.getByRole('button', { name: /less blur/i }));
+      await waitFor(() =>
+        expect(renderer.setBlurAmount.mock.calls.at(-1)?.[0]).toBeCloseTo(0.7, 5),
+      );
+      expect(screen.getByText('Blur 70%')).toBeInTheDocument();
+    });
+
+    it('hovering the light offers brighter or dimmer, and softer or crisper shadows', async () => {
+      const user = userEvent.setup();
+      const renderer = await opened();
+      await user.hover(screen.getByRole('button', { name: /^light$/i }));
+      await user.click(screen.getByRole('button', { name: /^brighter$/i }));
+      await waitFor(() =>
+        expect(renderer.setLightPower.mock.calls.at(-1)?.[0]).toBeCloseTo(1.15, 5),
+      );
+      await user.click(screen.getByRole('button', { name: /softer shadows/i }));
+      await waitFor(() =>
+        expect(renderer.setLightSize.mock.calls.at(-1)?.[0]).toBeCloseTo(0.65, 5),
+      );
+      // One Undo takes the softness back to the look's own.
+      await user.click(screen.getByRole('button', { name: /^undo$/i }));
+      await waitFor(() => expect(renderer.setLightSize.mock.calls.at(-1)?.[0]).toBeNull());
     });
 
     it('exports the finished studio still', async () => {

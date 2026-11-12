@@ -63,6 +63,10 @@ export interface ScreenshotStudio {
   focusRange: number;
   /** Light strength as a share of the look's own (1). */
   lightPower: number;
+  /** Blur strength 0..1, or null for the look's own. */
+  blur: number | null;
+  /** Light size 0..1 (larger: softer shadows), or null for the look's own. */
+  lightSize: number | null;
   /** Light handle position (fractions of the output), or null for the look's own light. */
   light: { x: number; y: number } | null;
 }
@@ -94,6 +98,8 @@ export const FLAT_STUDIO: ScreenshotStudio = {
   focus: null,
   focusRange: 0,
   lightPower: 1,
+  blur: null,
+  lightSize: null,
   light: null,
 };
 

@@ -77,8 +77,13 @@ import {
   IconDownload,
   IconHash,
   IconHighlighter,
+  IconFocusPoint,
+  IconMinus,
+  IconPlus,
   IconPointer,
   IconSun,
+  IconSunCrisp,
+  IconSunSoft,
   IconSquare,
   IconText,
   IconTrash,
@@ -89,6 +94,7 @@ import { cn } from 'src/lib/utils';
 import { useStore } from 'src/store';
 import type { ScreenshotCapture, StylePreset } from 'src/types';
 import { ScreenshotStylePanel } from './_components/ScreenshotStylePanel';
+import { StudioGooFilter, StudioPuck, type PuckAction } from './_components/StudioPuck';
 import { TopBarButton, TopBarGroup } from './_components/TopBarButtons';
 
 type Props = {
@@ -469,6 +475,8 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       focus: studio.focus,
       focusRange: studio.focusRange,
       lightPower: studio.lightPower,
+      blur: studio.blur,
+      lightSize: studio.lightSize,
     };
     if (display.width <= 0 || display.height <= 0) {
       return pose;
@@ -510,6 +518,8 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     renderer.setOffset(studioPose.offset, studioPose.depth);
     renderer.setLightHandle(studioPose.light);
     renderer.setLightPower(studioPose.lightPower);
+    renderer.setBlurAmount(studioPose.blur);
+    renderer.setLightSize(studioPose.lightSize);
     // The renderer's screen is the flat canvas (capped in size): capture pixels → its pixels.
     const k = flatGeometry.scale;
     const toScreen = (p: Point) => ({ x: p.x * k, y: p.y * k });
@@ -556,7 +566,23 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     window.clearTimeout(readoutTimer.current);
     readoutTimer.current = window.setTimeout(() => setReadout(null), READOUT_MS);
   };
+  /** The label of the option under the pointer, shown until the pointer leaves it. */
+  const hoverReadout = (kind: 'focus' | 'light') => (label: string | null) => {
+    window.clearTimeout(readoutTimer.current);
+    setReadout(label ? { kind, text: label } : null);
+  };
   useEffect(() => () => window.clearTimeout(readoutTimer.current), []);
+
+  // The first moments with a new screenshot: the focus ring and the light pulse and say what they
+  // are, so they are not missed.
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    if (!studioOn) {
+      return;
+    }
+    const timer = window.setTimeout(() => setIntro(false), 4500);
+    return () => window.clearTimeout(timer);
+  }, [studioOn]);
 
   // Space held hands the studio to the screenshot: drag moves it, scroll moves it in depth.
   // Without Space, a drag off the screenshot turns the camera and scroll zooms, as in a 3D viewer.
@@ -1142,6 +1168,115 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     onDoubleClick: handleDoubleClick,
   };
 
+  // The options around the focus ring and the light. Clicks on one option in quick succession
+  // undo as one step.
+  const optionGroup = useRef<{ id: string; at: number; group: string } | null>(null);
+  const applyOption = (id: string, patch: Partial<typeof studio>) => {
+    const now = performance.now();
+    const last = optionGroup.current;
+    const group =
+      last && last.id === id && now - last.at < 800 ? last.group : `option-${id}-${now}`;
+    optionGroup.current = { id, at: now, group };
+    setStyle({ ...style, studio: { ...studio, ...patch } }, group);
+  };
+  const percent = (value: number) => Math.round(value * 100);
+  const blurNow = studio.blur ?? look?.settings.dofAmt ?? 0.5;
+  const lightSizeNow = studio.lightSize ?? look?.settings.lightSize ?? 0.5;
+  const focusActions: PuckAction[] = [
+    {
+      id: 'sharp-less',
+      side: 'left',
+      label: t('narrowerSharpArea'),
+      icon: <IconMinus size={14} />,
+      onClick: () => {
+        const focusRange = Math.max(0, Math.round((studio.focusRange - 0.1) * 100) / 100);
+        applyOption('sharp', { focusRange });
+        showReadout('focus', t('readoutSharpArea', { value: percent(focusRange) }));
+      },
+    },
+    {
+      id: 'sharp-more',
+      side: 'right',
+      label: t('widerSharpArea'),
+      icon: <IconPlus size={14} />,
+      onClick: () => {
+        const focusRange = Math.min(1, Math.round((studio.focusRange + 0.1) * 100) / 100);
+        applyOption('sharp', { focusRange });
+        showReadout('focus', t('readoutSharpArea', { value: percent(focusRange) }));
+      },
+    },
+    {
+      id: 'blur-more',
+      side: 'top',
+      label: t('moreBlur'),
+      icon: <IconBlur size={14} />,
+      onClick: () => {
+        const blur = Math.min(1, Math.round((blurNow + 0.15) * 100) / 100);
+        applyOption('blur', { blur });
+        showReadout('focus', t('readoutBlur', { value: percent(blur) }));
+      },
+    },
+    {
+      id: 'blur-less',
+      side: 'bottom',
+      label: t('lessBlur'),
+      icon: <IconFocusPoint size={14} />,
+      onClick: () => {
+        const blur = Math.max(0, Math.round((blurNow - 0.15) * 100) / 100);
+        applyOption('blur', { blur });
+        showReadout('focus', t('readoutBlur', { value: percent(blur) }));
+      },
+    },
+  ];
+  const lightActions: PuckAction[] = [
+    {
+      id: 'dimmer',
+      side: 'left',
+      label: t('dimmer'),
+      icon: <IconMinus size={14} />,
+      onClick: () => {
+        const lightPower = Math.max(0.4, studio.lightPower / 1.15);
+        applyOption('power', { lightPower });
+        showReadout('light', t('readoutLight', { value: percent(lightPower) }));
+      },
+    },
+    {
+      id: 'brighter',
+      side: 'right',
+      label: t('brighter'),
+      icon: <IconPlus size={14} />,
+      onClick: () => {
+        const lightPower = Math.min(2, studio.lightPower * 1.15);
+        applyOption('power', { lightPower });
+        showReadout('light', t('readoutLight', { value: percent(lightPower) }));
+      },
+    },
+    {
+      id: 'softer',
+      side: 'top',
+      label: t('softerShadows'),
+      icon: <IconSunSoft size={14} />,
+      onClick: () => {
+        const lightSize = Math.min(1, Math.round((lightSizeNow + 0.15) * 100) / 100);
+        applyOption('softness', { lightSize });
+        showReadout('light', t('readoutSoftness', { value: percent(lightSize) }));
+      },
+    },
+    {
+      id: 'crisper',
+      side: 'bottom',
+      label: t('crisperShadows'),
+      icon: <IconSunCrisp size={14} />,
+      onClick: () => {
+        const lightSize = Math.max(0.05, Math.round((lightSizeNow - 0.15) * 100) / 100);
+        applyOption('softness', { lightSize });
+        showReadout('light', t('readoutSoftness', { value: percent(lightSize) }));
+      },
+    },
+  ];
+  const focusPuckSize = 28 + studioPose.focusRange * 90;
+  const LIGHT_PUCK = 32;
+
   const lightFromEvent = (e: { clientX: number; clientY: number }): StudioPoint | null => {
     const rect = studioCanvasRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0 || rect.height === 0) {
@@ -1291,103 +1426,115 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
                 {...canvasHandlers}
               />
             )}
+            {studioOn && <StudioGooFilter />}
             {studioOn && focusAt && (
-              <button
-                ref={focusRingRef}
-                type="button"
-                aria-label={t('focusRing')}
-                title={t('focusRingTitle')}
-                data-auto={!studioPose.focus}
-                className={cn(
-                  'absolute -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full border-[1.5px] border-white/85 opacity-70 shadow-[0_0_0_1px_rgba(0,0,0,0.3),inset_0_0_0_1px_rgba(0,0,0,0.2)] transition-[opacity,width,height] duration-150 hover:opacity-100 active:cursor-grabbing',
-                  !studioPose.focus && 'border-dashed opacity-50',
+              <StudioPuck
+                x={focusAt.x * display.width}
+                y={focusAt.y * display.height}
+                size={focusPuckSize}
+                actions={focusActions}
+                intro={intro}
+                caption={t('puckFocusCaption')}
+                onHoverAction={hoverReadout('focus')}
+                buttonRef={focusRingRef}
+                buttonClassName={cn(
+                  'cursor-grab touch-none rounded-full border-2 border-white/90 shadow-[0_0_0_1px_rgba(0,0,0,0.35),inset_0_0_0_1px_rgba(0,0,0,0.25),0_0_12px_rgba(255,255,255,0.25)] transition-[width,height,opacity] duration-150 active:cursor-grabbing',
+                  !studioPose.focus && 'border-dashed opacity-80',
                 )}
-                style={{
-                  left: focusAt.x * display.width,
-                  top: focusAt.y * display.height,
-                  width: 26 + studioPose.focusRange * 90,
-                  height: 26 + studioPose.focusRange * 90,
-                }}
-                onPointerDown={(e) => {
-                  if (e.button !== 0) {
-                    return;
-                  }
-                  e.stopPropagation();
-                  e.currentTarget.setPointerCapture?.(e.pointerId);
-                  const point = studioPose.focus ?? toImagePoint(e);
-                  if (point) {
-                    setDrag({ mode: 'focus', current: point });
-                  }
-                }}
-                onPointerMove={(e) => {
-                  if (drag?.mode !== 'focus') {
-                    return;
-                  }
-                  // Off the screenshot the ring keeps its last spot on it.
-                  const point = toImagePoint(e);
-                  if (point) {
-                    setDrag({ mode: 'focus', current: point });
-                  }
-                }}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={() => setDrag(null)}
-                onDoubleClick={() => {
-                  if (studio.focus !== null) {
-                    commitStudio({ focus: null });
-                  }
+                buttonProps={{
+                  'aria-label': t('focusRing'),
+                  title: t('focusRingTitle'),
+                  onPointerDown: (e) => {
+                    if (e.button !== 0) {
+                      return;
+                    }
+                    e.stopPropagation();
+                    e.currentTarget.setPointerCapture?.(e.pointerId);
+                    const point = studioPose.focus ?? toImagePoint(e);
+                    if (point) {
+                      setDrag({ mode: 'focus', current: point });
+                    }
+                  },
+                  onPointerMove: (e) => {
+                    if (drag?.mode !== 'focus') {
+                      return;
+                    }
+                    // Off the screenshot the ring keeps its last spot on it.
+                    const point = toImagePoint(e);
+                    if (point) {
+                      setDrag({ mode: 'focus', current: point });
+                    }
+                  },
+                  onPointerUp: handlePointerUp,
+                  onPointerCancel: () => setDrag(null),
+                  onDoubleClick: () => {
+                    if (studio.focus !== null) {
+                      commitStudio({ focus: null });
+                    }
+                  },
                 }}
               >
-                <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
-              </button>
+                <span className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)]" />
+              </StudioPuck>
             )}
             {studioOn && lightHandle && (
-              <button
-                ref={lightPuckRef}
-                type="button"
-                aria-label={t('lightHandle')}
-                title={t('lightHandleTitle')}
-                className="absolute flex size-7 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-full bg-black/25 text-white/90 opacity-70 shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_14px_rgba(255,236,190,0.45)] backdrop-blur-[2px] transition-opacity hover:opacity-100 active:cursor-grabbing"
-                style={{
-                  left: clamp(lightHandle.x, 0, 1) * display.width,
-                  top: clamp(lightHandle.y, 0, 1) * display.height,
-                }}
-                onPointerDown={(e) => {
-                  if (e.button !== 0) {
-                    return;
-                  }
-                  e.stopPropagation();
-                  e.currentTarget.setPointerCapture?.(e.pointerId);
-                  const at = lightFromEvent(e);
-                  if (at) {
-                    setDrag({ mode: 'light', start: at, current: at });
-                  }
-                }}
-                onPointerMove={(e) => {
-                  if (drag?.mode !== 'light') {
-                    return;
-                  }
-                  const at = lightFromEvent(e);
-                  if (at) {
-                    setDrag({ ...drag, current: at });
-                  }
-                }}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={() => setDrag(null)}
-                onDoubleClick={() => {
-                  if (studio.light !== null || studio.lightPower !== 1) {
-                    commitStudio({ light: null, lightPower: 1 });
-                  }
+              <StudioPuck
+                x={clamp(lightHandle.x, 0, 1) * display.width}
+                y={clamp(lightHandle.y, 0, 1) * display.height}
+                size={LIGHT_PUCK}
+                actions={lightActions}
+                intro={intro}
+                caption={t('puckLightCaption')}
+                onHoverAction={hoverReadout('light')}
+                buttonRef={lightPuckRef}
+                buttonClassName="flex cursor-grab touch-none items-center justify-center rounded-full bg-black/45 text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.6),0_0_16px_rgba(255,236,190,0.55)] backdrop-blur-[2px] active:cursor-grabbing"
+                buttonProps={{
+                  'aria-label': t('lightHandle'),
+                  title: t('lightHandleTitle'),
+                  onPointerDown: (e) => {
+                    if (e.button !== 0) {
+                      return;
+                    }
+                    e.stopPropagation();
+                    e.currentTarget.setPointerCapture?.(e.pointerId);
+                    const at = lightFromEvent(e);
+                    if (at) {
+                      setDrag({ mode: 'light', start: at, current: at });
+                    }
+                  },
+                  onPointerMove: (e) => {
+                    if (drag?.mode !== 'light') {
+                      return;
+                    }
+                    const at = lightFromEvent(e);
+                    if (at) {
+                      setDrag({ ...drag, current: at });
+                    }
+                  },
+                  onPointerUp: handlePointerUp,
+                  onPointerCancel: () => setDrag(null),
+                  onDoubleClick: () => {
+                    if (
+                      studio.light !== null ||
+                      studio.lightPower !== 1 ||
+                      studio.lightSize !== null
+                    ) {
+                      commitStudio({ light: null, lightPower: 1, lightSize: null });
+                    }
+                  },
                 }}
               >
-                <IconSun size={16} />
-              </button>
+                <IconSun size={18} />
+              </StudioPuck>
             )}
             {studioOn && readout && (
               <div
                 className="pointer-events-none absolute -translate-x-1/2 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white"
                 style={(() => {
                   const at = readout.kind === 'focus' ? focusAt : lightHandle;
-                  const lift = readout.kind === 'focus' ? 13 + studioPose.focusRange * 45 : 14;
+                  // Below the bottom option, so it never covers one.
+                  const lift =
+                    (readout.kind === 'focus' ? focusPuckSize : LIGHT_PUCK) / 2 + 26 + 14;
                   return at
                     ? {
                         left: clamp(at.x, 0, 1) * display.width,
@@ -1430,29 +1577,27 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           </div>
         </div>
 
-        {!studioOn && (
-          <aside
-            className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4"
-            // Hover cards (the window bar's styles) sit beside this panel.
-            data-preview-boundary
-          >
-            <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
-              {t('style')}
-            </div>
-            {/* Hover a window bar style for a preview of it. */}
-            <PreviewCardProvider>
-              <ScreenshotStylePanel
-                style={panelStyle}
-                presets={presets}
-                looksAvailable={!studioFailed}
-                onChange={setStyle}
-                windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
-                captureImage={capture.imageUrl}
-                capturePage={capturePage(capture)}
-              />
-            </PreviewCardProvider>
-          </aside>
-        )}
+        <aside
+          className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4"
+          // Hover cards (the window bar's styles) sit beside this panel.
+          data-preview-boundary
+        >
+          <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
+            {t('style')}
+          </div>
+          {/* Hover a window bar style for a preview of it. */}
+          <PreviewCardProvider>
+            <ScreenshotStylePanel
+              style={panelStyle}
+              presets={presets}
+              looksAvailable={!studioFailed}
+              onChange={setStyle}
+              windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
+              captureImage={capture.imageUrl}
+              capturePage={capturePage(capture)}
+            />
+          </PreviewCardProvider>
+        </aside>
       </div>
     </div>
   );

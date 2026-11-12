@@ -2,6 +2,10 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import type { HugeiconsProps, IconSvgElement } from '@hugeicons/react';
 import {
   Sun03Icon,
+  Sun01Icon,
+  SunCloud02Icon,
+  Remove01Icon,
+  CenterFocusIcon,
   Add01Icon,
   ArrowDown01Icon,
   ArrowLeft01Icon,
@@ -208,3 +212,7 @@ export const IconDownload = createIcon(Download01Icon, 'IconDownload');
 
 export type { CompatIconProps };
 export const IconSun = createIcon(Sun03Icon, 'IconSun');
+export const IconMinus = createIcon(Remove01Icon, 'IconMinus');
+export const IconFocusPoint = createIcon(CenterFocusIcon, 'IconFocusPoint');
+export const IconSunSoft = createIcon(SunCloud02Icon, 'IconSunSoft');
+export const IconSunCrisp = createIcon(Sun01Icon, 'IconSunCrisp');

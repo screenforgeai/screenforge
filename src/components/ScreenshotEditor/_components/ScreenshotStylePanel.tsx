@@ -129,6 +129,11 @@ export const ScreenshotStylePanel = ({
     studio.orbit.x !== 0 ||
     studio.orbit.y !== 0 ||
     studio.zoom !== 1 ||
+    studio.focus !== null ||
+    studio.focusRange !== 0 ||
+    studio.lightPower !== 1 ||
+    studio.blur !== null ||
+    studio.lightSize !== null ||
     studio.light !== null;
 
   const aspectRatio = (

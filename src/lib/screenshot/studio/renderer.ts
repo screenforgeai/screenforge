@@ -297,6 +297,9 @@ export class StudioRenderer {
   private focusRange = 0;
   /** Light strength as a share of the look's own. */
   private lightPower = 1;
+  /** The user's blur strength and light size (0..1), or null for the look's own. */
+  private blurAmount: number | null = null;
+  private lightSize: number | null = null;
   private handle: StudioPoint | null = null;
   private width = 1;
   private height = 1;
@@ -771,6 +774,24 @@ export class StudioRenderer {
     }
     this.lightPower = power;
     this.applyEnv();
+  }
+
+  /** Blur strength 0..1 (depth of field), or null for the look's own. */
+  setBlurAmount(amount: number | null): void {
+    if (amount === this.blurAmount) {
+      return;
+    }
+    this.blurAmount = amount;
+    this.invalidate();
+  }
+
+  /** Size of the key light 0..1 (larger: softer shadows), or null for the look's own. */
+  setLightSize(size: number | null): void {
+    if (size === this.lightSize) {
+      return;
+    }
+    this.lightSize = size;
+    this.invalidate();
   }
 
   /** A screen-canvas pixel as a point in the scene, on the screenshot's face. */
@@ -1353,7 +1374,7 @@ export class StudioRenderer {
     const oldAlpha = r.getClearAlpha();
     r.setClearColor(0x000000, 0);
     const wallGap = this.panelTarget.z - this.catcher.position.z;
-    const spread = 0.05 + this.s.lightSize * 0.55; // the light's angular radius, radians
+    const spread = 0.05 + (this.lightSize ?? this.s.lightSize) * 0.55; // the light's angular radius, radians
     const lightDir = this.key.position.clone().sub(this.panelTarget).normalize();
     if (layerIndex >= 0) {
       // A Vogel spiral spreads the layered light positions evenly over the light's disc.
@@ -1462,8 +1483,9 @@ export class StudioRenderer {
       u.focus.value = Math.max(-world.applyMatrix4(this.camera.matrixWorldInverse).z, 0.05);
       // Sharp area: up to 40% of the focus distance either side stays completely sharp.
       u.uRange.value = this.focusRange * (u.focus.value as number) * 0.4;
-      u.aperture.value = this.s.dofAmt * 0.12;
-      u.maxblur.value = 0.003 + this.s.dofAmt * 0.028;
+      const blur = this.blurAmount ?? this.s.dofAmt;
+      u.aperture.value = blur * 0.12;
+      u.maxblur.value = 0.003 + blur * 0.028;
       u.uFringe.value = this.s.fringe * 0.08;
     }
     if (this.layerIndex < LAYERED_FRAMES) {
