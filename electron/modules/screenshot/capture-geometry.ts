@@ -157,6 +157,26 @@ export function areaToImageRect(area: Rect, displaySize: Size, imageSize: Size):
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
+/**
+ * Maps a selection in display DIPs to a clamped rect in global screen
+ * coordinates (whole points), as macOS `screencapture -R` takes it.
+ */
+export function areaToScreenRect(area: Rect, display: { bounds: Rect; size: Size }): Rect | null {
+  const left = Math.max(0, Math.round(area.x));
+  const top = Math.max(0, Math.round(area.y));
+  const right = Math.min(display.size.width, Math.round(area.x + area.width));
+  const bottom = Math.min(display.size.height, Math.round(area.y + area.height));
+  if (right <= left || bottom <= top) {
+    return null;
+  }
+  return {
+    x: display.bounds.x + left,
+    y: display.bounds.y + top,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
 export function fitWithin(size: Size, max: Size): Size {
   const scale = Math.min(1, max.width / size.width, max.height / size.height);
   return { width: Math.round(size.width * scale), height: Math.round(size.height * scale) };

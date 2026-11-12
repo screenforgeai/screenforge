@@ -20,7 +20,7 @@ vi.mock('./service', () => serviceMock);
 
 import { registerScreenshotChannels } from './channel';
 
-const capture = { kind: 'display', dataUrl: 'data:image/png;base64,AAAA', width: 10, height: 10 };
+const capture = { kind: 'display', png: new Uint8Array([1, 2, 3]), width: 10, height: 10 };
 
 function makeWindow(destroyed = false) {
   return {
@@ -106,5 +106,27 @@ describe('screenshot capture channel', () => {
     expect(toolbar.close).not.toHaveBeenCalled();
     expect(toolbar.show).toHaveBeenCalledOnce();
     expect(setToolbarWindow).not.toHaveBeenCalled();
+  });
+});
+
+describe('take-screenshot channel', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+
+  it('runs the same area screenshot as the shortcut when the main window asks for one', async () => {
+    const takeArea = vi.fn();
+    registerScreenshotChannels(
+      {
+        getMainWindow: () => null,
+        getToolbarWindow: () => null,
+        setToolbarWindow: vi.fn(),
+      },
+      { takeArea },
+    );
+    const handler = handlers.get(CH.screenshot.TAKE_AREA);
+    expect(handler).toBeDefined();
+    await handler?.();
+    expect(takeArea).toHaveBeenCalledTimes(1);
   });
 });

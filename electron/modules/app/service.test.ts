@@ -192,6 +192,24 @@ describe('app permission service', () => {
   });
 
   describe('saveScreenshot', () => {
+    const pngHeader = (width: number, height: number): Buffer => {
+      const bytes = Buffer.alloc(33);
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes, 0);
+      bytes.writeUInt32BE(13, 8);
+      bytes.write('IHDR', 12, 'latin1');
+      bytes.writeUInt32BE(width, 16);
+      bytes.writeUInt32BE(height, 20);
+      return bytes;
+    };
+
+    it('refuses anything that is not PNG bytes', async () => {
+      const { saveScreenshot } = await loadServiceModule();
+      await expect(
+        saveScreenshot('data:image/png;base64,AAAA' as unknown as Uint8Array),
+      ).rejects.toThrow();
+      await expect(saveScreenshot(Buffer.from('plain text, not an image'))).rejects.toThrow();
+    });
+
     it('gives two saves in the same second their own files', async () => {
       const pictures = await fs.mkdtemp(path.join(os.tmpdir(), 'sf-screenshot-'));
       electronMock.app.getPath.mockReturnValue(pictures);
@@ -199,12 +217,14 @@ describe('app permission service', () => {
       vi.setSystemTime(new Date('2026-11-10T12:00:00.000Z'));
       try {
         const { saveScreenshot } = await loadServiceModule();
-        const first = await saveScreenshot('data:image/png;base64,AAAA');
-        const second = await saveScreenshot('data:image/png;base64,BBBB');
+        const a = pngHeader(10, 10);
+        const b = pngHeader(20, 20);
+        const first = await saveScreenshot(a);
+        const second = await saveScreenshot(b);
 
         expect(second).not.toBe(first);
-        expect((await fs.readFile(first)).toString('base64')).toBe('AAAA');
-        expect((await fs.readFile(second)).toString('base64')).toBe('BBBB');
+        expect(await fs.readFile(first)).toEqual(a);
+        expect(await fs.readFile(second)).toEqual(b);
       } finally {
         vi.useRealTimers();
         await fs.rm(pictures, { recursive: true, force: true });
