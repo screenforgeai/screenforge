@@ -115,7 +115,10 @@ describe('getStudioLook', () => {
 
   it('gives every look the full set of settings', () => {
     const macro = getStudioLook('macro');
-    expect(macro?.settings.lean).toBe(58);
+    // Macro starts straight-on; turning the camera brings the angle.
+    expect(macro?.settings.lean).toBe(0);
+    expect(macro?.settings.camera).toBe('straight');
+    expect(macro?.settings.dof).toBe(true);
     expect(getStudioLook('night-glow')?.settings.lean).toBe(0);
   });
 });

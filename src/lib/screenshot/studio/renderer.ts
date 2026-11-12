@@ -171,6 +171,8 @@ const CAMERAS: Record<StudioCameraId, { az: number; el: number; dist: number; fo
   front: { az: 0, el: 0.02, dist: 0.95, fov: 20 },
   left: { az: -0.5, el: 0.12, dist: 1, fov: 20 },
   macro: { az: 0.16, el: 0.2, dist: 0.2, fov: 38 },
+  // Straight-on, the screenshot filling about two thirds of the frame.
+  straight: { az: 0, el: 0.02, dist: 0.52, fov: 26 },
 };
 const BASE_RADIUS = 13.6;
 /** The framing was tuned at this width:height; narrower outputs pull the camera back. */
@@ -585,6 +587,9 @@ export class StudioRenderer {
 
     this.bokeh = new BokehPass(scene, this.camera, { focus: 13, aperture: 0.001, maxblur: 0.01 });
     this.bokeh.enabled = false;
+    // Depth is packed into RGBA, which is exact only in 8-bit channels; the pass's own half-float
+    // target loses enough precision a few metres out to blur pixels that are in focus.
+    this.bokeh.renderTargetDepth.texture.type = THREE.UnsignedByteType;
     const bokehUniforms = this.bokeh.uniforms as Record<string, THREE.IUniform>;
     bokehUniforms.uFringe = { value: 0 };
     bokehUniforms.uRim = { value: 1.2 };

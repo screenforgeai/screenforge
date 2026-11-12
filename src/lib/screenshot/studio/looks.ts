@@ -21,7 +21,7 @@ export type StudioWallId =
   | 'black';
 export type StudioLightId = 'studio' | 'dramatic' | 'bright' | 'rim';
 export type StudioEdgeId = 'glass' | 'silver' | 'graphite';
-export type StudioCameraId = 'hero' | 'front' | 'left' | 'macro';
+export type StudioCameraId = 'hero' | 'front' | 'left' | 'macro' | 'straight';
 
 export interface StudioSettings {
   wall: StudioWallId;
@@ -188,27 +188,27 @@ export const STUDIO_LOOKS: readonly StudioLook[] = [
   }),
   // A close lens skimming a leaned-back screen: one sharp band, the rest melting
   // into soft discs, vivid colour glowing, the far side sinking into shadow.
+  // Starts straight-on, the whole screenshot sharp and framed; turning the camera (a drag)
+  // brings in the angle, and with it the focus fall-off and the screen's viewing-angle dimming.
   look('macro', 'Macro', macroThumb, {
     wall: 'black',
     edge: 'graphite',
-    camera: 'macro',
+    camera: 'straight',
     envInt: 0.9,
     lightSize: 0.5,
     bgRefl: 0.3,
     reflect: 0.3,
-    tilt: -14,
+    tilt: 0,
     shadowStr: 0.6,
     screenGlow: 0.2,
     dof: true,
     dofAmt: 0.85,
     bloomMode: 'colour',
-    lean: 58,
-    vignette: 0.7,
-    fisheye: 0.35,
-    fringe: 0.3,
-    screenFade: 0.85,
-    fadeAngle: 90,
-    fadeSoft: 0.65,
+    lean: 0,
+    vignette: 0.55,
+    fisheye: 0.12,
+    fringe: 0.2,
+    screenFade: 0,
     lcd: 1,
     screenGain: 'auto',
   }),

@@ -205,7 +205,8 @@ describe('ScreenshotEditor', () => {
 
     it('opens every screenshot through the macro lens, with no style panel', async () => {
       const renderer = await opened();
-      expect(renderer.settings.lean).toBe(58);
+      // Straight-on to start: no lean, depth of field ready for when the camera turns.
+      expect(renderer.settings.lean).toBe(0);
       expect(renderer.settings.dof).toBe(true);
       expect(renderer.start).toHaveBeenCalled();
       expect(screen.queryByText(/^style$/i)).not.toBeInTheDocument();
