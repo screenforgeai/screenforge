@@ -195,6 +195,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const studio = style.studio ?? FLAT_STUDIO;
   const look = getStudioLook(studio.lookId);
   const studioOn = !!look && !studioFailed;
+  // Without a working studio, the panel always sees (and edits) the flat frame, whatever an
+  // undo or redo brings back.
+  const panelStyle = useMemo(
+    () => (studioFailed ? { ...style, studio: FLAT_STUDIO } : style),
+    [style, studioFailed],
+  );
 
   const shapeStyle = useMemo(
     () => ({ color, scale: getAnnotationScale(capture.width, capture.height) }),
@@ -356,9 +362,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     try {
       renderer = new StudioRenderer(canvas, settings);
     } catch {
-      // Back to the flat frame, so the panel shows (and offers) what is really on screen.
+      // The editor falls back to the flat frame; the panel is shown that (see panelStyle), so
+      // nothing goes into the undo history that Undo could bring back.
       setStudioFailed(true);
-      setStyle({ ...style, studio: FLAT_STUDIO });
       toast.error(t('studioUnavailable'));
       return;
     }
@@ -1055,7 +1061,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
             {t('style')}
           </div>
           <ScreenshotStylePanel
-            style={style}
+            style={panelStyle}
             presets={presets}
             looksAvailable={!studioFailed}
             onChange={setStyle}

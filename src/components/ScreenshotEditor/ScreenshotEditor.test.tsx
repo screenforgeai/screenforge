@@ -195,6 +195,14 @@ describe('ScreenshotEditor', () => {
         ),
       );
       expect(screen.getByRole('button', { name: /night glow/i })).toBeDisabled();
+      // Undo and redo cannot bring the failed look back into the panel.
+      await user.click(screen.getByRole('button', { name: /^undo$/i }));
+      await user.click(screen.getByRole('button', { name: /^redo$/i }));
+      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('switch', { name: /^frame$/i })).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /^copy$/i }));
       await waitFor(() =>
         expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalledWith(OUTPUT),
@@ -230,6 +238,8 @@ describe('ScreenshotEditor', () => {
       fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 250 });
       // The text box is placed at capture pixel (8192, 4096) and shown where that lands on the screen.
       await waitFor(() => expect(renderer.projectImagePoint).toHaveBeenCalledWith(4096, 2048));
+      // 100 capture pixels to the right is 50 on the half-size screen: tells the two spaces apart.
+      expect(renderer.projectImagePoint).toHaveBeenCalledWith(4146, 2048);
       expect(renderer.pickImagePoint).toHaveBeenCalledWith(0.5, 0.5);
     });
 
