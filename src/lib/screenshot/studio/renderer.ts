@@ -705,6 +705,8 @@ export class StudioRenderer {
     }
     if (!sameSize || !this.face) {
       this.buildPanel();
+      // A new panel size moves the camera's target; settings changes place the camera themselves.
+      this.placeCamera(false);
     }
     this.invalidate();
   }
@@ -1093,7 +1095,6 @@ export class StudioRenderer {
     if (this.screenTex) {
       this.fitTexture(this.screenTex, pw / h);
     }
-    this.placeCamera(false);
     this.invalidate();
   }
 

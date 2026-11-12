@@ -31,6 +31,8 @@ const BACKGROUND_TYPES: Exclude<BackgroundType, 'blur'>[] = ['wallpaper', 'gradi
 type Props = {
   style: ScreenshotStyle;
   presets: StylePreset[];
+  /** False when the studio (WebGL 2) could not start here: only Flat can be picked. */
+  looksAvailable?: boolean;
   /** `group`: changes sharing one (a slider drag, one colour pick) undo as a single step. */
   onChange: (style: ScreenshotStyle, group?: string) => void;
 };
@@ -38,7 +40,12 @@ type Props = {
 let groupCounter = 0;
 const nextGroup = (name: string) => `${name}-${++groupCounter}`;
 
-export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
+export const ScreenshotStylePanel = ({
+  style,
+  presets,
+  looksAvailable = true,
+  onChange,
+}: Props) => {
   const { t } = useTranslation('screenshot');
   const { t: tFrame } = useTranslation('frame');
   const solidInputRef = useRef<HTMLInputElement>(null);
@@ -90,14 +97,17 @@ export const ScreenshotStylePanel = ({ style, presets, onChange }: Props) => {
 
   const lookTile = (id: string | null, label: string, thumb?: string) => {
     const selected = studio.lookId === id;
+    const disabled = id !== null && !looksAvailable;
     return (
       <button
         key={id ?? 'flat'}
         type="button"
         aria-pressed={selected}
+        disabled={disabled}
+        title={disabled ? t('studioUnavailable') : undefined}
         onClick={() => pickLook(id)}
         className={cn(
-          'flex cursor-pointer flex-col overflow-hidden rounded-md border p-0 text-left transition-all active:scale-[0.97]',
+          'flex cursor-pointer flex-col overflow-hidden rounded-md border p-0 text-left transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-30',
           selected
             ? 'border-sf-border-lt ring-1 ring-sf-border-lt'
             : 'border-sf-border opacity-65 hover:opacity-90',

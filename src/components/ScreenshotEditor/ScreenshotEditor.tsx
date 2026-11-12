@@ -356,7 +356,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     try {
       renderer = new StudioRenderer(canvas, settings);
     } catch {
+      // Back to the flat frame, so the panel shows (and offers) what is really on screen.
       setStudioFailed(true);
+      setStyle({ ...style, studio: FLAT_STUDIO });
       toast.error(t('studioUnavailable'));
       return;
     }
@@ -465,10 +467,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       if (!renderer || !rect || rect.width === 0 || rect.height === 0) {
         return null;
       }
-      return renderer.pickImagePoint(
+      // The studio's screen is the flat canvas, which is capped in size: back to capture pixels.
+      const hit = renderer.pickImagePoint(
         (e.clientX - rect.left) / rect.width,
         (e.clientY - rect.top) / rect.height,
       );
+      return hit ? { x: hit.x / flatGeometry.scale, y: hit.y / flatGeometry.scale } : null;
     }
     const canvas = canvasRef.current;
     if (!canvas) {
@@ -789,8 +793,10 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       editing?.type === 'text' ? editing.fontSize : getDefaultFontSize(shapeStyle.scale);
     if (studioOn) {
       const renderer = studioRef.current;
-      const at = renderer?.projectImagePoint(textEdit.point.x, textEdit.point.y);
-      const next = renderer?.projectImagePoint(textEdit.point.x + 100, textEdit.point.y);
+      // Capture pixels → the flat canvas the studio shows.
+      const k = flatGeometry.scale;
+      const at = renderer?.projectImagePoint(textEdit.point.x * k, textEdit.point.y * k);
+      const next = renderer?.projectImagePoint((textEdit.point.x + 100) * k, textEdit.point.y * k);
       if (!at || !next) {
         return null;
       }
@@ -1048,7 +1054,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
             {t('style')}
           </div>
-          <ScreenshotStylePanel style={style} presets={presets} onChange={setStyle} />
+          <ScreenshotStylePanel
+            style={style}
+            presets={presets}
+            looksAvailable={!studioFailed}
+            onChange={setStyle}
+          />
         </aside>
       </div>
     </div>

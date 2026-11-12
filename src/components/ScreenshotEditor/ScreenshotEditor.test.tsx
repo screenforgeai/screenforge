@@ -14,6 +14,8 @@ const studio = vi.hoisted(() => ({
     renderStill: (w: number, h: number) => HTMLCanvasElement;
     setScreen: (...args: unknown[]) => void;
     setSettings: (...args: unknown[]) => void;
+    pickImagePoint: ReturnType<typeof vi.fn>;
+    projectImagePoint: ReturnType<typeof vi.fn>;
   }[],
 }));
 vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
@@ -185,10 +187,85 @@ describe('ScreenshotEditor', () => {
       });
       await user.click(screen.getByRole('button', { name: /night glow/i }));
       expect(container.querySelector('canvas')).toBeInTheDocument();
+      // The panel shows what is really on screen, and the looks cannot be picked here.
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        ),
+      );
+      expect(screen.getByRole('button', { name: /night glow/i })).toBeDisabled();
       await user.click(screen.getByRole('button', { name: /^copy$/i }));
       await waitFor(() =>
         expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalledWith(OUTPUT),
       );
+    });
+
+    it('maps the pointer through the tilted screen in capture pixels, even past the size cap', async () => {
+      // 16384 px wide: the studio's screen canvas is capped at 8192, half the capture's size.
+      const big: ScreenshotCapture = { ...capture, width: 16384, height: 8192 };
+      const user = userEvent.setup();
+      const { container } = render(<ScreenshotEditor capture={big} onClose={vi.fn()} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      const renderer = studio.instances[0];
+      renderer.pickImagePoint.mockReturnValue({ x: 4096, y: 2048 });
+      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 500,
+        right: 800,
+        bottom: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      canvas.setPointerCapture = vi.fn();
+      await user.click(screen.getByRole('button', { name: /^text$/i }));
+      fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 250 });
+      // The text box is placed at capture pixel (8192, 4096) and shown where that lands on the screen.
+      await waitFor(() => expect(renderer.projectImagePoint).toHaveBeenCalledWith(4096, 2048));
+      expect(renderer.pickImagePoint).toHaveBeenCalledWith(0.5, 0.5);
+    });
+
+    it('draws an annotation straight onto the studio screen', async () => {
+      const user = userEvent.setup();
+      const { container } = render(<ScreenshotEditor capture={capture} onClose={vi.fn()} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      const renderer = studio.instances[0];
+      const canvas = container.querySelector('canvas') as HTMLCanvasElement;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 500,
+        right: 800,
+        bottom: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      canvas.setPointerCapture = vi.fn();
+      await user.click(screen.getByRole('button', { name: /^box$/i }));
+      renderer.pickImagePoint.mockReturnValue({ x: 100, y: 100 });
+      fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 200, clientY: 200 });
+      renderer.pickImagePoint.mockReturnValue({ x: 400, y: 300 });
+      fireEvent.pointerMove(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+      fireEvent.pointerUp(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+      // The new box is selected, so it can be deleted, and it is undoable.
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /delete annotation/i })).toBeEnabled(),
+      );
+      expect(screen.getByRole('button', { name: /^undo$/i })).toBeEnabled();
     });
   });
 
