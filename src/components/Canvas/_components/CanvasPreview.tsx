@@ -10,6 +10,7 @@ import { trackEvent } from 'src/lib/analytics';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../../../store';
 import { usePixiRenderer } from '../../../hooks/usePixiRenderer';
+import { useRecordedBarDetection } from '../../../hooks/useRecordedBarDetection';
 import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { getFrameGeometry, resolveAspectRatioValue } from 'src/lib/effects/frame';
 import { FrameCropOverlay } from './FrameCropOverlay';
@@ -100,6 +101,8 @@ const ProcessingOverlay = () => {
 };
 
 export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
+  // Finds (and crops off) a recorded browser toolbar once per window recording.
+  useRecordedBarDetection();
   const { t } = useTranslation('common');
   const {
     recordingResult,

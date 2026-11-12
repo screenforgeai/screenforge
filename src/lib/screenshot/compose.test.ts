@@ -86,6 +86,55 @@ describe('getScreenshotGeometry', () => {
   });
 });
 
+describe('getScreenshotGeometry with a window bar', () => {
+  const mac = { style: 'mac' as const, theme: 'light' as const, center: 'url' as const };
+  const withBar = (frameEnabled: boolean): ScreenshotStyle => ({
+    ...(frameEnabled ? framed({ padding: 0 }) : unframed),
+    windowBar: mac,
+  });
+
+  it('writes a 1x capture at 2x, the bar above the image, sized for the window in points', () => {
+    const g = getScreenshotGeometry(1280, 800, withBar(false), undefined, {
+      scaleFactor: 1,
+    });
+    expect(g.canvasWidth).toBe(2560);
+    expect(g.scale).toBe(2);
+    expect(g.barHeight).toBe(72); // 36pt at 1280pt wide, at 2x
+    expect(g.canvasHeight).toBe(1600 + 72);
+    expect(g.mediaRect).toEqual({ x: 0, y: 72, width: 2560, height: 1600 });
+    expect(g.windowRect).toEqual({ x: 0, y: 0, width: 2560, height: 1672 });
+  });
+
+  it('keeps a Retina capture at its own pixels', () => {
+    const g = getScreenshotGeometry(2560, 1600, withBar(false), undefined, {
+      scaleFactor: 2,
+    });
+    expect(g.scale).toBe(1);
+    expect(g.windowPoints).toBe(1280);
+    expect(g.barHeight).toBe(72);
+  });
+
+  it('wraps bar and page in the frame as one window', () => {
+    const g = getScreenshotGeometry(1280, 800, withBar(true), undefined, {
+      scaleFactor: 2,
+    });
+    expect(g.windowRect.height).toBeCloseTo(g.mediaRect.height + g.barHeight);
+    expect(g.mediaRect.y).toBeCloseTo(g.windowRect.y + g.barHeight);
+  });
+
+  it('draws a bar on a cropped capture too, when one is picked', () => {
+    // An area or a preview frame gets whatever bar the person chooses.
+    const g = getScreenshotGeometry(800, 600, withBar(false), undefined, { scaleFactor: 1 });
+    expect(g.barHeight).toBeGreaterThan(0);
+    expect(g.canvasHeight).toBeCloseTo(1200 + g.barHeight);
+  });
+
+  it('leaves a capture without a bar at its own size', () => {
+    const g = getScreenshotGeometry(800, 600, unframed, undefined, { scaleFactor: 1 });
+    expect(g).toMatchObject({ canvasWidth: 800, canvasHeight: 600, barHeight: 0 });
+  });
+});
+
 describe('point conversion', () => {
   it('round-trips image ↔ canvas coordinates', () => {
     const g = getScreenshotGeometry(1600, 900, framed({ padding: 0.2 }));

@@ -227,7 +227,8 @@ describe('screenshot service', () => {
       expect(nodeMock.readFile).toHaveBeenCalledWith(file);
       expect(nodeMock.rm).toHaveBeenCalledWith(file, { force: true });
       // The file's bytes, as they are: no decode, no re-encode, no base64.
-      expect(capture).toEqual({ kind: 'area', png, width: 600, height: 400 });
+      // scaleFactor is the area's display's (the secondary, at 1x).
+      expect(capture).toEqual({ kind: 'area', png, width: 600, height: 400, scaleFactor: 1 });
     });
 
     it('falls back to the desktop capturer when screencapture fails', async () => {

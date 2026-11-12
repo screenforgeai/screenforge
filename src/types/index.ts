@@ -122,6 +122,10 @@ export interface ScreenshotCaptureData {
   png: Uint8Array;
   width: number;
   height: number;
+  /** A captured window's title, for its window bar. */
+  windowTitle?: string;
+  /** Image pixels per screen point (2 on a Retina display). */
+  scaleFactor?: number;
 }
 
 /** A still image handed to the Screenshot editor. */
@@ -132,6 +136,11 @@ export interface ScreenshotCapture {
   imageUrl: string;
   width: number;
   height: number;
+  /** The captured window's app and title at the moment of capture, for its window bar. */
+  appName?: string;
+  windowTitle?: string;
+  /** Image pixels per screen point (2 on a Retina display); 1 when unknown. */
+  scaleFactor?: number;
 }
 
 export interface WindowFocusTarget {
@@ -211,6 +220,23 @@ export interface ConcatRecordingsOptions {
   target?: RecordingArea;
 }
 
+/**
+ * What was recorded, as picked at the start: the window bar uses it to tell
+ * a browser window (whose real toolbar should be cropped off) from a whole
+ * screen, and to show the page's title.
+ */
+export interface RecordingCaptureSource {
+  kind: 'display' | 'window' | 'area';
+  /**
+   * Wayland's screen-share picker: getDisplayMedia's displaySurface, which
+   * says whether the person shared a tab, a window or a whole screen.
+   */
+  displaySurface?: 'browser' | 'window' | 'monitor';
+  /** The recorded window's app ("Google Chrome") and title, when known. */
+  appName?: string;
+  windowTitle?: string;
+}
+
 export interface RecordingResult {
   filePath: string;
   mouseData: CursorEvent[];
@@ -223,6 +249,8 @@ export interface RecordingResult {
   audioPath?: string;
   cameraPath?: string;
   isImported?: boolean; // true for user-imported videos (no native cursor data)
+  /** Absent on recordings made before it was kept, and on imports. */
+  captureSource?: RecordingCaptureSource;
 }
 
 export interface ProjectCursorSettings {
@@ -530,6 +558,8 @@ export interface StylePreset {
   name: string;
   savedAt: string;
   background: import('../lib/effects/frame').BackgroundSettings;
+  /** The window bar; absent on presets saved before it existed. */
+  windowBar?: import('../lib/window-bar').WindowBarSettings;
   cursor: ProjectCursorSettings;
   camera: ProjectCameraSettings;
   keyboard: ProjectKeyboardSettings;

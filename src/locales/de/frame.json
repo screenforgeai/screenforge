@@ -1,1 +1,62 @@
-{ "header": "Rahmen", "noRecordingSelected": "Keine Aufnahme ausgewählt.", "background": "Hintergrund", "wallpaper": "Hintergrundbild", "solid": "Einfarbig", "padding": "Abstand", "cornerRadius": "Eckenradius", "frame": "Rahmen", "crop": "Zuschneiden", "applied": "Angewendet", "reset": "Zurücksetzen", "done": "Fertig", "editCrop": "Zuschnitt bearbeiten", "shadow": "Schatten", "blur": "Unschärfe", "opacity": "Deckkraft", "from": "Von", "to": "Bis", "pickColor": "Farbe wählen", "startColor": "Startfarbe", "endColor": "Endfarbe", "direction": "Richtung" }
+{
+  "header": "Rahmen",
+  "noRecordingSelected": "Keine Aufnahme ausgewählt.",
+  "background": "Hintergrund",
+  "wallpaper": "Hintergrundbild",
+  "solid": "Einfarbig",
+  "padding": "Abstand",
+  "cornerRadius": "Eckenradius",
+  "frame": "Rahmen",
+  "crop": "Zuschneiden",
+  "applied": "Angewendet",
+  "reset": "Zurücksetzen",
+  "done": "Fertig",
+  "editCrop": "Zuschnitt bearbeiten",
+  "shadow": "Schatten",
+  "blur": "Unschärfe",
+  "opacity": "Deckkraft",
+  "from": "Von",
+  "to": "Bis",
+  "pickColor": "Farbe wählen",
+  "startColor": "Startfarbe",
+  "endColor": "Endfarbe",
+  "direction": "Richtung",
+  "windowBar": "Fensterleiste",
+  "windowStyleLabel": "Stil",
+  "windowThemeLabel": "Design",
+  "windowTitle": "Titel",
+  "windowAddress": "Adresse",
+  "windowStyle": {
+    "none": "Keine",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "Browser"
+  },
+  "windowPreview": {
+    "mac": "Eine macOS-Titelleiste: die drei Punkte und die Adresse in einem Feld in der Mitte.",
+    "windows": "Eine Windows-Titelleiste: links der Titel, rechts Minimieren, Maximieren und Schließen.",
+    "browser": "Eine Browserleiste: Zurück, Vor und Neu laden, dazu eine Adresszeile über die ganze Breite."
+  },
+  "windowCurrent": "Aktuell",
+  "windowTheme": {
+    "auto": "Auto",
+    "light": "Hell",
+    "dark": "Dunkel"
+  },
+  "recordedBar": "Aufgenommene Leiste",
+  "adjustCrop": "Zuschnitt anpassen",
+  "recordedBarMode": {
+    "auto": "Auto",
+    "manual": "Manuell",
+    "off": "Aus"
+  },
+  "recordedBarStatus": {
+    "detecting": "Suche nach der Browserleiste…",
+    "crop": "Browserleiste gefunden und abgeschnitten.",
+    "adjust": "Möglicherweise eine Leiste, aber ihr Ende ist unsicher. Passe den Zuschnitt an, um es zu prüfen.",
+    "none": "In dieser Aufnahme wurde keine Browserleiste gefunden.",
+    "failed": "Die Aufnahme konnte nicht nach einer Leiste durchsucht werden. Passe den Zuschnitt an, um sie von Hand abzuschneiden.",
+    "manual": "Die oberen {{rows}} Zeilen werden abgeschnitten.",
+    "off": "Die aufgenommene Leiste bleibt erhalten."
+  }
+}

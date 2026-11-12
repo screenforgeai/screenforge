@@ -21,11 +21,13 @@ import { resolveCameraAtTime } from '../camera/layout';
 import { transformPointWithSharedCamera, applyPerspectiveWarpToPoint } from '../zoom/index';
 import { interpolateCursor } from './render';
 import { computeMagnifierTransforms } from './magnifier';
+import { createCanvasLayer } from './canvasLayer';
 import { getMoveEvents, getClickEvents, getPressEvents, getActivityEvents } from './analyze';
 import type { CursorData, PressEvent, ActivityEvent } from './analyze';
 import { resolveCursorStyleState, isCursorStyleStateType, type CursorStyleState } from './cursors';
 import {
   cursorStyleReactsToPress,
+  getCursorTiltFactor,
   isAnimatedCursorStyle,
   isNameTagCursorStyle,
   normalizeCursorStyle,
@@ -205,7 +207,7 @@ function createVectorCursorTextures() {
         canvas,
         drawnAt: t,
         cursor: {
-          texture: Texture.from(canvas),
+          texture: Texture.from(canvas, true),
           anchorX: info.anchorX,
           anchorY: info.anchorY,
           unitsPerPixel: 1 / VECTOR_CURSOR_RESOLUTION,
@@ -300,12 +302,8 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
     // ── Effects layer (spotlight, highlight, glitter, pulse, sparkles, confetti) ──
     // One canvas the size of the output, drawn with the same code as the editor's
     // previews and uploaded only on frames that use an effect.
-    const effectsCanvas = document.createElement('canvas');
-    effectsCanvas.width = 1;
-    effectsCanvas.height = 1;
-    const effectsCtx = effectsCanvas.getContext('2d');
-    const effectsSprite = new Sprite(Texture.from(effectsCanvas));
-    effectsSprite.eventMode = 'none';
+    const effectsLayer = createCanvasLayer();
+    const effectsSprite = effectsLayer.sprite;
     effectsSprite.visible = false;
 
     // ── Magnifier: the recording again, zoomed, inside a circle ──────────────
@@ -334,7 +332,7 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
       lensMaskCtx.fillStyle = soft;
       lensMaskCtx.fillRect(0, 0, 256, 256);
     }
-    const lensMask = new Sprite(Texture.from(lensMaskCanvas));
+    const lensMask = new Sprite(Texture.from(lensMaskCanvas, true));
     lensMask.eventMode = 'none';
     lensMask.anchor.set(0.5);
     lensBody.mask = lensMask;
@@ -676,7 +674,8 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
       const cvx = dispVelNx * scene.sourceWidth * frameScale * zoomScale;
       const cvy = dispVelNy * scene.sourceHeight * frameScale * zoomScale;
       const speed = Math.sqrt(cvx * cvx + cvy * cvy);
-      const MAX_TILT = (cursorMaxTilt * Math.PI) / 180;
+      // Dart pointers swing further than the arrow cursors at the same Rotation setting.
+      const MAX_TILT = (cursorMaxTilt * getCursorTiltFactor(style) * Math.PI) / 180;
       const TILT_SPEED_SCALE = 600;
       const tiltFactor = Math.min(speed / TILT_SPEED_SCALE, 1);
       const targetRotation =
@@ -758,18 +757,13 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
       }
 
       // ── Effects layer ──────────────────────────────────────────────────────
-      if (isVisible && effectsCtx && needsEffectsOverlay(cursorClickEffect, cursorEffect)) {
-        // Soft effects don't need more than 1080p of detail; keeps 4K uploads cheap.
-        const k = Math.min(1, 1080 / Math.max(ch, 1));
-        const ew = Math.max(1, Math.round(cw * k));
-        const eh = Math.max(1, Math.round(ch * k));
-        if (effectsCanvas.width !== ew || effectsCanvas.height !== eh) {
-          effectsCanvas.width = ew;
-          effectsCanvas.height = eh;
-          effectsSprite.texture.source.resize(ew, eh);
-        }
-        effectsCtx.setTransform(1, 0, 0, 1, 0, 0);
-        effectsCtx.clearRect(0, 0, ew, eh);
+      // Soft effects don't need more than 1080p of detail; keeps 4K uploads cheap.
+      const k = Math.min(1, 1080 / Math.max(ch, 1));
+      const effectsCtx =
+        isVisible && needsEffectsOverlay(cursorClickEffect, cursorEffect)
+          ? effectsLayer.prepare(Math.max(1, Math.round(cw * k)), Math.max(1, Math.round(ch * k)))
+          : null;
+      if (effectsCtx) {
         effectsCtx.setTransform(k, 0, 0, k, 0, 0);
         const recent = findClicksInWindow(clickEvents, t, MAX_CLICK_EFFECT_DURATION);
         const latest = recent.length > 0 ? clickEvents[recent[recent.length - 1]] : null;
@@ -793,7 +787,7 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
           },
           sinceClick: latest ? t - latest.t : null,
         });
-        effectsSprite.texture.source.update();
+        effectsLayer.upload();
         effectsSprite.scale.set(1 / k);
         effectsSprite.visible = true;
       } else {

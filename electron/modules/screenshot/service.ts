@@ -64,7 +64,7 @@ async function captureAreaWithScreencapture(
       log.warn('[screenshot] screencapture wrote no image, using desktopCapturer');
       return null;
     }
-    return { kind: 'area', png, ...size };
+    return { kind: 'area', png, ...size, scaleFactor: display.scaleFactor };
   } catch (error) {
     log.warn('[screenshot] screencapture failed, using desktopCapturer', { error });
     return null;
@@ -145,12 +145,16 @@ export async function captureStill(
   }
 
   let image = source.thumbnail;
+  // Pixels per point, for the window bar's size: a window's thumbnail comes at
+  // the primary display's density (the closest guess without its bounds).
+  let scaleFactor = primary.scaleFactor;
   if (request.kind !== 'window') {
     const display =
       request.kind === 'area'
         ? areaDisplay
         : (displays.find((d) => String(d.id) === source.display_id) ?? primary);
     // Thumbnails are fitted to thumbnailSize, so a display smaller than it comes back upscaled.
+    scaleFactor = display.scaleFactor;
     const current = image.getSize();
     const native = fitWithin(current, getDisplayPixelSize(display));
     // Crop first, so only the area (not the whole screen) is ever resampled or encoded.
@@ -172,7 +176,15 @@ export async function captureStill(
   }
 
   const size = image.getSize();
-  return { kind: request.kind, png: image.toPNG(), width: size.width, height: size.height };
+  return {
+    kind: request.kind,
+    png: image.toPNG(),
+    width: size.width,
+    height: size.height,
+    scaleFactor,
+    // A window source's name is its title: the page's title, for its window bar.
+    ...(request.kind === 'window' && source.name && { windowTitle: source.name }),
+  };
 }
 
 export async function copyImageToClipboard(png: Uint8Array): Promise<void> {

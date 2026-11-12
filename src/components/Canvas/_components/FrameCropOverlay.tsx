@@ -10,6 +10,7 @@ import {
 } from 'src/lib/effects/frame';
 import type { CropHandle, CropRect } from 'src/lib/effects/frame';
 import { useStore } from 'src/store';
+import { applyRecordedBar } from 'src/lib/recording/recordedBar';
 
 interface FrameCropOverlayProps {
   containerRef: RefObject<HTMLDivElement | null>;
@@ -52,6 +53,8 @@ export const FrameCropOverlay = ({
   const currentTime = useStore((s) => s.currentTime);
   const frame = useStore((s) => s.frame);
   const commitEdit = useStore((s) => s.commitEdit);
+  // The Window widget's recorded-toolbar line, rather than the Frame widget's crop box.
+  const editsToolbarLine = useStore((s) => s.cropEditTarget === 'recordedBar');
   const beginHistoryGroup = useStore((s) => s.beginHistoryGroup);
   const endHistoryGroup = useStore((s) => s.endHistoryGroup);
 
@@ -187,12 +190,21 @@ export const FrameCropOverlay = ({
   };
 
   const updateCropRect = (label: string, nextRect: CropRect) => {
-    commitEdit(label, (state) => ({
-      frame: {
-        ...state.frame,
-        cropRect: nextRect,
-      },
-    }));
+    commitEdit(label, (state) => {
+      const bar = state.frame.recordedBar;
+      // The toolbar line: its top edge is a manual toolbar crop, added to
+      // (never replacing) the person's own crop.
+      if (editsToolbarLine && bar) {
+        return {
+          frame: applyRecordedBar(
+            state.frame,
+            { ...bar, mode: 'manual', cropTop: Math.round(nextRect.y * bar.height) },
+            bar.height,
+          ),
+        };
+      }
+      return { frame: { ...state.frame, cropRect: nextRect } };
+    });
   };
 
   const startInteraction = (
@@ -285,6 +297,97 @@ export const FrameCropOverlay = ({
 
   if (!recordingResult) {
     return null;
+  }
+
+  if (editsToolbarLine) {
+    // The line is the toolbar crop's own; the dimmed part is everything cut
+    // off above the crop (the person's own top may go deeper).
+    const bar = frame.recordedBar;
+    const lineShare = bar ? bar.cropTop / Math.max(bar.height, 1) : cropOverlayRect.y;
+    // The line moves over the whole recording, whatever the crop's bottom.
+    const lineRect = { x: 0, y: lineShare, width: 1, height: 1 - lineShare };
+    return (
+      <div
+        className="absolute inset-0 z-10 select-none rounded-[inherit]"
+        style={{ cursor: isDragging ? 'ns-resize' : undefined }}
+      >
+        <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/45 px-2.5 py-1 text-[11px] text-white/80">
+          Drag the line to the bottom of the recorded toolbar
+        </div>
+        <div
+          ref={sourceBoundsRef}
+          className="absolute"
+          style={{
+            left: sourceDisplayRect.x,
+            top: sourceDisplayRect.y,
+            width: sourceDisplayRect.width,
+            height: sourceDisplayRect.height,
+          }}
+        >
+          <video
+            ref={overlayVideoRef}
+            src={createScreenforgeFileUrl(recordingResult.filePath)}
+            className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+            muted
+            preload="metadata"
+          />
+          {/* What gets cropped off: the recorded toolbar above the line. */}
+          <div
+            className="pointer-events-none absolute left-0 top-0 w-full bg-black/60"
+            style={{ height: `${cropOverlayRect.y * 100}%` }}
+          />
+          <div
+            role="slider"
+            aria-label="Recorded toolbar crop line"
+            aria-orientation="vertical"
+            aria-valuemin={0}
+            aria-valuemax={resolvedSourceHeight}
+            aria-valuenow={Math.round(lineShare * resolvedSourceHeight)}
+            tabIndex={0}
+            className="group absolute left-0 h-4 w-full -translate-y-1/2 cursor-ns-resize"
+            style={{ top: `${lineShare * 100}%`, touchAction: 'none' }}
+            onPointerDown={(event) => {
+              const point = getPointerSourcePoint(event.clientX, event.clientY);
+              startInteraction(
+                event,
+                {
+                  type: 'resize',
+                  handle: 'n',
+                  startRect: lineRect,
+                  startPointerSourceX: point.x,
+                  startPointerSourceY: point.y,
+                },
+                'recorded-bar-line',
+                'Move recorded toolbar crop',
+              );
+            }}
+            onKeyDown={(event) => {
+              const step = event.shiftKey ? 10 : 1;
+              const delta = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+              if (!delta) {
+                return;
+              }
+              event.preventDefault();
+              const top = Math.max(0, lineShare * resolvedSourceHeight + delta);
+              updateCropRect(
+                'Move recorded toolbar crop',
+                resizeCropRectFromHandle(
+                  lineRect,
+                  'n',
+                  0,
+                  top,
+                  resolvedSourceWidth,
+                  resolvedSourceHeight,
+                ),
+              );
+            }}
+          >
+            <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-sf-primary shadow-[0_0_0_1px_rgba(0,0,0,0.45)] group-focus-visible:h-0.5" />
+            <div className="absolute left-1/2 top-1/2 h-2 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 bg-sf-primary" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

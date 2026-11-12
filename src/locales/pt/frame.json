@@ -1,1 +1,62 @@
-{ "header": "Moldura", "noRecordingSelected": "Nenhuma gravação selecionada.", "background": "Plano de fundo", "wallpaper": "Papel de parede", "solid": "Sólido", "padding": "Preenchimento", "cornerRadius": "Raio do canto", "frame": "Moldura", "crop": "Recortar", "applied": "Aplicado", "reset": "Redefinir", "done": "Concluído", "editCrop": "Editar recorte", "shadow": "Sombra", "blur": "Desfoque", "opacity": "Opacidade", "from": "De", "to": "Para", "pickColor": "Escolher cor", "startColor": "Cor inicial", "endColor": "Cor final", "direction": "Direção" }
+{
+  "header": "Moldura",
+  "noRecordingSelected": "Nenhuma gravação selecionada.",
+  "background": "Plano de fundo",
+  "wallpaper": "Papel de parede",
+  "solid": "Sólido",
+  "padding": "Preenchimento",
+  "cornerRadius": "Raio do canto",
+  "frame": "Moldura",
+  "crop": "Recortar",
+  "applied": "Aplicado",
+  "reset": "Redefinir",
+  "done": "Concluído",
+  "editCrop": "Editar recorte",
+  "shadow": "Sombra",
+  "blur": "Desfoque",
+  "opacity": "Opacidade",
+  "from": "De",
+  "to": "Para",
+  "pickColor": "Escolher cor",
+  "startColor": "Cor inicial",
+  "endColor": "Cor final",
+  "direction": "Direção",
+  "windowBar": "Barra da janela",
+  "windowStyleLabel": "Estilo",
+  "windowThemeLabel": "Tema",
+  "windowTitle": "Título",
+  "windowAddress": "Endereço",
+  "windowStyle": {
+    "none": "Nenhuma",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "Navegador"
+  },
+  "windowPreview": {
+    "mac": "Uma barra de título do macOS: os três pontos e o endereço numa caixa no centro.",
+    "windows": "Uma barra de título do Windows: o título à esquerda; minimizar, maximizar e fechar à direita.",
+    "browser": "Uma barra de navegador: voltar, avançar e recarregar, e um campo de endereço de largura total."
+  },
+  "windowCurrent": "Atual",
+  "windowTheme": {
+    "auto": "Auto",
+    "light": "Claro",
+    "dark": "Escuro"
+  },
+  "recordedBar": "Barra gravada",
+  "adjustCrop": "Ajustar recorte",
+  "recordedBarMode": {
+    "auto": "Auto",
+    "manual": "Manual",
+    "off": "Desligado"
+  },
+  "recordedBarStatus": {
+    "detecting": "Procurando a barra do navegador…",
+    "crop": "A barra do navegador foi encontrada e recortada.",
+    "adjust": "Parece haver uma barra, mas não dá para ter certeza de onde termina. Ajuste o recorte para conferir.",
+    "none": "Nenhuma barra de navegador encontrada nesta gravação.",
+    "failed": "Não foi possível ler a gravação para procurar uma barra. Ajuste o recorte para removê-la à mão.",
+    "manual": "Recortando as {{rows}} linhas de cima.",
+    "off": "A barra gravada é mantida."
+  }
+}
