@@ -118,8 +118,13 @@ export const ScreenshotStylePanel = ({
 
   const studio = style.studio ?? FLAT_STUDIO;
   // Picking a look starts from its own framing and light.
-  const pickLook = (lookId: string | null) =>
+  // Picking the look already on keeps its position and light, and adds no undo step.
+  const pickLook = (lookId: string | null) => {
+    if (lookId === studio.lookId) {
+      return;
+    }
     onChange({ ...style, studio: { lookId, offset: { x: 0, y: 0 }, light: null } });
+  };
   const moved = studio.offset.x !== 0 || studio.offset.y !== 0 || studio.light !== null;
 
   const aspectRatio = (

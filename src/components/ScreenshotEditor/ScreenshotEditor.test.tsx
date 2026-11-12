@@ -168,6 +168,38 @@ describe('ScreenshotEditor', () => {
       expect(renderer.renderStill).toHaveBeenCalled();
     });
 
+    it('keeps one undo step when the active look or the light handle is just clicked', async () => {
+      const user = userEvent.setup();
+      await renderEditor();
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 500,
+        right: 800,
+        bottom: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      const handle = screen.getByRole('button', { name: /light position/i });
+      handle.setPointerCapture = vi.fn();
+      fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      fireEvent.pointerUp(handle, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+      fireEvent.doubleClick(handle);
+      // A single Undo goes all the way back to Flat: none of the clicks above was recorded.
+      await user.click(screen.getByRole('button', { name: /^undo$/i }));
+      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
+    });
+
     it('switches looks on the same renderer', async () => {
       const user = userEvent.setup();
       await renderEditor();

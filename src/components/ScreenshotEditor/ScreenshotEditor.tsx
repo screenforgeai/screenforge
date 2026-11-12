@@ -92,7 +92,7 @@ type Drag =
   /** Studio: moving the screenshot around the output (client pixels). */
   | { mode: 'pan'; start: Point; current: Point; origin: StudioPoint }
   /** Studio: moving the light handle (fractions of the output). */
-  | { mode: 'light'; current: StudioPoint };
+  | { mode: 'light'; start: StudioPoint; current: StudioPoint };
 
 const TOOLS: { id: AnnotationTool; hotkey: string }[] = [
   { id: 'select', hotkey: 'v' },
@@ -637,7 +637,10 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
         commitStudio({ offset: studioPose.offset });
       }
     } else if (drag.mode === 'light') {
-      commitStudio({ light: drag.current });
+      // A plain click on the handle keeps the look's own light (and adds no undo step).
+      if (drag.current.x !== drag.start.x || drag.current.y !== drag.start.y) {
+        commitStudio({ light: drag.current });
+      }
     } else if (drag.mode === 'draw') {
       const shape = createShapeFromDrag(drag.tool, drag.start, drag.current, newId(), shapeStyle);
       if (shape) {
@@ -1024,7 +1027,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
                   e.currentTarget.setPointerCapture?.(e.pointerId);
                   const at = lightFromEvent(e);
                   if (at) {
-                    setDrag({ mode: 'light', current: at });
+                    setDrag({ mode: 'light', start: at, current: at });
                   }
                 }}
                 onPointerMove={(e) => {
@@ -1033,12 +1036,16 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
                   }
                   const at = lightFromEvent(e);
                   if (at) {
-                    setDrag({ mode: 'light', current: at });
+                    setDrag({ ...drag, current: at });
                   }
                 }}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={() => setDrag(null)}
-                onDoubleClick={() => commitStudio({ light: null })}
+                onDoubleClick={() => {
+                  if (studio.light !== null) {
+                    commitStudio({ light: null });
+                  }
+                }}
               />
             )}
             {textEdit && textOverlay && (
