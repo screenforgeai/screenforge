@@ -65,7 +65,7 @@ import {
   IconTrash,
   IconX,
 } from 'src/lib/icons';
-import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
+import { Button, PreviewCardProvider, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { cn } from 'src/lib/utils';
 import { useStore } from 'src/store';
 import type { ScreenshotCapture, StylePreset } from 'src/types';
@@ -729,17 +729,25 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           </div>
         </div>
 
-        <aside className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4">
+        <aside
+          className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4"
+          // Hover cards (the window bar's styles) sit beside this panel.
+          data-preview-boundary
+        >
           <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
             {t('style')}
           </div>
-          <ScreenshotStylePanel
-            style={style}
-            presets={presets}
-            onChange={setStyle}
-            windowBarAvailable={!isCroppedCapture(capture)}
-            windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
-          />
+          {/* Hover a window bar style for a preview of it. */}
+          <PreviewCardProvider>
+            <ScreenshotStylePanel
+              style={style}
+              presets={presets}
+              onChange={setStyle}
+              windowBarAvailable={!isCroppedCapture(capture)}
+              windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
+              captureImage={capture.dataUrl}
+            />
+          </PreviewCardProvider>
         </aside>
       </div>
     </div>

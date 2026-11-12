@@ -33,7 +33,6 @@ export type WidgetTab =
   | 'mask'
   | 'cursor'
   | 'frame'
-  | 'window'
   | 'keyboard'
   | 'captions'
   | 'text'

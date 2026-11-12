@@ -21,17 +21,23 @@
   "startColor": "開始色",
   "endColor": "終了色",
   "direction": "方向",
-  "windowHeader": "ウィンドウ",
   "windowBar": "ウィンドウバー",
   "windowStyleLabel": "スタイル",
   "windowThemeLabel": "テーマ",
   "windowTitle": "タイトル",
   "windowAddress": "アドレス",
   "windowStyle": {
+    "none": "なし",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "ブラウザ"
   },
+  "windowPreview": {
+    "mac": "macOS のタイトルバー：3つのボタンと、中央の欄にアドレス。",
+    "windows": "Windows のタイトルバー：左にタイトル、右に最小化・最大化・閉じる。",
+    "browser": "ブラウザのツールバー：戻る・進む・再読み込みと、横幅いっぱいのアドレス欄。"
+  },
+  "windowCurrent": "現在",
   "windowTheme": {
     "auto": "自動",
     "light": "ライト",
@@ -51,7 +57,6 @@
     "adjust": "ツールバーらしきものがありますが、境目がはっきりしません。切り抜きを調整して確認してください。",
     "none": "この録画にブラウザのツールバーは見つかりませんでした。",
     "manual": "上から {{rows}} 行を切り取っています。",
-    "off": "録画されたツールバーを残します。",
-    "barOff": "ウィンドウバーをオンにすると切り取ります。"
+    "off": "録画されたツールバーを残します。"
   }
 }

@@ -21,17 +21,23 @@
   "startColor": "시작 색상",
   "endColor": "끝 색상",
   "direction": "방향",
-  "windowHeader": "창",
   "windowBar": "창 막대",
   "windowStyleLabel": "스타일",
   "windowThemeLabel": "테마",
   "windowTitle": "제목",
   "windowAddress": "주소",
   "windowStyle": {
+    "none": "없음",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "브라우저"
   },
+  "windowPreview": {
+    "mac": "macOS 제목 막대: 점 세 개와 가운데 상자 안의 주소.",
+    "windows": "Windows 제목 막대: 왼쪽에 제목, 오른쪽에 최소화·최대화·닫기.",
+    "browser": "브라우저 도구 모음: 뒤로·앞으로·새로 고침과 너비 전체의 주소창."
+  },
+  "windowCurrent": "현재",
   "windowTheme": {
     "auto": "자동",
     "light": "라이트",
@@ -51,7 +57,6 @@
     "adjust": "도구 모음으로 보이지만 끝나는 위치가 확실하지 않습니다. 자르기를 조정해 확인하세요.",
     "none": "이 녹화에서 브라우저 도구 모음을 찾지 못했습니다.",
     "manual": "위쪽 {{rows}}줄을 잘라냅니다.",
-    "off": "녹화된 도구 모음을 유지합니다.",
-    "barOff": "창 막대를 켜면 잘라냅니다."
+    "off": "녹화된 도구 모음을 유지합니다."
   }
 }

@@ -21,17 +21,23 @@
   "startColor": "Couleur de début",
   "endColor": "Couleur de fin",
   "direction": "Direction",
-  "windowHeader": "Fenêtre",
   "windowBar": "Barre de fenêtre",
   "windowStyleLabel": "Style",
   "windowThemeLabel": "Thème",
   "windowTitle": "Titre",
   "windowAddress": "Adresse",
   "windowStyle": {
+    "none": "Aucune",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "Navigateur"
   },
+  "windowPreview": {
+    "mac": "Une barre de titre macOS : les trois points, et l’adresse dans une case au centre.",
+    "windows": "Une barre de titre Windows : le titre à gauche ; réduire, agrandir et fermer à droite.",
+    "browser": "Une barre de navigateur : précédent, suivant et actualiser, et un champ d’adresse sur toute la largeur."
+  },
+  "windowCurrent": "Actuel",
   "windowTheme": {
     "auto": "Auto",
     "light": "Clair",
@@ -51,7 +57,6 @@
     "adjust": "Une barre semble présente, mais sa limite est incertaine. Ajustez le recadrage pour vérifier.",
     "none": "Aucune barre de navigateur dans cet enregistrement.",
     "manual": "Recadrage des {{rows}} premières lignes.",
-    "off": "La barre enregistrée est conservée.",
-    "barOff": "Recadrée dès que la barre de fenêtre est activée."
+    "off": "La barre enregistrée est conservée."
   }
 }

@@ -12,7 +12,27 @@ import {
 import { getInitialPlaybackTime } from 'src/lib/helpers/segments';
 import { useStore } from '../../../store';
 import type { BackgroundSettings, BackgroundType } from '../../../store';
-import { Button, Slider, ToggleGroup, ToggleGroupItem } from '../../../lib/ui';
+import {
+  Button,
+  PreviewCardBody,
+  PreviewCardProvider,
+  Slider,
+  ToggleGroup,
+  ToggleGroupItem,
+  usePreviewCard,
+} from '../../../lib/ui';
+import {
+  DEFAULT_WINDOW_BAR,
+  activeBarStyle,
+  type WindowBarSettings,
+  type WindowBarStyle,
+} from 'src/lib/window-bar';
+import { windowBarStartText } from 'src/lib/recording/captureSource';
+import { withWindowBar } from 'src/lib/recording/recordedBar';
+import { WindowBarControls } from 'src/components/WindowBarControls';
+import { WindowBarPreviewStage } from 'src/components/WindowBarPreviewStage';
+import { RecordedBarCropSection } from './RecordedBarCropSection';
+import { useRecordingFrame } from './MotionWidget/useRecordingFrame';
 import { cn } from 'src/lib/utils';
 import { IconPhoto, IconPlus } from 'src/lib/icons';
 import {
@@ -32,8 +52,15 @@ const ANGLE_PRESETS = [
   { label: '↑', value: 0 },
 ];
 
-export const FrameWidget = () => {
+export const FrameWidget = () => (
+  <PreviewCardProvider>
+    <FrameWidgetBody />
+  </PreviewCardProvider>
+);
+
+const FrameWidgetBody = () => {
   const { t } = useTranslation('frame');
+  const preview = usePreviewCard();
   const {
     activeWidget,
     frame,
@@ -169,6 +196,52 @@ export const FrameWidget = () => {
     });
   };
 
+  // One still of the recording for the window bar's hover previews.
+  const still = useRecordingFrame(
+    recordingResult?.filePath ?? null,
+    Math.round((recordingResult?.duration ?? 0) * 0.5 * 2) / 2,
+  );
+  // The bar as it is; a None bar keeps its theme and words for when a style is picked.
+  const windowBar: WindowBarSettings = {
+    ...DEFAULT_WINDOW_BAR,
+    center: 'custom',
+    customText: windowBarStartText(recordingResult),
+    ...frame.windowBar,
+    style: activeBarStyle(frame.windowBar),
+  };
+  const patchWindowBar = (label: string, patch: Partial<WindowBarSettings>) => {
+    commitFrameEdit(label, (state) => ({
+      frame: withWindowBar(state.frame, { ...windowBar, ...patch, enabled: true }),
+    }));
+    if (patch.style) {
+      trackFrame('window_bar_style', patch.style);
+    }
+  };
+  // The share of the recording the recorded toolbar crop takes off, for the previews.
+  const recordedBar = frame.recordedBar;
+  const toolbarShare =
+    recordedBar &&
+    (recordedBar.mode === 'manual' ||
+      (recordedBar.mode === 'auto' && recordedBar.detected === 'crop'))
+      ? recordedBar.cropTop / Math.max(recordedBar.height, 1)
+      : 0;
+  const previewStyle = (style: WindowBarStyle) =>
+    preview.bind(`window-bar-${style}`, () => (
+      <PreviewCardBody
+        preview={
+          <WindowBarPreviewStage
+            settings={{ ...windowBar, style }}
+            background={frame.background}
+            still={still}
+            cropTop={toolbarShare}
+          />
+        }
+        title={t(`windowStyle.${style}`)}
+        description={t(`windowPreview.${style}`)}
+        badge={windowBar.style === style ? t('windowCurrent') : undefined}
+      />
+    ));
+
   if (!recordingResult) {
     return (
       <div className="flex h-full min-h-0 flex-col">
@@ -186,7 +259,8 @@ export const FrameWidget = () => {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // Hover cards (the window bar's styles) sit beside this panel.
+    <div className="flex h-full min-h-0 flex-col" data-preview-boundary>
       <div className={WIDGET_PANEL_HEADER_CLASS}>
         <IconPhoto className="size-4.5" />
         {t('header')}
@@ -554,6 +628,19 @@ export const FrameWidget = () => {
               />
             </div>
           </div>
+
+          <div className="flex flex-col gap-4 border-t border-[#161515] pt-4">
+            <div className={WIDGET_SECTION_HEADING_CLASS}>{t('windowBar')}</div>
+            <WindowBarControls
+              value={windowBar}
+              onChange={patchWindowBar}
+              previewStyle={previewStyle}
+              onTextEditStart={() => beginHistoryGroup('window-bar-text', 'Change window bar text')}
+              onTextEditEnd={() => endHistoryGroup('window-bar-text')}
+            />
+          </div>
+
+          {windowBar.style !== 'none' && <RecordedBarCropSection />}
 
           <div className="flex flex-col gap-4 border-t border-[#161515] pt-4">
             <div className="flex items-center justify-between">

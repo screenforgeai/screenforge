@@ -111,3 +111,14 @@ export function recordedBarFromDetection(
     height: video.height,
   };
 }
+
+/** The frame with a new window bar, the recorded toolbar's crop following it on or off. */
+export function withWindowBar(
+  frame: FrameSettings,
+  windowBar: NonNullable<FrameSettings['windowBar']>,
+): FrameSettings {
+  const next = { ...frame, windowBar };
+  return next.recordedBar
+    ? applyRecordedBar(next, next.recordedBar, next.recordedBar.height)
+    : next;
+}

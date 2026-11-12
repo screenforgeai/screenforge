@@ -41,7 +41,6 @@ import {
   VideoOffIcon,
   ViewOffIcon,
   WindowsNewIcon,
-  BrowserIcon,
   ZoomInAreaIcon,
   ZoomOutAreaIcon,
   AiMagicIcon,
@@ -118,7 +117,6 @@ function createIcon(icon: IconSvgElement, displayName: string) {
 }
 
 export const IconAppWindow = createIcon(WindowsNewIcon, 'IconAppWindow');
-export const IconBrowser = createIcon(BrowserIcon, 'IconBrowser');
 export const IconArrowBackUp = createIcon(UndoIcon, 'IconArrowBackUp');
 export const IconArrowForwardUp = createIcon(RedoIcon, 'IconArrowForwardUp');
 export const IconCheck = createIcon(Tick02Icon, 'IconCheck');

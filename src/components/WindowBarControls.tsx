@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { WindowBarSettings, WindowBarStyle, WindowBarTheme } from 'src/lib/window-bar';
 import { Input, ToggleGroup, ToggleGroupItem } from 'src/lib/ui';
 
-const STYLE_VALUES: Exclude<WindowBarStyle, 'none'>[] = ['mac', 'windows', 'browser'];
+const STYLE_VALUES: WindowBarStyle[] = ['none', 'mac', 'windows', 'browser'];
 const THEME_VALUES: WindowBarTheme[] = ['auto', 'light', 'dark'];
 
 /** Longest text the bar takes; the address box cuts it to fit anyway. */
@@ -16,6 +16,8 @@ type Props = {
   /** Typing the text: start and end one undo step for the whole edit. */
   onTextEditStart?: () => void;
   onTextEditEnd?: () => void;
+  /** Hover/focus props for a style option: a preview card of that bar (see usePreviewCard). */
+  previewStyle?: (style: WindowBarStyle) => Record<string, unknown>;
 };
 
 /** A small label over its control, inside a section (the Style panel's own pattern). */
@@ -27,12 +29,18 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
 );
 
 /**
- * The window bar's settings, shared by the Window widget and the screenshot
- * editor (each puts the section heading and its on/off switch above them):
- * one group of rows for the style, the theme and the words in the middle.
- * Text that reads as an address gets the lock by itself.
+ * The window bar's settings, shared by the Frame widget and the screenshot
+ * editor (each puts the section heading above them): one group of rows for
+ * the style (None, or a bar), and with a bar its theme and the words in the
+ * middle. Text that reads as an address gets the lock by itself.
  */
-export const WindowBarControls = ({ value, onChange, onTextEditStart, onTextEditEnd }: Props) => {
+export const WindowBarControls = ({
+  value,
+  onChange,
+  onTextEditStart,
+  onTextEditEnd,
+  previewStyle,
+}: Props) => {
   const { t } = useTranslation('frame');
   // A Windows bar has a title where the others have an address.
   const textLabel = value.style === 'windows' ? t('windowTitle') : t('windowAddress');
@@ -53,50 +61,59 @@ export const WindowBarControls = ({ value, onChange, onTextEditStart, onTextEdit
           className="w-full"
         >
           {STYLE_VALUES.map((style) => (
-            <ToggleGroupItem key={style} value={style} className="flex-1 text-md">
+            <ToggleGroupItem
+              key={style}
+              value={style}
+              className="flex-1 text-md"
+              {...(style !== 'none' ? previewStyle?.(style) : {})}
+            >
               {t(`windowStyle.${style}`)}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
       </Row>
 
-      <Row label={t('windowThemeLabel')}>
-        <ToggleGroup
-          type="single"
-          size="sm"
-          value={value.theme}
-          aria-label={t('windowThemeLabel')}
-          onValueChange={(next) => {
-            if (next) {
-              onChange('Change window bar theme', { theme: next as WindowBarTheme });
-            }
-          }}
-          className="w-full"
-        >
-          {THEME_VALUES.map((theme) => (
-            <ToggleGroupItem key={theme} value={theme} className="flex-1 text-md">
-              {t(`windowTheme.${theme}`)}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </Row>
+      {value.style !== 'none' && (
+        <>
+          <Row label={t('windowThemeLabel')}>
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={value.theme}
+              aria-label={t('windowThemeLabel')}
+              onValueChange={(next) => {
+                if (next) {
+                  onChange('Change window bar theme', { theme: next as WindowBarTheme });
+                }
+              }}
+              className="w-full"
+            >
+              {THEME_VALUES.map((theme) => (
+                <ToggleGroupItem key={theme} value={theme} className="flex-1 text-md">
+                  {t(`windowTheme.${theme}`)}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </Row>
 
-      <Row label={textLabel}>
-        <Input
-          aria-label={textLabel}
-          value={value.customText ?? ''}
-          maxLength={TEXT_MAX}
-          spellCheck={false}
-          onFocus={onTextEditStart}
-          onBlur={onTextEditEnd}
-          onChange={(event) =>
-            onChange('Change window bar text', {
-              center: 'custom',
-              customText: event.target.value,
-            })
-          }
-        />
-      </Row>
+          <Row label={textLabel}>
+            <Input
+              aria-label={textLabel}
+              value={value.customText ?? ''}
+              maxLength={TEXT_MAX}
+              spellCheck={false}
+              onFocus={onTextEditStart}
+              onBlur={onTextEditEnd}
+              onChange={(event) =>
+                onChange('Change window bar text', {
+                  center: 'custom',
+                  customText: event.target.value,
+                })
+              }
+            />
+          </Row>
+        </>
+      )}
     </div>
   );
 };

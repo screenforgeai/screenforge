@@ -432,12 +432,10 @@ export const useStore = create<AppStore>((set, get) => {
       set((s) => ({ musicClips: clips.map((c) => ({ ...c })), editVersion: s.editVersion + 1 })),
     setMaskClips: (clips) => set({ maskClips: clips.map((c) => ({ ...c })) }),
     setActiveWidget: (tab) =>
-      set((s) => ({
+      set(() => ({
         activeWidget: tab,
-        // Crop editing belongs to the widget that opened it (Frame's box, Window's toolbar line).
-        ...(tab !== (s.cropEditTarget === 'recordedBar' ? 'window' : 'frame')
-          ? { isCropEditing: false }
-          : {}),
+        // Both crop editors (the crop box, the recorded toolbar line) live in Frame.
+        ...(tab !== 'frame' ? { isCropEditing: false } : {}),
       })),
     setFocusMode: (v) => set({ focusMode: v }),
     setIsExporting: (v) => set({ isExporting: v }),

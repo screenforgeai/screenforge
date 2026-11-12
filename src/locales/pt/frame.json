@@ -21,17 +21,23 @@
   "startColor": "Cor inicial",
   "endColor": "Cor final",
   "direction": "Direção",
-  "windowHeader": "Janela",
   "windowBar": "Barra da janela",
   "windowStyleLabel": "Estilo",
   "windowThemeLabel": "Tema",
   "windowTitle": "Título",
   "windowAddress": "Endereço",
   "windowStyle": {
+    "none": "Nenhuma",
     "mac": "Mac",
     "windows": "Windows",
     "browser": "Navegador"
   },
+  "windowPreview": {
+    "mac": "Uma barra de título do macOS: os três pontos e o endereço numa caixa no centro.",
+    "windows": "Uma barra de título do Windows: o título à esquerda; minimizar, maximizar e fechar à direita.",
+    "browser": "Uma barra de navegador: voltar, avançar e recarregar, e um campo de endereço de largura total."
+  },
+  "windowCurrent": "Atual",
   "windowTheme": {
     "auto": "Auto",
     "light": "Claro",
@@ -51,7 +57,6 @@
     "adjust": "Parece haver uma barra, mas não dá para ter certeza de onde termina. Ajuste o recorte para conferir.",
     "none": "Nenhuma barra de navegador encontrada nesta gravação.",
     "manual": "Recortando as {{rows}} linhas de cima.",
-    "off": "A barra gravada é mantida.",
-    "barOff": "É recortada quando a barra da janela está ligada."
+    "off": "A barra gravada é mantida."
   }
 }
