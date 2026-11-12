@@ -434,13 +434,15 @@ export const useStore = create<AppStore>((set, get) => {
     setActiveWidget: (tab) =>
       set(() => ({
         activeWidget: tab,
+        // Both crop editors (the crop box, the recorded toolbar line) live in Frame.
         ...(tab !== 'frame' ? { isCropEditing: false } : {}),
       })),
     setFocusMode: (v) => set({ focusMode: v }),
     setIsExporting: (v) => set({ isExporting: v }),
     openScreenshotEditor: (capture) => set({ screenshotCapture: capture }),
     closeScreenshotEditor: () => set({ screenshotCapture: null }),
-    setIsCropEditing: (v) => set({ isCropEditing: v }),
+    setIsCropEditing: (v, target = 'frame') =>
+      set(v ? { isCropEditing: true, cropEditTarget: target } : { isCropEditing: false }),
     setLayerHidden: (layer, hidden) =>
       set((state) => ({ hiddenLayers: { ...state.hiddenLayers, [layer]: hidden } })),
     setIsAppendMode: (v) => set({ isAppendMode: v }),

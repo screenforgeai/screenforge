@@ -51,12 +51,16 @@ export async function captureStill(request: ScreenshotCaptureRequest): Promise<S
   }
 
   let image = source.thumbnail;
+  // Pixels per point, for the window bar's size: a window's thumbnail comes at
+  // the primary display's density (the closest guess without its bounds).
+  let scaleFactor = primary.scaleFactor;
   if (request.kind !== 'window') {
     const display =
       request.kind === 'area'
         ? areaDisplay
         : (displays.find((d) => String(d.id) === source.display_id) ?? primary);
     // Thumbnails are fitted to the largest display, so a smaller one comes back upscaled.
+    scaleFactor = display.scaleFactor;
     const current = image.getSize();
     const target = fitWithin(current, getDisplayPixelSize(display));
     if (target.width !== current.width || target.height !== current.height) {
@@ -72,7 +76,15 @@ export async function captureStill(request: ScreenshotCaptureRequest): Promise<S
   }
 
   const size = image.getSize();
-  return { kind: request.kind, dataUrl: image.toDataURL(), width: size.width, height: size.height };
+  return {
+    kind: request.kind,
+    dataUrl: image.toDataURL(),
+    width: size.width,
+    height: size.height,
+    scaleFactor,
+    // A window source's name is its title: the page's title, for its window bar.
+    ...(request.kind === 'window' && source.name && { windowTitle: source.name }),
+  };
 }
 
 export async function copyImageToClipboard(dataUrl: string): Promise<void> {

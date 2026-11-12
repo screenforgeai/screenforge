@@ -92,6 +92,8 @@ export interface EditorSessionState {
   maskClips: MaskClip[];
   motionClips: MotionClip[];
   isCropEditing: boolean;
+  /** What the crop editor is editing: the frame's crop box, or the line under a recorded toolbar. */
+  cropEditTarget: 'frame' | 'recordedBar';
 }
 
 export interface HistorySnapshot {
@@ -253,7 +255,7 @@ export interface AppStore extends EditorSessionState {
   setIsExporting: (v: boolean) => void;
   openScreenshotEditor: (capture: ScreenshotCapture) => void;
   closeScreenshotEditor: () => void;
-  setIsCropEditing: (v: boolean) => void;
+  setIsCropEditing: (v: boolean, target?: 'frame' | 'recordedBar') => void;
   setLayerHidden: (layer: TimelineLayerId, hidden: boolean) => void;
   setIsAppendMode: (v: boolean) => void;
   setAppendStartTime: (t: number | null) => void;

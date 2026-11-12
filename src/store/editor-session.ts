@@ -122,6 +122,7 @@ export function createEmptyEditorSession(): EditorSessionState {
     maskClips: [],
     motionClips: [],
     isCropEditing: false,
+    cropEditTarget: 'frame',
   };
 }
 

@@ -1,1 +1,63 @@
-{ "header": "Cadre", "noRecordingSelected": "Aucun enregistrement sélectionné.", "background": "Arrière-plan", "wallpaper": "Fond d'écran", "solid": "Uni", "padding": "Rembourrage", "cornerRadius": "Rayon des coins", "frame": "Cadre", "crop": "Recadrer", "applied": "Appliqué", "reset": "Réinitialiser", "done": "Terminé", "editCrop": "Modifier le recadrage", "shadow": "Ombre", "blur": "Flou", "opacity": "Opacité", "from": "De", "to": "À", "pickColor": "Choisir une couleur", "startColor": "Couleur de début", "endColor": "Couleur de fin", "direction": "Direction" }
+{
+  "header": "Cadre",
+  "noRecordingSelected": "Aucun enregistrement sélectionné.",
+  "background": "Arrière-plan",
+  "wallpaper": "Fond d'écran",
+  "solid": "Uni",
+  "padding": "Rembourrage",
+  "cornerRadius": "Rayon des coins",
+  "frame": "Cadre",
+  "crop": "Recadrer",
+  "applied": "Appliqué",
+  "reset": "Réinitialiser",
+  "done": "Terminé",
+  "editCrop": "Modifier le recadrage",
+  "shadow": "Ombre",
+  "blur": "Flou",
+  "opacity": "Opacité",
+  "from": "De",
+  "to": "À",
+  "pickColor": "Choisir une couleur",
+  "startColor": "Couleur de début",
+  "endColor": "Couleur de fin",
+  "direction": "Direction",
+  "windowBar": "Barre de fenêtre",
+  "windowStyleLabel": "Style",
+  "windowThemeLabel": "Thème",
+  "windowTitle": "Titre",
+  "windowAddress": "Adresse",
+  "windowStyle": {
+    "none": "Aucune",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "Navigateur"
+  },
+  "windowPreview": {
+    "mac": "Une barre de titre macOS : les trois points, et l’adresse dans une case au centre.",
+    "windows": "Une barre de titre Windows : le titre à gauche ; réduire, agrandir et fermer à droite.",
+    "browser": "Une barre de navigateur : précédent, suivant et actualiser, et un champ d’adresse sur toute la largeur."
+  },
+  "windowCurrent": "Actuel",
+  "windowTheme": {
+    "auto": "Auto",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
+  "windowBarCropped": "Pas de barre de fenêtre sur une capture recadrée : une barre de fenêtre entière sur une partie de l’écran ne rend pas bien.",
+  "recordedBar": "Barre enregistrée",
+  "adjustCrop": "Ajuster le recadrage",
+  "recordedBarMode": {
+    "auto": "Auto",
+    "manual": "Manuel",
+    "off": "Non"
+  },
+  "recordedBarStatus": {
+    "detecting": "Recherche de la barre du navigateur…",
+    "crop": "Barre du navigateur trouvée et recadrée.",
+    "adjust": "Une barre semble présente, mais sa limite est incertaine. Ajustez le recadrage pour vérifier.",
+    "none": "Aucune barre de navigateur dans cet enregistrement.",
+    "failed": "Impossible de lire l'enregistrement pour y chercher une barre. Ajustez le recadrage pour la retirer à la main.",
+    "manual": "Recadrage des {{rows}} premières lignes.",
+    "off": "La barre enregistrée est conservée."
+  }
+}

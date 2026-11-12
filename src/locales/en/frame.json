@@ -20,5 +20,44 @@
   "pickColor": "Pick color",
   "startColor": "Start color",
   "endColor": "End color",
-  "direction": "Direction"
+  "direction": "Direction",
+  "windowBar": "Window bar",
+  "windowStyleLabel": "Style",
+  "windowThemeLabel": "Theme",
+  "windowTitle": "Title",
+  "windowAddress": "Address",
+  "windowStyle": {
+    "none": "None",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "Browser"
+  },
+  "windowPreview": {
+    "mac": "A macOS title bar: the three dots, and the address in a box in the middle.",
+    "windows": "A Windows title bar: the title on the left, minimize, maximize and close on the right.",
+    "browser": "A browser toolbar: back, forward and reload, and a full-width address field."
+  },
+  "windowCurrent": "Current",
+  "windowTheme": {
+    "auto": "Auto",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "windowBarCropped": "No window bar on a cropped capture: a whole-window bar on part of the screen looks wrong.",
+  "recordedBar": "Recorded toolbar",
+  "adjustCrop": "Adjust crop",
+  "recordedBarMode": {
+    "auto": "Auto",
+    "manual": "Manual",
+    "off": "Off"
+  },
+  "recordedBarStatus": {
+    "detecting": "Looking for the browser's own toolbar…",
+    "crop": "Found the browser's toolbar and cropped it off.",
+    "adjust": "Found what may be a toolbar but couldn't be sure where it ends. Adjust the crop to check.",
+    "none": "No browser toolbar found in this recording.",
+    "failed": "Couldn't read this recording to find a toolbar. Adjust the crop to cut it off by hand.",
+    "manual": "Cropping the top {{rows}} rows.",
+    "off": "The recorded toolbar is kept."
+  }
 }
