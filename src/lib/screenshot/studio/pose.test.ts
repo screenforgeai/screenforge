@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_DEPTH, MAX_OFFSET, MIN_DEPTH, clampOffset, depthAfterWheel } from './pose';
+import {
+  MAX_DEPTH,
+  MAX_OFFSET,
+  MAX_ORBIT_DOWN,
+  MAX_ORBIT_UP,
+  MAX_ORBIT_X,
+  MAX_ZOOM,
+  MIN_DEPTH,
+  MIN_ZOOM,
+  clampOffset,
+  depthAfterWheel,
+  orbitAfterDrag,
+  zoomAfterWheel,
+} from './pose';
 
 describe('depthAfterWheel', () => {
   it('brings the screenshot closer on scroll up (or pinch out), pushes it back on scroll down', () => {
@@ -32,5 +45,34 @@ describe('clampOffset', () => {
 
   it('keeps it within reach so it can always be dragged back', () => {
     expect(clampOffset({ x: 9, y: -9 })).toEqual({ x: MAX_OFFSET, y: -MAX_OFFSET });
+  });
+});
+
+describe('orbitAfterDrag', () => {
+  it('turns the camera left/right with a sideways drag and up/down with a vertical one', () => {
+    const turned = orbitAfterDrag({ x: 0, y: 0 }, -0.25, 0.25);
+    expect(turned.x).toBeGreaterThan(0);
+    expect(turned.y).toBeGreaterThan(0);
+  });
+
+  it('keeps the screenshot facing the camera: the turn stops short of its edge, and of going under it', () => {
+    expect(orbitAfterDrag({ x: 0, y: 0 }, -5, 0).x).toBe(MAX_ORBIT_X);
+    expect(orbitAfterDrag({ x: 0, y: 0 }, 5, 0).x).toBe(-MAX_ORBIT_X);
+    expect(orbitAfterDrag({ x: 0, y: 0 }, 0, 5).y).toBe(MAX_ORBIT_UP);
+    expect(orbitAfterDrag({ x: 0, y: 0 }, 0, -5).y).toBe(-MAX_ORBIT_DOWN);
+    expect(MAX_ORBIT_X).toBeLessThan(Math.PI / 2);
+  });
+});
+
+describe('zoomAfterWheel', () => {
+  it('moves the camera in on scroll up and out on scroll down', () => {
+    expect(zoomAfterWheel(1, -100)).toBeLessThan(1);
+    expect(zoomAfterWheel(1, 100)).toBeGreaterThan(1);
+  });
+
+  it('round-trips and stays within its range', () => {
+    expect(zoomAfterWheel(zoomAfterWheel(1, -240), 240)).toBeCloseTo(1, 6);
+    expect(zoomAfterWheel(1, -100000)).toBe(MIN_ZOOM);
+    expect(zoomAfterWheel(1, 100000)).toBe(MAX_ZOOM);
   });
 });

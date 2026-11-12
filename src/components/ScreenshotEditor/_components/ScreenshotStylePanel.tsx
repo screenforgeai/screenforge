@@ -123,7 +123,13 @@ export const ScreenshotStylePanel = ({
     onChange({ ...style, studio: { ...FLAT_STUDIO, lookId } });
   };
   const moved =
-    studio.offset.x !== 0 || studio.offset.y !== 0 || studio.depth !== 0 || studio.light !== null;
+    studio.offset.x !== 0 ||
+    studio.offset.y !== 0 ||
+    studio.depth !== 0 ||
+    studio.orbit.x !== 0 ||
+    studio.orbit.y !== 0 ||
+    studio.zoom !== 1 ||
+    studio.light !== null;
 
   const aspectRatio = (
     <div className="flex flex-col gap-2">

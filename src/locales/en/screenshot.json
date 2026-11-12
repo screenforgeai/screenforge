@@ -33,7 +33,7 @@
   "actions": "Edit actions",
   "look": "Look",
   "flat": "Flat",
-  "studioHint": "Drag the screenshot to move it, and scroll to bring it closer or push it back. Drag the small light to change where the light comes from.",
+  "studioHint": "Drag around the screenshot to turn the camera and scroll to zoom. Hold Space and drag to move the screenshot, or Space and scroll to bring it closer or push it back. Drag the small light to change where the light comes from.",
   "resetPosition": "Reset position and light",
   "lightHandle": "Light position",
   "studioUnavailable": "Studio looks need WebGL 2, which isn't available here."

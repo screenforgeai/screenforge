@@ -53,6 +53,10 @@ export interface ScreenshotStudio {
   offset: { x: number; y: number };
   /** Depth toward the camera: a share of its distance (0 = the look's own framing). */
   depth: number;
+  /** The camera's turn around the screenshot (radians), added to the look's own angle. */
+  orbit: { x: number; y: number };
+  /** Camera distance as a share of the look's own (1). */
+  zoom: number;
   /** Light handle position (fractions of the output), or null for the look's own light. */
   light: { x: number; y: number } | null;
 }
@@ -79,6 +83,8 @@ export const FLAT_STUDIO: ScreenshotStudio = {
   lookId: null,
   offset: { x: 0, y: 0 },
   depth: 0,
+  orbit: { x: 0, y: 0 },
+  zoom: 1,
   light: null,
 };
 

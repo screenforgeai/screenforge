@@ -32,3 +32,33 @@ export const depthAfterWheel = (depth: number, deltaY: number): number => {
   const distance = (1 - depth) * Math.exp(deltaY * WHEEL_RATE);
   return clamp(1 - distance, MIN_DEPTH, MAX_DEPTH);
 };
+
+/**
+ * The camera's turn around the screenshot, added to the look's own angle
+ * (radians): x around the vertical axis, y up/down. It stops short of the
+ * screenshot's edge, and of looking at it from below the floor.
+ */
+export const MAX_ORBIT_X = 1.3;
+export const MAX_ORBIT_UP = 1.0;
+export const MAX_ORBIT_DOWN = 0.12;
+/** How far the camera turns for a drag across the whole output, radians. */
+const ORBIT_PER_WIDTH = Math.PI;
+const ORBIT_PER_HEIGHT = Math.PI / 2;
+
+/**
+ * Orbit after a drag of (dx, dy) fractions of the output. Dragging right turns
+ * the camera to the left of the screenshot (the scene turns with the pointer),
+ * dragging down raises it.
+ */
+export const orbitAfterDrag = (orbit: StudioPoint, dx: number, dy: number): StudioPoint => ({
+  x: clamp(orbit.x - dx * ORBIT_PER_WIDTH, -MAX_ORBIT_X, MAX_ORBIT_X),
+  y: clamp(orbit.y + dy * ORBIT_PER_HEIGHT, -MAX_ORBIT_DOWN, MAX_ORBIT_UP),
+});
+
+/** Camera distance as a share of the look's own (1). Lower is closer. */
+export const MIN_ZOOM = 0.35;
+export const MAX_ZOOM = 2.5;
+
+/** Zoom after a wheel step: the distance is scaled, so each notch feels the same. */
+export const zoomAfterWheel = (zoom: number, deltaY: number): number =>
+  clamp(zoom * Math.exp(deltaY * WHEEL_RATE), MIN_ZOOM, MAX_ZOOM);

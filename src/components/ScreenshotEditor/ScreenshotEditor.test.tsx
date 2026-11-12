@@ -17,6 +17,7 @@ const studio = vi.hoisted(() => ({
     pickImagePoint: ReturnType<typeof vi.fn>;
     projectImagePoint: ReturnType<typeof vi.fn>;
     setOffset: ReturnType<typeof vi.fn>;
+    setView: ReturnType<typeof vi.fn>;
   }[],
 }));
 vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
@@ -30,6 +31,8 @@ vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
     setOffset = vi.fn();
     setLightHandle = vi.fn();
     maxDepth = vi.fn(() => 0.85);
+    setView = vi.fn();
+    minZoom = vi.fn(() => 0.35);
     pickImagePoint = vi.fn(() => null);
     projectImagePoint = vi.fn(() => null);
     renderStill = vi.fn((width: number, height: number) =>
@@ -204,7 +207,83 @@ describe('ScreenshotEditor', () => {
       expect(screen.getByRole('button', { name: /^undo$/i })).toBeDisabled();
     });
 
-    it('scrolling over the studio moves the screenshot in depth, as one undo step', async () => {
+    const studioCanvas = () => {
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 500,
+        right: 800,
+        bottom: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      canvas.setPointerCapture = vi.fn();
+      return canvas;
+    };
+    const drag = (canvas: HTMLCanvasElement, from: [number, number], to: [number, number]) => {
+      fireEvent.pointerDown(canvas, {
+        button: 0,
+        pointerId: 1,
+        clientX: from[0],
+        clientY: from[1],
+      });
+      fireEvent.pointerMove(canvas, { button: 0, pointerId: 1, clientX: to[0], clientY: to[1] });
+      fireEvent.pointerUp(canvas, { button: 0, pointerId: 1, clientX: to[0], clientY: to[1] });
+    };
+
+    // jsdom lays nothing out: give every element (the stage too) a real size.
+    const withLayout = () =>
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 848,
+        height: 548,
+        right: 848,
+        bottom: 548,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+
+    it('turns the camera on a drag off the screenshot, and zooms on scroll', async () => {
+      withLayout();
+      const user = userEvent.setup();
+      await renderEditor();
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      const renderer = studio.instances[0];
+      const canvas = studioCanvas();
+      const lastView = () =>
+        renderer.setView.mock.calls.at(-1) as [{ x: number; y: number }, number];
+      drag(canvas, [100, 100], [300, 100]);
+      await waitFor(() => expect(lastView()[0].x).toBeLessThan(0));
+      // The screenshot itself stays where it was.
+      expect(renderer.setOffset.mock.calls.at(-1)?.[0]).toEqual({ x: 0, y: 0 });
+      fireEvent.wheel(canvas, { deltaY: -100 });
+      await waitFor(() => expect(lastView()[1]).toBeLessThan(1));
+    });
+
+    it('moves the screenshot with Space + drag', async () => {
+      withLayout();
+      const user = userEvent.setup();
+      await renderEditor();
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      const renderer = studio.instances[0];
+      const canvas = studioCanvas();
+      fireEvent.keyDown(window, { code: 'Space', key: ' ' });
+      drag(canvas, [400, 250], [600, 250]);
+      fireEvent.keyUp(window, { code: 'Space', key: ' ' });
+      await waitFor(() => expect(renderer.setOffset.mock.calls.at(-1)?.[0].x).toBeGreaterThan(0.2));
+      expect(renderer.setOffset.mock.calls.at(-1)?.[0].y).toBe(0);
+      // The camera did not turn.
+      expect(renderer.setView.mock.calls.at(-1)?.[0]).toEqual({ x: 0, y: 0 });
+    });
+
+    it('moves the screenshot in depth with Space + scroll, as one undo step', async () => {
       const user = userEvent.setup();
       await renderEditor();
       await user.click(screen.getByRole('button', { name: /night glow/i }));
@@ -212,12 +291,14 @@ describe('ScreenshotEditor', () => {
       const renderer = studio.instances[0];
       const canvas = document.querySelector('canvas') as HTMLCanvasElement;
       const lastDepth = () => renderer.setOffset.mock.calls.at(-1)?.[1] as number;
+      fireEvent.keyDown(window, { code: 'Space', key: ' ' });
       fireEvent.wheel(canvas, { deltaY: -100 });
       fireEvent.wheel(canvas, { deltaY: -100 });
       await waitFor(() => expect(lastDepth()).toBeGreaterThan(0.2));
       // Scrolling back out goes behind the look's own framing.
       fireEvent.wheel(canvas, { deltaY: 600 });
       await waitFor(() => expect(lastDepth()).toBeLessThan(0));
+      fireEvent.keyUp(window, { code: 'Space', key: ' ' });
       // The whole gesture undoes at once, leaving the look on.
       await user.click(screen.getByRole('button', { name: /^undo$/i }));
       await waitFor(() => expect(lastDepth()).toBe(0));

@@ -51,6 +51,8 @@ import {
   clampOffset,
   defaultLightHandle,
   depthAfterWheel,
+  orbitAfterDrag,
+  zoomAfterWheel,
   getStudioLook,
   getStudioOutputSize,
   imageStats,
@@ -95,6 +97,8 @@ type Drag =
   | { mode: 'move'; id: string; start: Point; current: Point }
   /** Studio: moving the screenshot around the output (client pixels). */
   | { mode: 'pan'; start: Point; current: Point; origin: StudioPoint }
+  /** Studio: turning the camera around the screenshot (client pixels). */
+  | { mode: 'orbit'; start: Point; current: Point; origin: StudioPoint }
   /** Studio: moving the light handle (fractions of the output). */
   | { mode: 'light'; start: StudioPoint; current: StudioPoint };
 
@@ -432,36 +436,102 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   }, [display.width, display.height, studioReady]);
 
   const studioPose = useMemo(() => {
-    if (drag?.mode === 'pan' && display.width > 0 && display.height > 0) {
+    const pose = {
+      offset: studio.offset,
+      depth: studio.depth,
+      orbit: studio.orbit,
+      zoom: studio.zoom,
+      light: studio.light,
+    };
+    if (display.width <= 0 || display.height <= 0) {
+      return pose;
+    }
+    if (drag?.mode === 'pan') {
       return {
-        offset: {
-          ...clampOffset({
-            x: drag.origin.x + (drag.current.x - drag.start.x) / display.width,
-            y: drag.origin.y + (drag.current.y - drag.start.y) / display.height,
-          }),
-        },
-        depth: studio.depth,
-        light: studio.light,
+        ...pose,
+        offset: clampOffset({
+          x: drag.origin.x + (drag.current.x - drag.start.x) / display.width,
+          y: drag.origin.y + (drag.current.y - drag.start.y) / display.height,
+        }),
+      };
+    }
+    if (drag?.mode === 'orbit') {
+      return {
+        ...pose,
+        orbit: orbitAfterDrag(
+          drag.origin,
+          (drag.current.x - drag.start.x) / display.width,
+          (drag.current.y - drag.start.y) / display.height,
+        ),
       };
     }
     if (drag?.mode === 'light') {
-      return { offset: studio.offset, depth: studio.depth, light: drag.current };
+      return { ...pose, light: drag.current };
     }
-    return { offset: studio.offset, depth: studio.depth, light: studio.light };
-  }, [display.height, display.width, drag, studio.depth, studio.light, studio.offset]);
+    return pose;
+  }, [display.height, display.width, drag, studio]);
 
   useEffect(() => {
     const renderer = studioRef.current;
     if (!renderer) {
       return;
     }
+    renderer.setView(studioPose.orbit, studioPose.zoom);
     renderer.setOffset(studioPose.offset, studioPose.depth);
     renderer.setLightHandle(studioPose.light);
   }, [studioPose, studioReady]);
 
-  // Scroll (or pinch) over the studio: bring the screenshot closer or push it back. One gesture
-  // is one undo step; the depth is tracked here between renders so fast wheels lose nothing.
-  const wheelGesture = useRef<{ group: string; at: number; depth: number } | null>(null);
+  // Space held hands the studio to the screenshot: drag moves it, scroll moves it in depth.
+  // Without Space, a drag off the screenshot turns the camera and scroll zooms, as in a 3D viewer.
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const spaceRef = useRef(false);
+  useEffect(() => {
+    if (!studioOn) {
+      return;
+    }
+    const isTyping = (el: Element | null) =>
+      !!el &&
+      ((el as HTMLElement).isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+    const set = (held: boolean) => {
+      spaceRef.current = held;
+      setSpaceHeld(held);
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || isTyping(document.activeElement)) {
+        return;
+      }
+      // Also keeps a focused button (a look, a tool) from being pressed by Space.
+      e.preventDefault();
+      if (!e.repeat) {
+        set(true);
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && spaceRef.current) {
+        e.preventDefault();
+        set(false);
+      }
+    };
+    const onBlur = () => set(false);
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', onBlur);
+      set(false);
+    };
+  }, [studioOn]);
+
+  // Scroll (or pinch) over the studio: zoom, or with Space move the screenshot in depth. One
+  // gesture is one undo step; the value is tracked here between renders so fast wheels lose nothing.
+  const wheelGesture = useRef<{
+    group: string;
+    at: number;
+    kind: 'zoom' | 'depth';
+    value: number;
+  } | null>(null);
   const handleWheel = useRef<(e: WheelEvent) => void>(() => undefined);
   useLayoutEffect(() => {
     handleWheel.current = (e: WheelEvent) => {
@@ -470,17 +540,24 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
         return;
       }
       e.preventDefault();
+      const kind = spaceRef.current ? 'depth' : 'zoom';
       const now = performance.now();
+      const current = kind === 'depth' ? studio.depth : studio.zoom;
       const gesture =
-        wheelGesture.current && now - wheelGesture.current.at < 400
+        wheelGesture.current &&
+        wheelGesture.current.kind === kind &&
+        now - wheelGesture.current.at < 400
           ? wheelGesture.current
-          : { group: `studio-depth-${now}`, at: now, depth: studio.depth };
+          : { group: `studio-${kind}-${now}`, at: now, kind, value: current };
       // Line-based wheels (deltaMode 1) report notches, not pixels.
       const delta = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
-      const depth = Math.min(depthAfterWheel(gesture.depth, delta), renderer.maxDepth());
-      wheelGesture.current = { ...gesture, at: now, depth };
-      if (depth !== studio.depth) {
-        setStyle({ ...style, studio: { ...studio, depth } }, gesture.group);
+      const value =
+        kind === 'depth'
+          ? Math.min(depthAfterWheel(gesture.value, delta), renderer.maxDepth())
+          : Math.max(zoomAfterWheel(gesture.value, delta), renderer.minZoom());
+      wheelGesture.current = { ...gesture, at: now, value };
+      if (value !== current) {
+        setStyle({ ...style, studio: { ...studio, [kind]: value } }, gesture.group);
       }
     };
   });
@@ -592,6 +669,13 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     setDrag({ mode: 'pan', start: at, current: at, origin: studio.offset });
   };
 
+  const startOrbit = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setSelectedId(null);
+    const at = { x: e.clientX, y: e.clientY };
+    setDrag({ mode: 'orbit', start: at, current: at, origin: studio.orbit });
+  };
+
   const handlePointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) {
       return;
@@ -600,11 +684,16 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       commitTextEdit(textEdit);
       return;
     }
+    // Studio, Space held: the drag moves the screenshot, wherever it starts.
+    if (studioOn && spaceRef.current) {
+      startPan(e);
+      return;
+    }
     const point = toImagePoint(e);
     if (!point) {
-      // Studio: off the screenshot, a drag moves it.
+      // Studio: off the screenshot, a drag turns the camera around it.
       if (studioOn) {
-        startPan(e);
+        startOrbit(e);
       }
       return;
     }
@@ -623,9 +712,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
 
     switch (tool) {
       case 'select':
-        // Studio: with Select, dragging the screenshot itself moves it too.
+        // Studio: with Select, dragging the screenshot itself turns the camera too.
         if (studioOn) {
-          startPan(e);
+          startOrbit(e);
         } else {
           setSelectedId(null);
         }
@@ -650,7 +739,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   };
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (drag?.mode === 'pan') {
+    if (drag?.mode === 'pan' || drag?.mode === 'orbit') {
       setDrag({ ...drag, current: { x: e.clientX, y: e.clientY } });
       return;
     }
@@ -678,9 +767,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     if (!drag) {
       return;
     }
-    if (drag.mode === 'pan') {
+    if (drag.mode === 'pan' || drag.mode === 'orbit') {
       if (drag.current.x !== drag.start.x || drag.current.y !== drag.start.y) {
-        commitStudio({ offset: studioPose.offset });
+        commitStudio(
+          drag.mode === 'pan' ? { offset: studioPose.offset } : { orbit: studioPose.orbit },
+        );
       }
     } else if (drag.mode === 'light') {
       // A plain click on the handle keeps the look's own light (and adds no undo step).
@@ -890,17 +981,19 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   })();
 
   const cursor =
-    drag?.mode === 'move' || drag?.mode === 'pan'
+    drag?.mode === 'move' || drag?.mode === 'pan' || drag?.mode === 'orbit'
       ? 'grabbing'
-      : hoveredId
+      : studioOn && spaceHeld
         ? 'move'
-        : studioOn && (offScreen || tool === 'select')
-          ? 'grab'
-          : tool === 'select'
-            ? 'default'
-            : tool === 'text'
-              ? 'text'
-              : 'crosshair';
+        : hoveredId
+          ? 'move'
+          : studioOn && (offScreen || tool === 'select')
+            ? 'grab'
+            : tool === 'select'
+              ? 'default'
+              : tool === 'text'
+                ? 'text'
+                : 'crosshair';
 
   const canvasHandlers = {
     onPointerDown: handlePointerDown,

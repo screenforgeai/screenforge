@@ -33,7 +33,7 @@
   "actions": "Bearbeitungsaktionen",
   "look": "Look",
   "flat": "Flach",
-  "studioHint": "Ziehe den Screenshot, um ihn zu verschieben, und scrolle, um ihn näher zu holen oder wegzuschieben. Ziehe das kleine Licht, um die Lichtrichtung zu ändern.",
+  "studioHint": "Ziehe neben dem Screenshot, um die Kamera zu drehen, und scrolle zum Zoomen. Halte die Leertaste und ziehe, um den Screenshot zu verschieben, oder halte sie und scrolle, um ihn näher zu holen oder wegzuschieben. Ziehe das kleine Licht, um die Lichtrichtung zu ändern.",
   "resetPosition": "Position und Licht zurücksetzen",
   "lightHandle": "Lichtposition",
   "studioUnavailable": "Studio-Looks brauchen WebGL 2, das hier nicht verfügbar ist."

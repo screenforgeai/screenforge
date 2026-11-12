@@ -286,6 +286,9 @@ export class StudioRenderer {
   private mediaLum = 0.5;
   private offset: StudioPoint = { x: 0, y: 0 };
   private depth = 0;
+  /** The user's turn of the camera around the screenshot (radians) and its zoom (1 = the look's). */
+  private orbit: StudioPoint = { x: 0, y: 0 };
+  private zoom = 1;
   private handle: StudioPoint | null = null;
   private width = 1;
   private height = 1;
@@ -730,12 +733,40 @@ export class StudioRenderer {
 
   /** The closest the screenshot may come for the current look without reaching the lens. */
   maxDepth(): number {
+    return Math.max(0, 1 - this.panelReach() / this.sphericalFor(this.s.camera).radius);
+  }
+
+  /**
+   * Turn the camera around the screenshot and zoom it, on top of the look's own
+   * angle and distance. Takes effect at once (no animation): it follows a drag.
+   */
+  setView(orbit: StudioPoint, zoom: number): void {
+    if (orbit.x === this.orbit.x && orbit.y === this.orbit.y && zoom === this.zoom) {
+      return;
+    }
+    this.orbit = { ...orbit };
+    this.zoom = zoom;
+    this.placeCamera(false);
+  }
+
+  /** The closest zoom for the current look that keeps the camera clear of the screenshot. */
+  minZoom(): number {
+    const own = this.lookRadius();
+    return own > 0 ? (this.panelReach() * 1.15) / own : 1;
+  }
+
+  /** Half the panel's diagonal, with a margin: how far the screenshot reaches from its centre. */
+  private panelReach(): number {
     const { halfWidth = PANEL_W / 2, halfHeight = 1 } = this.panel.userData as {
       halfWidth?: number;
       halfHeight?: number;
     };
-    const reach = Math.hypot(halfWidth, halfHeight) * 1.2;
-    return Math.max(0, 1 - reach / this.sphericalFor(this.s.camera).radius);
+    return Math.hypot(halfWidth, halfHeight) * 1.2;
+  }
+
+  private lookRadius(): number {
+    const fit = Math.max(1, REFERENCE_ASPECT / Math.max(this.camera.aspect, 0.1));
+    return BASE_RADIUS * CAMERAS[this.s.camera].dist * fit;
   }
 
   /** Light handle position (fractions of the output), or null for the look's own light. */
@@ -1177,10 +1208,14 @@ export class StudioRenderer {
 
   // Camera
 
+  /** The look's camera, turned and zoomed by the user; never below the floor or inside the panel. */
   private sphericalFor(id: StudioCameraId): THREE.Spherical {
     const c = CAMERAS[id];
     const fit = Math.max(1, REFERENCE_ASPECT / Math.max(this.camera.aspect, 0.1));
-    return new THREE.Spherical(BASE_RADIUS * c.dist * fit, Math.PI / 2 - c.el, c.az);
+    const own = BASE_RADIUS * c.dist * fit;
+    const radius = Math.max(own * this.zoom, Math.min(own, this.panelReach() * 1.15));
+    const elevation = THREE.MathUtils.clamp(c.el + this.orbit.y, -0.02, 1.35);
+    return new THREE.Spherical(radius, Math.PI / 2 - elevation, c.az + this.orbit.x);
   }
 
   private placeCamera(animate: boolean): void {
