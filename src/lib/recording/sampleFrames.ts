@@ -10,6 +10,27 @@ export interface SampledFrames {
 const SEEK_TIMEOUT_MS = 4000;
 
 /**
+ * How many of `frames` differ in content. Separate seeks can still decode
+ * the same picture (a recording that only stores a frame when the screen
+ * changes, or a very low frame rate), and a repeat says nothing about which
+ * rows hold still. Compared by a hash of every pixel.
+ */
+export function distinctFrameCount(frames: RgbaFrame[]): number {
+  const seen = new Set<string>();
+  for (const frame of frames) {
+    // FNV-1a over the bytes, with the size so different shapes never match.
+    let hash = 0x811c9dc5;
+    const { data } = frame;
+    for (let i = 0; i < data.length; i++) {
+      hash ^= data[i] ?? 0;
+      hash = Math.imul(hash, 0x01000193);
+    }
+    seen.add(`${frame.width}x${frame.height}:${hash >>> 0}`);
+  }
+  return seen.size;
+}
+
+/**
  * The positions to seek to for `times` in a video `duration` seconds long:
  * clamped to the video, and each one only once. A video shorter than the
  * recording said would otherwise give the same last frame many times over,

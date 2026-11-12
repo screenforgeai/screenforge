@@ -8,13 +8,17 @@ import {
   recordedBarFromDetection,
   shouldDetectRecordedBar,
 } from 'src/lib/recording/recordedBar';
-import { sampleVideoFrames, type SampledFrames } from 'src/lib/recording/sampleFrames';
+import {
+  distinctFrameCount,
+  sampleVideoFrames,
+  type SampledFrames,
+} from 'src/lib/recording/sampleFrames';
 import type { RecordedBarSettings } from 'src/lib/effects/frame';
 import type { RecordingResult } from 'src/types';
 
 /** About 20 frames across the recording: enough to see which rows never move. */
 const SAMPLE_COUNT = 20;
-/** Fewer decoded frames than this can't show what holds still: a guess only, never a crop. */
+/** Fewer distinct decoded frames than this can't show what holds still: a guess only, never a crop. */
 const MIN_FRAMES_TO_CROP = 10;
 
 /**
@@ -33,7 +37,8 @@ function detect(
   }
   const source = recordingResult.captureSource;
   const browser = knownBrowserOf(source);
-  const sure = sampled.frames.length >= MIN_FRAMES_TO_CROP && !(source?.appName && !browser);
+  const sure =
+    distinctFrameCount(sampled.frames) >= MIN_FRAMES_TO_CROP && !(source?.appName && !browser);
   const detection = detectRecordedToolbar(sampled.frames, {
     displaySurface: source?.displaySurface ?? 'window',
     mode: 'auto',
