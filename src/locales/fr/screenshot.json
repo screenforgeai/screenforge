@@ -30,5 +30,11 @@
   "captureFailed": "Impossible de faire la capture. Vérifiez l'autorisation d'enregistrement de l'écran et réessayez.",
   "annotate": "Annoter",
   "tools": "Outils",
-  "actions": "Actions d'édition"
+  "actions": "Actions d'édition",
+  "look": "Rendu",
+  "flat": "À plat",
+  "studioHint": "Faites glisser la capture pour la déplacer. Faites glisser la petite lumière pour changer la direction de l'éclairage.",
+  "resetPosition": "Réinitialiser la position et la lumière",
+  "lightHandle": "Position de la lumière",
+  "studioUnavailable": "Les rendus studio nécessitent WebGL 2, qui n'est pas disponible ici."
 }

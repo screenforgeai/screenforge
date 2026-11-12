@@ -32,11 +32,24 @@ import {
 export const MAX_SCREENSHOT_DIMENSION = 8192;
 export const ANNOTATION_FONT_FAMILY = 'Geist, -apple-system, system-ui, sans-serif';
 
+/** A studio look (3D lighting) in place of the flat frame. */
+export interface ScreenshotStudio {
+  /** Id of a look in `STUDIO_LOOKS`, or null for the flat frame. */
+  lookId: string | null;
+  /** Where the screenshot sits: a shift from centre, as fractions of the output's width and height. */
+  offset: { x: number; y: number };
+  /** Light handle position (fractions of the output), or null for the look's own light. */
+  light: { x: number; y: number } | null;
+}
+
 export interface ScreenshotStyle {
   frameEnabled: boolean;
   aspectRatioId: string;
   background: BackgroundSettings;
+  studio?: ScreenshotStudio;
 }
+
+export const FLAT_STUDIO: ScreenshotStudio = { lookId: null, offset: { x: 0, y: 0 }, light: null };
 
 export interface ScreenshotGeometry {
   canvasWidth: number;

@@ -6,6 +6,41 @@ import { ScreenshotEditor } from './ScreenshotEditor';
 
 vi.mock('src/lib/analytics', () => ({ trackEvent: vi.fn() }));
 
+// WebGL is not available in jsdom; a stand-in renderer records what the editor asks of it.
+const studio = vi.hoisted(() => ({
+  fail: false,
+  instances: [] as {
+    start: () => void;
+    renderStill: (w: number, h: number) => HTMLCanvasElement;
+    setScreen: (...args: unknown[]) => void;
+    setSettings: (...args: unknown[]) => void;
+  }[],
+}));
+vi.mock('src/lib/screenshot/studio', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('src/lib/screenshot/studio')>();
+  class FakeStudioRenderer {
+    start = vi.fn();
+    dispose = vi.fn();
+    resize = vi.fn();
+    setScreen = vi.fn();
+    setSettings = vi.fn();
+    setOffset = vi.fn();
+    setLightHandle = vi.fn();
+    pickImagePoint = vi.fn(() => null);
+    projectImagePoint = vi.fn(() => null);
+    renderStill = vi.fn((width: number, height: number) =>
+      Object.assign(document.createElement('canvas'), { width, height }),
+    );
+    constructor() {
+      if (studio.fail) {
+        throw new Error('Studio looks need WebGL 2');
+      }
+      studio.instances.push(this);
+    }
+  }
+  return { ...actual, StudioRenderer: FakeStudioRenderer };
+});
+
 vi.mock('src/lib/effects/frame', async (importOriginal) => {
   const actual = await importOriginal<typeof import('src/lib/effects/frame')>();
   return {
@@ -96,6 +131,67 @@ const renderEditor = async (onClose = vi.fn()) => {
 };
 
 describe('ScreenshotEditor', () => {
+  describe('studio looks', () => {
+    beforeEach(() => {
+      studio.fail = false;
+      studio.instances.length = 0;
+    });
+
+    it('starts flat, with the looks offered beside it', async () => {
+      await renderEditor();
+      expect(screen.getByRole('button', { name: /^flat$/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: /macro/i })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+      expect(studio.instances).toHaveLength(0);
+    });
+
+    it('renders a picked look in the studio and exports the studio still', async () => {
+      const user = userEvent.setup();
+      await renderEditor();
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      const renderer = studio.instances[0];
+      expect(renderer.start).toHaveBeenCalled();
+      await waitFor(() => expect(renderer.setScreen).toHaveBeenCalled());
+      // The flat frame's own controls give way to the look.
+      expect(screen.queryByRole('switch', { name: /^frame$/i })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /^copy$/i }));
+      await waitFor(() => expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalled());
+      expect(renderer.renderStill).toHaveBeenCalled();
+    });
+
+    it('switches looks on the same renderer', async () => {
+      const user = userEvent.setup();
+      await renderEditor();
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      await waitFor(() => expect(studio.instances).toHaveLength(1));
+      await user.click(screen.getByRole('button', { name: /macro/i }));
+      await waitFor(() => expect(studio.instances[0].setSettings).toHaveBeenCalled());
+      expect(studio.instances).toHaveLength(1);
+    });
+
+    it('stays usable on the flat frame when the studio cannot start', async () => {
+      studio.fail = true;
+      const user = userEvent.setup();
+      const { container } = render(<ScreenshotEditor capture={capture} onClose={vi.fn()} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      await user.click(screen.getByRole('button', { name: /night glow/i }));
+      expect(container.querySelector('canvas')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^copy$/i }));
+      await waitFor(() =>
+        expect(window.screenforge.copyScreenshotToClipboard).toHaveBeenCalledWith(OUTPUT),
+      );
+    });
+  });
+
   it('offers every annotation tool', async () => {
     await renderEditor();
     for (const name of [

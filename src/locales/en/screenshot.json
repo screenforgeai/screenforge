@@ -30,5 +30,11 @@
   "captureFailed": "Couldn't take the screenshot. Check the screen recording permission and try again.",
   "annotate": "Annotate",
   "tools": "Tools",
-  "actions": "Edit actions"
+  "actions": "Edit actions",
+  "look": "Look",
+  "flat": "Flat",
+  "studioHint": "Drag the screenshot to move it. Drag the small light to change where the light comes from.",
+  "resetPosition": "Reset position and light",
+  "lightHandle": "Light position",
+  "studioUnavailable": "Studio looks need WebGL 2, which isn't available here."
 }

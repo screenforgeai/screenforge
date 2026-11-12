@@ -37,6 +37,7 @@ import {
   type TextEdit,
 } from 'src/lib/screenshot/annotations';
 import {
+  FLAT_STUDIO,
   canvasPointFromImage,
   clientToCanvasPoint,
   getScreenshotGeometry,
@@ -44,6 +45,14 @@ import {
   renderScreenshot,
   type ScreenshotStyle,
 } from 'src/lib/screenshot/compose';
+import {
+  StudioRenderer,
+  defaultLightHandle,
+  getStudioLook,
+  getStudioOutputSize,
+  imageStats,
+  type StudioPoint,
+} from 'src/lib/screenshot/studio';
 import { trackEvent } from 'src/lib/analytics';
 import {
   IconArrowBackUp,
@@ -74,7 +83,11 @@ type Props = {
 
 type Drag =
   | { mode: 'draw'; tool: DragShapeType; start: Point; current: Point }
-  | { mode: 'move'; id: string; start: Point; current: Point };
+  | { mode: 'move'; id: string; start: Point; current: Point }
+  /** Studio: moving the screenshot around the output (client pixels). */
+  | { mode: 'pan'; start: Point; current: Point; origin: StudioPoint }
+  /** Studio: moving the light handle (fractions of the output). */
+  | { mode: 'light'; current: StudioPoint };
 
 const TOOLS: { id: AnnotationTool; hotkey: string }[] = [
   { id: 'select', hotkey: 'v' },
@@ -108,6 +121,25 @@ const TOOL_LABEL_KEYS = {
 
 const STAGE_PADDING = 48;
 const HIT_TOLERANCE_CSS_PX = 6;
+/** The studio preview never renders above 2x; past that the GPU cost outgrows what the eye sees. */
+const STUDIO_MAX_DPR = 2;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/** Mean brightness of a screenshot, from a small downscaled copy. */
+const measureLuminance = (image: HTMLImageElement): number => {
+  try {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 96, height: 60 });
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      return 0.5;
+    }
+    ctx.drawImage(image, 0, 0, 96, 60);
+    return imageStats(ctx.getImageData(0, 0, 96, 60).data).lum;
+  } catch {
+    return 0.5;
+  }
+};
 
 const newId = () => crypto.randomUUID();
 
@@ -152,6 +184,17 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [wallpapersReady, setWallpapersReady] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [studioFailed, setStudioFailed] = useState(false);
+  const [studioReady, setStudioReady] = useState(0);
+  const [offScreen, setOffScreen] = useState(false);
+  const studioCanvasRef = useRef<HTMLCanvasElement>(null);
+  const studioRef = useRef<StudioRenderer | null>(null);
+  // The screenshot with its annotations, flat: the studio's screen texture.
+  const flatCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const studio = style.studio ?? FLAT_STUDIO;
+  const look = getStudioLook(studio.lookId);
+  const studioOn = !!look && !studioFailed;
 
   const shapeStyle = useMemo(
     () => ({ color, scale: getAnnotationScale(capture.width, capture.height) }),
@@ -161,14 +204,34 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     () => getScreenshotGeometry(capture.width, capture.height, style),
     [capture.height, capture.width, style],
   );
+  // The studio's screen: the screenshot at full size, no frame. Independent of the style, so
+  // moving the screenshot or picking a look never repaints it.
+  const flatStyle = useMemo<ScreenshotStyle>(
+    () => ({ frameEnabled: false, aspectRatioId: 'original', background: DEFAULT_BACKGROUND }),
+    [],
+  );
+  const flatGeometry = useMemo(
+    () => getScreenshotGeometry(capture.width, capture.height, flatStyle),
+    [capture.height, capture.width, flatStyle],
+  );
+  const studioSize = useMemo(
+    () => getStudioOutputSize(capture.width, capture.height, style),
+    [capture.height, capture.width, style],
+  );
+  const outputWidth = studioOn ? studioSize.width : geometry.canvasWidth;
+  const outputHeight = studioOn ? studioSize.height : geometry.canvasHeight;
   const display = getContainRect(
     Math.max(stageSize.width - STAGE_PADDING, 0),
     Math.max(stageSize.height - STAGE_PADDING, 0),
-    geometry.canvasWidth,
-    geometry.canvasHeight,
+    outputWidth,
+    outputHeight,
   );
   // CSS pixels per canvas pixel.
   const displayScale = display.width / geometry.canvasWidth;
+  const imageLum = useMemo(
+    () => (studioOn && image ? measureLuminance(image) : 0.5),
+    [image, studioOn],
+  );
 
   useEffect(() => {
     const img = new Image();
@@ -217,15 +280,24 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   // Shapes as they should look right now: a shape being moved is shown at its
   // new spot, a shape being drawn is appended, a text box being edited is hidden
   // (the textarea stands in for it).
+  // Only shape drags change the shapes; moving the screenshot or the light must not
+  // repaint (and re-upload) the whole screenshot.
+  const shapeDrag = drag?.mode === 'move' || drag?.mode === 'draw' ? drag : null;
   const visibleShapes = useMemo(() => {
     let shapes: AnnotationShape[] = annotations.shapes;
-    if (drag?.mode === 'move') {
-      const dx = drag.current.x - drag.start.x;
-      const dy = drag.current.y - drag.start.y;
-      shapes = shapes.map((s) => (s.id === drag.id ? translateShape(s, dx, dy) : s));
+    if (shapeDrag?.mode === 'move') {
+      const dx = shapeDrag.current.x - shapeDrag.start.x;
+      const dy = shapeDrag.current.y - shapeDrag.start.y;
+      shapes = shapes.map((s) => (s.id === shapeDrag.id ? translateShape(s, dx, dy) : s));
     }
-    if (drag?.mode === 'draw') {
-      const draft = createShapeFromDrag(drag.tool, drag.start, drag.current, 'draft', shapeStyle);
+    if (shapeDrag?.mode === 'draw') {
+      const draft = createShapeFromDrag(
+        shapeDrag.tool,
+        shapeDrag.start,
+        shapeDrag.current,
+        'draft',
+        shapeStyle,
+      );
       if (draft) {
         shapes = [...shapes, draft];
       }
@@ -234,9 +306,132 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       shapes = shapes.filter((s) => s.id !== textEdit.editingId);
     }
     return shapes;
-  }, [annotations.shapes, drag, shapeStyle, textEdit]);
+  }, [annotations.shapes, shapeDrag, shapeStyle, textEdit]);
+
+  /** Paint the screenshot and its annotations, flat, and hand them to the studio as its screen. */
+  const paintStudioScreen = useCallback(
+    (shapes: readonly AnnotationShape[], selected: string | null) => {
+      const renderer = studioRef.current;
+      if (!renderer || !image) {
+        return;
+      }
+      const canvas = flatCanvasRef.current ?? document.createElement('canvas');
+      flatCanvasRef.current = canvas;
+      if (
+        canvas.width !== flatGeometry.canvasWidth ||
+        canvas.height !== flatGeometry.canvasHeight
+      ) {
+        canvas.width = flatGeometry.canvasWidth;
+        canvas.height = flatGeometry.canvasHeight;
+      }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return;
+      }
+      renderScreenshot(ctx, {
+        image,
+        imageWidth: capture.width,
+        imageHeight: capture.height,
+        style: flatStyle,
+        geometry: flatGeometry,
+        shapes,
+        selectedId: selected,
+      });
+      renderer.setScreen(canvas, canvas.width, canvas.height, imageLum);
+    },
+    [capture.height, capture.width, flatGeometry, flatStyle, image, imageLum],
+  );
+
+  // One renderer per studio session: created when a look is turned on, freed when it is turned off.
+  useEffect(() => {
+    if (!studioOn) {
+      return;
+    }
+    const canvas = studioCanvasRef.current;
+    const settings = getStudioLook(studio.lookId)?.settings;
+    if (!canvas || !settings) {
+      return;
+    }
+    let renderer: StudioRenderer;
+    try {
+      renderer = new StudioRenderer(canvas, settings);
+    } catch {
+      setStudioFailed(true);
+      toast.error(t('studioUnavailable'));
+      return;
+    }
+    studioRef.current = renderer;
+    renderer.start();
+    setStudioReady((n) => n + 1);
+    return () => {
+      studioRef.current = null;
+      appliedLookRef.current = null;
+      renderer.dispose();
+    };
+    // Only on/off recreates the renderer; look changes are applied below, animated.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studioOn]);
+
+  const appliedLookRef = useRef<string | null>(null);
+  useEffect(() => {
+    const renderer = studioRef.current;
+    if (!renderer || !look) {
+      return;
+    }
+    if (appliedLookRef.current !== null && appliedLookRef.current !== look.id) {
+      renderer.setSettings(look.settings, true);
+    }
+    appliedLookRef.current = look.id;
+  }, [look, studioReady]);
 
   useEffect(() => {
+    studioRef.current?.resize(
+      display.width,
+      display.height,
+      Math.min(window.devicePixelRatio || 1, STUDIO_MAX_DPR),
+    );
+  }, [display.width, display.height, studioReady]);
+
+  const studioPose = useMemo(() => {
+    if (drag?.mode === 'pan' && display.width > 0 && display.height > 0) {
+      return {
+        offset: {
+          x: clamp(drag.origin.x + (drag.current.x - drag.start.x) / display.width, -0.6, 0.6),
+          y: clamp(drag.origin.y + (drag.current.y - drag.start.y) / display.height, -0.6, 0.6),
+        },
+        light: studio.light,
+      };
+    }
+    if (drag?.mode === 'light') {
+      return { offset: studio.offset, light: drag.current };
+    }
+    return { offset: studio.offset, light: studio.light };
+  }, [display.height, display.width, drag, studio.light, studio.offset]);
+
+  useEffect(() => {
+    const renderer = studioRef.current;
+    if (!renderer) {
+      return;
+    }
+    renderer.setOffset(studioPose.offset);
+    renderer.setLightHandle(studioPose.light);
+  }, [studioPose, studioReady]);
+
+  const lightHandle = studioPose.light ?? (look ? defaultLightHandle(look.settings.envRot) : null);
+
+  // At most one repaint per frame, however fast pointer events arrive while drawing.
+  useEffect(() => {
+    if (!studioOn) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => paintStudioScreen(visibleShapes, selectedId));
+    return () => cancelAnimationFrame(frame);
+  }, [paintStudioScreen, selectedId, studioOn, studioReady, visibleShapes]);
+
+  useEffect(() => {
+    if (studioOn) {
+      return;
+    }
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || !image) {
@@ -257,12 +452,24 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     geometry,
     image,
     selectedId,
+    studioOn,
     style,
     visibleShapes,
     wallpapersReady,
   ]);
 
   const toImagePoint = (e: { clientX: number; clientY: number }): Point | null => {
+    if (studioOn) {
+      const renderer = studioRef.current;
+      const rect = studioCanvasRef.current?.getBoundingClientRect();
+      if (!renderer || !rect || rect.width === 0 || rect.height === 0) {
+        return null;
+      }
+      return renderer.pickImagePoint(
+        (e.clientX - rect.left) / rect.width,
+        (e.clientY - rect.top) / rect.height,
+      );
+    }
     const canvas = canvasRef.current;
     if (!canvas) {
       return null;
@@ -277,7 +484,11 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     return imagePointFromCanvas(canvasPoint, geometry);
   };
 
-  const hitTolerance = HIT_TOLERANCE_CSS_PX / Math.max(displayScale * geometry.scale, 0.0001);
+  // In the studio the screen is foreshortened; this rough scale is close enough for picking.
+  const pickScale = studioOn
+    ? (display.width * 0.6) / Math.max(capture.width, 1)
+    : displayScale * geometry.scale;
+  const hitTolerance = HIT_TOLERANCE_CSS_PX / Math.max(pickScale, 0.0001);
 
   // The pointer-down that ends a text box also blurs the textarea; remember the
   // last edit handled so the same box is never committed twice.
@@ -303,6 +514,13 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     [annotations.shapes, shapeStyle],
   );
 
+  const startPan = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setSelectedId(null);
+    const at = { x: e.clientX, y: e.clientY };
+    setDrag({ mode: 'pan', start: at, current: at, origin: studio.offset });
+  };
+
   const handlePointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) {
       return;
@@ -313,6 +531,10 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
     const point = toImagePoint(e);
     if (!point) {
+      // Studio: off the screenshot, a drag moves it.
+      if (studioOn) {
+        startPan(e);
+      }
       return;
     }
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -330,7 +552,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
 
     switch (tool) {
       case 'select':
-        setSelectedId(null);
+        // Studio: with Select, dragging the screenshot itself moves it too.
+        if (studioOn) {
+          startPan(e);
+        } else {
+          setSelectedId(null);
+        }
         break;
       case 'step': {
         const shape = createStepShape(point, newId(), shapeStyle);
@@ -352,11 +579,18 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   };
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (drag?.mode === 'pan') {
+      setDrag({ ...drag, current: { x: e.clientX, y: e.clientY } });
+      return;
+    }
     const point = toImagePoint(e);
+    if (studioOn && !drag && (point === null) !== offScreen) {
+      setOffScreen(point === null);
+    }
     if (!point) {
       return;
     }
-    if (drag) {
+    if (drag?.mode === 'draw' || drag?.mode === 'move') {
       setDrag({ ...drag, current: point });
       return;
     }
@@ -366,11 +600,20 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     }
   };
 
+  const commitStudio = (patch: Partial<typeof studio>) =>
+    setStyle({ ...style, studio: { ...studio, ...patch } });
+
   const handlePointerUp = () => {
     if (!drag) {
       return;
     }
-    if (drag.mode === 'draw') {
+    if (drag.mode === 'pan') {
+      if (drag.current.x !== drag.start.x || drag.current.y !== drag.start.y) {
+        commitStudio({ offset: studioPose.offset });
+      }
+    } else if (drag.mode === 'light') {
+      commitStudio({ light: drag.current });
+    } else if (drag.mode === 'draw') {
       const shape = createShapeFromDrag(drag.tool, drag.start, drag.current, newId(), shapeStyle);
       if (shape) {
         dispatch({ type: 'add', shape });
@@ -425,6 +668,14 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       ? resolveTextEdit(annotations.shapes, textEdit, newId(), shapeStyle)
       : null;
     const shapes = pending ? annotationsReducer(annotations, pending).shapes : annotations.shapes;
+    const renderer = studioRef.current;
+    if (studioOn && renderer) {
+      // Layer every sharp frame at full size, then put the live view (with its selection) back.
+      paintStudioScreen(shapes, null);
+      const still = renderer.renderStill(studioSize.width, studioSize.height);
+      paintStudioScreen(visibleShapes, selectedId);
+      return still.toDataURL('image/png');
+    }
     if (style.frameEnabled && style.background.type === 'wallpaper') {
       await Promise.all([preloadWallpapersAsync(), preloadCustomWallpaperAsync()]);
     }
@@ -449,6 +700,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const exportProps = () => ({
     kind: capture.kind,
     framed: style.frameEnabled,
+    look: studioOn ? studio.lookId : null,
     annotations: annotations.shapes.length,
   });
 
@@ -535,6 +787,22 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     const editing = annotations.shapes.find((s) => s.id === textEdit.editingId);
     const fontSize =
       editing?.type === 'text' ? editing.fontSize : getDefaultFontSize(shapeStyle.scale);
+    if (studioOn) {
+      const renderer = studioRef.current;
+      const at = renderer?.projectImagePoint(textEdit.point.x, textEdit.point.y);
+      const next = renderer?.projectImagePoint(textEdit.point.x + 100, textEdit.point.y);
+      if (!at || !next) {
+        return null;
+      }
+      const scale =
+        Math.hypot((next.x - at.x) * display.width, (next.y - at.y) * display.height) / 100;
+      return {
+        left: at.x * display.width,
+        top: at.y * display.height,
+        fontSize: Math.max(10, fontSize * scale),
+        color: editing?.color ?? color,
+      };
+    }
     const at = canvasPointFromImage(textEdit.point, geometry);
     return {
       left: at.x * displayScale,
@@ -545,15 +813,37 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   })();
 
   const cursor =
-    drag?.mode === 'move'
+    drag?.mode === 'move' || drag?.mode === 'pan'
       ? 'grabbing'
       : hoveredId
         ? 'move'
-        : tool === 'select'
-          ? 'default'
-          : tool === 'text'
-            ? 'text'
-            : 'crosshair';
+        : studioOn && (offScreen || tool === 'select')
+          ? 'grab'
+          : tool === 'select'
+            ? 'default'
+            : tool === 'text'
+              ? 'text'
+              : 'crosshair';
+
+  const canvasHandlers = {
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePointerUp,
+    onPointerCancel: () => setDrag(null),
+    onPointerLeave: () => setHoveredId(null),
+    onDoubleClick: handleDoubleClick,
+  };
+
+  const lightFromEvent = (e: { clientX: number; clientY: number }): StudioPoint | null => {
+    const rect = studioCanvasRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) {
+      return null;
+    }
+    return {
+      x: clamp((e.clientX - rect.left) / rect.width, -0.2, 1.2),
+      y: clamp((e.clientY - rect.top) / rect.height, 0, 0.6),
+    };
+  };
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-sf-bg font-sans text-sf-primary">
@@ -668,19 +958,61 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           className="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden"
         >
           <div className="relative" style={{ width: display.width, height: display.height }}>
-            <canvas
-              ref={canvasRef}
-              width={geometry.canvasWidth}
-              height={geometry.canvasHeight}
-              className="block h-full w-full touch-none select-none"
-              style={{ cursor }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={() => setDrag(null)}
-              onPointerLeave={() => setHoveredId(null)}
-              onDoubleClick={handleDoubleClick}
-            />
+            {studioOn ? (
+              // Keyed: a canvas that has held a 2D context can never take a WebGL one.
+              <canvas
+                key="studio"
+                ref={studioCanvasRef}
+                className="block h-full w-full touch-none select-none"
+                style={{ cursor }}
+                {...canvasHandlers}
+              />
+            ) : (
+              <canvas
+                key="flat"
+                ref={canvasRef}
+                width={geometry.canvasWidth}
+                height={geometry.canvasHeight}
+                className="block h-full w-full touch-none select-none"
+                style={{ cursor }}
+                {...canvasHandlers}
+              />
+            )}
+            {studioOn && lightHandle && (
+              <button
+                type="button"
+                aria-label={t('lightHandle')}
+                title={t('lightHandle')}
+                className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full border border-white/70 bg-white/25 opacity-60 shadow-[0_0_0_1px_rgba(0,0,0,0.25),0_0_10px_rgba(255,255,255,0.45)] transition-opacity hover:opacity-100 active:cursor-grabbing"
+                style={{
+                  left: clamp(lightHandle.x, 0, 1) * display.width,
+                  top: clamp(lightHandle.y, 0, 1) * display.height,
+                }}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) {
+                    return;
+                  }
+                  e.stopPropagation();
+                  e.currentTarget.setPointerCapture?.(e.pointerId);
+                  const at = lightFromEvent(e);
+                  if (at) {
+                    setDrag({ mode: 'light', current: at });
+                  }
+                }}
+                onPointerMove={(e) => {
+                  if (drag?.mode !== 'light') {
+                    return;
+                  }
+                  const at = lightFromEvent(e);
+                  if (at) {
+                    setDrag({ mode: 'light', current: at });
+                  }
+                }}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={() => setDrag(null)}
+                onDoubleClick={() => commitStudio({ light: null })}
+              />
+            )}
             {textEdit && textOverlay && (
               <textarea
                 autoFocus

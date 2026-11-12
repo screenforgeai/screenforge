@@ -30,5 +30,11 @@
   "captureFailed": "No se pudo hacer la captura. Revisa el permiso de grabación de pantalla e inténtalo de nuevo.",
   "annotate": "Anotar",
   "tools": "Herramientas",
-  "actions": "Acciones de edición"
+  "actions": "Acciones de edición",
+  "look": "Estilo",
+  "flat": "Plano",
+  "studioHint": "Arrastra la captura para moverla. Arrastra la pequeña luz para cambiar de dónde viene la luz.",
+  "resetPosition": "Restablecer posición y luz",
+  "lightHandle": "Posición de la luz",
+  "studioUnavailable": "Los estilos de estudio necesitan WebGL 2, que no está disponible aquí."
 }

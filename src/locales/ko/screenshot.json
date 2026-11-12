@@ -30,5 +30,11 @@
   "captureFailed": "스크린샷을 찍지 못했습니다. 화면 기록 권한을 확인한 후 다시 시도하세요.",
   "annotate": "주석 달기",
   "tools": "도구",
-  "actions": "편집 작업"
+  "actions": "편집 작업",
+  "look": "룩",
+  "flat": "플랫",
+  "studioHint": "스크린샷을 드래그해 옮기세요. 작은 조명을 드래그하면 빛의 방향이 바뀝니다.",
+  "resetPosition": "위치와 조명 초기화",
+  "lightHandle": "조명 위치",
+  "studioUnavailable": "스튜디오 룩에는 WebGL 2가 필요하지만 여기서는 사용할 수 없습니다."
 }

@@ -30,5 +30,11 @@
   "captureFailed": "Der Screenshot konnte nicht aufgenommen werden. Prüfe die Berechtigung zur Bildschirmaufnahme und versuche es erneut.",
   "annotate": "Beschriften",
   "tools": "Werkzeuge",
-  "actions": "Bearbeitungsaktionen"
+  "actions": "Bearbeitungsaktionen",
+  "look": "Look",
+  "flat": "Flach",
+  "studioHint": "Ziehe den Screenshot, um ihn zu verschieben. Ziehe das kleine Licht, um die Lichtrichtung zu ändern.",
+  "resetPosition": "Position und Licht zurücksetzen",
+  "lightHandle": "Lichtposition",
+  "studioUnavailable": "Studio-Looks brauchen WebGL 2, das hier nicht verfügbar ist."
 }
