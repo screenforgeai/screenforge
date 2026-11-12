@@ -47,6 +47,8 @@ const ExportWorker = () => {
         maskClips: snap.maskClips as MaskClip[],
         motionClips: normalizeMotionClips(snap.motionClips),
         isCropEditing: false,
+        // The window bar reads the recorded window's title from it.
+        recordingResult: params.recording,
       });
 
       // Register custom wallpaper data URL so the export window can render it.

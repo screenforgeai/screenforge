@@ -44,7 +44,9 @@ import type {
   ToolbarShapeRect,
   ScreenshotCaptureRequest,
   RegisteredCaptureShortcuts,
+  RecordingCaptureSource,
 } from '../../types/index';
+import { displaySurfaceOf } from '../../lib/recording/captureSource';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
 import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
@@ -401,6 +403,8 @@ export const FloatingToolbar = () => {
   }, []);
 
   const startTimeRef = useRef(0);
+  // What this recording captures, kept for its window bar (RecordingResult.captureSource).
+  const captureSourceRef = useRef<RecordingCaptureSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -923,6 +927,12 @@ export const FloatingToolbar = () => {
       }
 
       const cropArea = tab === 'area' ? selectedArea : null;
+      captureSourceRef.current = {
+        kind: tab,
+        ...(tab === 'window' && selectedSource?.appName && { appName: selectedSource.appName }),
+        ...(tab === 'window' &&
+          selectedSource?.windowTitle && { windowTitle: selectedSource.windowTitle }),
+      };
       if (captureBackendRef.current === 'wayland-portal') {
         await startWaylandPortalCapture();
         try {
@@ -1170,6 +1180,10 @@ export const FloatingToolbar = () => {
   }
 
   async function handleStop() {
+    // What this recording captured, taken now: a next recording may start
+    // (and set its own) before this one has finished saving.
+    const captureSource = captureSourceRef.current;
+    captureSourceRef.current = null;
     logToolbarDiagnostic('toolbar.recording.stop-clicked', {
       elapsed,
       micEnabled,
@@ -1286,6 +1300,7 @@ export const FloatingToolbar = () => {
         hasEmbeddedAudio,
         audioPath: timelineAudioPath ?? undefined,
         cameraPath: cameraPath ?? undefined,
+        ...(captureSource && { captureSource }),
       });
     } catch (err) {
       console.error('[recording] stop pipeline failed:', err);
@@ -1423,6 +1438,14 @@ export const FloatingToolbar = () => {
     // user ends the capture from the OS screen-share indicator.
     const [videoTrack] = stream.getVideoTracks();
     setScreenTrack(videoTrack ?? null);
+    // The portal, not the toolbar, decides what's shared: a tab, a window or a screen.
+    const displaySurface = displaySurfaceOf(videoTrack);
+    if (displaySurface) {
+      captureSourceRef.current = {
+        kind: displaySurface === 'monitor' ? 'display' : 'window',
+        displaySurface,
+      };
+    }
 
     const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8'].find((candidate) =>
       MediaRecorder.isTypeSupported(candidate),

@@ -1,1 +1,63 @@
-{ "header": "フレーム", "noRecordingSelected": "録画が選択されていません。", "background": "背景", "wallpaper": "壁紙", "solid": "単色", "padding": "パディング", "cornerRadius": "角丸", "frame": "フレーム", "crop": "トリミング", "applied": "適用済み", "reset": "リセット", "done": "完了", "editCrop": "トリミングを編集", "shadow": "シャドウ", "blur": "ブラー", "opacity": "不透明度", "from": "開始", "to": "終了", "pickColor": "色を選択", "startColor": "開始色", "endColor": "終了色", "direction": "方向" }
+{
+  "header": "フレーム",
+  "noRecordingSelected": "録画が選択されていません。",
+  "background": "背景",
+  "wallpaper": "壁紙",
+  "solid": "単色",
+  "padding": "パディング",
+  "cornerRadius": "角丸",
+  "frame": "フレーム",
+  "crop": "トリミング",
+  "applied": "適用済み",
+  "reset": "リセット",
+  "done": "完了",
+  "editCrop": "トリミングを編集",
+  "shadow": "シャドウ",
+  "blur": "ブラー",
+  "opacity": "不透明度",
+  "from": "開始",
+  "to": "終了",
+  "pickColor": "色を選択",
+  "startColor": "開始色",
+  "endColor": "終了色",
+  "direction": "方向",
+  "windowBar": "ウィンドウバー",
+  "windowStyleLabel": "スタイル",
+  "windowThemeLabel": "テーマ",
+  "windowTitle": "タイトル",
+  "windowAddress": "アドレス",
+  "windowStyle": {
+    "none": "なし",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "ブラウザ"
+  },
+  "windowPreview": {
+    "mac": "macOS のタイトルバー：3つのボタンと、中央の欄にアドレス。",
+    "windows": "Windows のタイトルバー：左にタイトル、右に最小化・最大化・閉じる。",
+    "browser": "ブラウザのツールバー：戻る・進む・再読み込みと、横幅いっぱいのアドレス欄。"
+  },
+  "windowCurrent": "現在",
+  "windowTheme": {
+    "auto": "自動",
+    "light": "ライト",
+    "dark": "ダーク"
+  },
+  "windowBarCropped": "切り抜いたキャプチャにはウィンドウバーを付けません。画面の一部にウィンドウ全体のバーを付けると不自然になるためです。",
+  "recordedBar": "録画されたツールバー",
+  "adjustCrop": "切り抜きを調整",
+  "recordedBarMode": {
+    "auto": "自動",
+    "manual": "手動",
+    "off": "オフ"
+  },
+  "recordedBarStatus": {
+    "detecting": "ブラウザのツールバーを探しています…",
+    "crop": "ブラウザのツールバーを見つけて切り取りました。",
+    "adjust": "ツールバーらしきものがありますが、境目がはっきりしません。切り抜きを調整して確認してください。",
+    "none": "この録画にブラウザのツールバーは見つかりませんでした。",
+    "failed": "録画を読み取れず、ツールバーを探せませんでした。切り抜きを調整して手動で取り除いてください。",
+    "manual": "上から {{rows}} 行を切り取っています。",
+    "off": "録画されたツールバーを残します。"
+  }
+}

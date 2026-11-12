@@ -1,1 +1,63 @@
-{ "header": "Marco", "noRecordingSelected": "Ninguna grabación seleccionada.", "background": "Fondo", "wallpaper": "Fondo de pantalla", "solid": "Sólido", "padding": "Relleno", "cornerRadius": "Radio de esquina", "frame": "Marco", "crop": "Recortar", "applied": "Aplicado", "reset": "Restablecer", "done": "Listo", "editCrop": "Editar recorte", "shadow": "Sombra", "blur": "Desenfoque", "opacity": "Opacidad", "from": "Desde", "to": "Hasta", "pickColor": "Elegir color", "startColor": "Color inicial", "endColor": "Color final", "direction": "Dirección" }
+{
+  "header": "Marco",
+  "noRecordingSelected": "Ninguna grabación seleccionada.",
+  "background": "Fondo",
+  "wallpaper": "Fondo de pantalla",
+  "solid": "Sólido",
+  "padding": "Relleno",
+  "cornerRadius": "Radio de esquina",
+  "frame": "Marco",
+  "crop": "Recortar",
+  "applied": "Aplicado",
+  "reset": "Restablecer",
+  "done": "Listo",
+  "editCrop": "Editar recorte",
+  "shadow": "Sombra",
+  "blur": "Desenfoque",
+  "opacity": "Opacidad",
+  "from": "Desde",
+  "to": "Hasta",
+  "pickColor": "Elegir color",
+  "startColor": "Color inicial",
+  "endColor": "Color final",
+  "direction": "Dirección",
+  "windowBar": "Barra de ventana",
+  "windowStyleLabel": "Estilo",
+  "windowThemeLabel": "Tema",
+  "windowTitle": "Título",
+  "windowAddress": "Dirección",
+  "windowStyle": {
+    "none": "Ninguna",
+    "mac": "Mac",
+    "windows": "Windows",
+    "browser": "Navegador"
+  },
+  "windowPreview": {
+    "mac": "Una barra de título de macOS: los tres puntos y la dirección en un cuadro en el centro.",
+    "windows": "Una barra de título de Windows: el título a la izquierda; minimizar, maximizar y cerrar a la derecha.",
+    "browser": "Una barra de navegador: atrás, adelante y recargar, y un campo de dirección a lo ancho."
+  },
+  "windowCurrent": "Actual",
+  "windowTheme": {
+    "auto": "Auto",
+    "light": "Claro",
+    "dark": "Oscuro"
+  },
+  "windowBarCropped": "Sin barra de ventana en una captura recortada: una barra de ventana completa sobre parte de la pantalla se ve mal.",
+  "recordedBar": "Barra grabada",
+  "adjustCrop": "Ajustar recorte",
+  "recordedBarMode": {
+    "auto": "Auto",
+    "manual": "Manual",
+    "off": "No"
+  },
+  "recordedBarStatus": {
+    "detecting": "Buscando la barra del navegador…",
+    "crop": "Se encontró la barra del navegador y se recortó.",
+    "adjust": "Puede haber una barra, pero no está claro dónde termina. Ajusta el recorte para comprobarlo.",
+    "none": "No se encontró ninguna barra del navegador en esta grabación.",
+    "failed": "No se pudo leer la grabación para buscar una barra. Ajusta el recorte para quitarla a mano.",
+    "manual": "Recortando las {{rows}} filas superiores.",
+    "off": "Se mantiene la barra grabada."
+  }
+}

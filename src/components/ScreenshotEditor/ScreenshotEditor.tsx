@@ -44,6 +44,11 @@ import {
   renderScreenshot,
   type ScreenshotStyle,
 } from 'src/lib/screenshot/compose';
+import type { WindowBarPage } from 'src/lib/window-bar';
+import {
+  WINDOW_BAR_PLACEHOLDER_TEXT,
+  pageTitleFromWindowTitle,
+} from 'src/lib/recording/captureSource';
 import { trackEvent } from 'src/lib/analytics';
 import {
   IconArrowBackUp,
@@ -60,7 +65,7 @@ import {
   IconTrash,
   IconX,
 } from 'src/lib/icons';
-import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
+import { Button, PreviewCardProvider, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { cn } from 'src/lib/utils';
 import { useStore } from 'src/store';
 import type { ScreenshotCapture, StylePreset } from 'src/types';
@@ -124,8 +129,23 @@ const initialStyle = (capture: ScreenshotCapture): ScreenshotStyle => {
     frameEnabled: capture.kind !== 'frame',
     aspectRatioId: 'original',
     background: { ...(recordingResult ? frame.background : DEFAULT_BACKGROUND) },
+    // The project's window bar, for a capture of a window or screen (a preview
+    // frame already has the project's bar drawn into it).
+    ...(recordingResult &&
+      frame.windowBar &&
+      capture.kind !== 'frame' && { windowBar: { ...frame.windowBar } }),
   };
 };
+
+/** A cropped capture (an area, or a preview frame) gets no whole-window bar. */
+const isCroppedCapture = (capture: ScreenshotCapture) =>
+  capture.kind === 'area' || capture.kind === 'frame';
+
+/** The page a capture shows, for its window bar: the window's title at the moment of capture. */
+const capturePage = (capture: ScreenshotCapture): WindowBarPage | null =>
+  capture.windowTitle
+    ? { title: pageTitleFromWindowTitle(capture.windowTitle, capture.appName) }
+    : null;
 
 export const ScreenshotEditor = ({ capture, onClose }: Props) => {
   const { t } = useTranslation('screenshot');
@@ -158,8 +178,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     [capture.height, capture.width, color],
   );
   const geometry = useMemo(
-    () => getScreenshotGeometry(capture.width, capture.height, style),
-    [capture.height, capture.width, style],
+    () =>
+      getScreenshotGeometry(capture.width, capture.height, style, undefined, {
+        scaleFactor: capture.scaleFactor ?? 1,
+        cropped: isCroppedCapture(capture),
+      }),
+    [capture, style],
   );
   const display = getContainRect(
     Math.max(stageSize.width - STAGE_PADDING, 0),
@@ -250,17 +274,9 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       geometry,
       shapes: visibleShapes,
       selectedId,
+      windowBarPage: capturePage(capture),
     });
-  }, [
-    capture.height,
-    capture.width,
-    geometry,
-    image,
-    selectedId,
-    style,
-    visibleShapes,
-    wallpapersReady,
-  ]);
+  }, [capture, geometry, image, selectedId, style, visibleShapes, wallpapersReady]);
 
   const toImagePoint = (e: { clientX: number; clientY: number }): Point | null => {
     const canvas = canvasRef.current;
@@ -442,6 +458,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
       style,
       geometry,
       shapes,
+      windowBarPage: capturePage(capture),
     });
     return canvas.toDataURL('image/png');
   };
@@ -712,11 +729,26 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
           </div>
         </div>
 
-        <aside className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4">
+        <aside
+          className="w-72 flex-none overflow-y-auto border-l border-sf-border bg-sf-panel p-4"
+          // Hover cards (the window bar's styles) sit beside this panel.
+          data-preview-boundary
+        >
           <div className="mb-4 text-sm font-medium tracking-[0.04em] text-sf-primary">
             {t('style')}
           </div>
-          <ScreenshotStylePanel style={style} presets={presets} onChange={setStyle} />
+          {/* Hover a window bar style for a preview of it. */}
+          <PreviewCardProvider>
+            <ScreenshotStylePanel
+              style={style}
+              presets={presets}
+              onChange={setStyle}
+              windowBarAvailable={!isCroppedCapture(capture)}
+              windowBarText={capturePage(capture)?.title || WINDOW_BAR_PLACEHOLDER_TEXT}
+              captureImage={capture.dataUrl}
+              capturePage={capturePage(capture)}
+            />
+          </PreviewCardProvider>
         </aside>
       </div>
     </div>

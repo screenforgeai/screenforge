@@ -28,6 +28,18 @@ import {
   type StepShape,
   type TextShape,
 } from './annotations';
+import {
+  AUTO_THEME_SAMPLE_ROWS,
+  activeBarStyle,
+  drawWindowBar,
+  layoutWindowBar,
+  resolveWindowBarTheme,
+  topBandBrightness,
+  windowBarHeight,
+  type ResolvedWindowBarTheme,
+  type WindowBarPage,
+  type WindowBarSettings,
+} from 'src/lib/window-bar';
 
 export const MAX_SCREENSHOT_DIMENSION = 8192;
 export const ANNOTATION_FONT_FAMILY = 'Geist, -apple-system, system-ui, sans-serif';
@@ -36,6 +48,19 @@ export interface ScreenshotStyle {
   frameEnabled: boolean;
   aspectRatioId: string;
   background: BackgroundSettings;
+  /** The window bar over the capture; none when absent or style 'none'. */
+  windowBar?: WindowBarSettings;
+}
+
+/** With a window bar, a capture is written at least this many pixels per screen point. */
+export const WINDOW_BAR_CAPTURE_SCALE = 2;
+
+/** What a capture's window bar needs besides the style: where it was taken. */
+export interface ScreenshotWindowInfo {
+  /** Image pixels per screen point at capture (2 on Retina); 1 when unknown. */
+  scaleFactor: number;
+  /** A crop of part of the screen: a whole-window bar on it looks wrong, so it gets none. */
+  cropped: boolean;
 }
 
 export interface ScreenshotGeometry {
@@ -43,6 +68,12 @@ export interface ScreenshotGeometry {
   canvasHeight: number;
   /** Where the screenshot lands on the canvas. */
   mediaRect: Rect;
+  /** The whole window: the window bar plus mediaRect (mediaRect itself with no bar). */
+  windowRect: Rect;
+  /** Window bar height in canvas px; 0 with no bar. */
+  barHeight: number;
+  /** The window's width in screen points, what the bar is laid out for. */
+  windowPoints: number;
   /** Canvas pixels per screenshot pixel. */
   scale: number;
   cornerRadius: number;
@@ -59,23 +90,38 @@ export function getScreenshotGeometry(
   imageHeight: number,
   style: ScreenshotStyle,
   maxDimension = MAX_SCREENSHOT_DIMENSION,
+  window: ScreenshotWindowInfo = { scaleFactor: 1, cropped: false },
 ): ScreenshotGeometry {
-  const capScale = Math.min(1, maxDimension / Math.max(imageWidth, imageHeight, 1));
+  const scaleFactor = window.scaleFactor > 0 ? window.scaleFactor : 1;
+  const windowPoints = imageWidth / scaleFactor;
+  const barStyle = window.cropped ? 'none' : activeBarStyle(style.windowBar);
+  // The bar in screenshot pixels, sized for the window's width in points.
+  const barPixels = windowBarHeight(barStyle, windowPoints) * scaleFactor;
+  // A bar is drawn sharp at 2x, so a 1x capture is written at 2x around it.
+  const upscale = barPixels > 0 ? Math.max(1, WINDOW_BAR_CAPTURE_SCALE / scaleFactor) : 1;
+  const windowHeight = imageHeight + barPixels;
+  const capScale = Math.min(upscale, maxDimension / Math.max(imageWidth, windowHeight, 1));
 
   if (!style.frameEnabled) {
     const width = Math.max(1, Math.round(imageWidth * capScale));
-    const height = Math.max(1, Math.round(imageHeight * capScale));
+    const scale = width / imageWidth;
+    const barHeight = barPixels * scale;
+    const height = Math.max(1, Math.round(imageHeight * scale + barHeight));
     return {
       canvasWidth: width,
       canvasHeight: height,
-      mediaRect: { x: 0, y: 0, width, height },
-      scale: width / imageWidth,
+      mediaRect: { x: 0, y: barHeight, width, height: height - barHeight },
+      windowRect: { x: 0, y: 0, width, height },
+      barHeight,
+      windowPoints,
+      scale,
       cornerRadius: 0,
       shadowBlur: 0,
       shadowOpacity: 0,
     };
   }
 
+  // The frame wraps the whole window (bar and page) like the video frame does.
   const base = getFrameGeometry(
     {
       aspectRatioId: style.aspectRatioId,
@@ -83,10 +129,10 @@ export function getScreenshotGeometry(
       background: style.background,
     },
     imageWidth,
-    imageHeight,
+    windowHeight,
   );
 
-  let k = imageWidth / Math.max(base.mediaRect.width, 1);
+  let k = (imageWidth * upscale) / Math.max(base.mediaRect.width, 1);
   const largest = Math.max(base.canvasWidth, base.canvasHeight) * k;
   if (largest > maxDimension) {
     k *= maxDimension / largest;
@@ -94,11 +140,19 @@ export function getScreenshotGeometry(
 
   const canvasWidth = Math.max(1, Math.round(base.canvasWidth * k));
   const canvasHeight = Math.max(1, Math.round(base.canvasHeight * k));
-  const mediaRect = {
+  const windowRect = {
     x: base.mediaRect.x * k,
     y: base.mediaRect.y * k,
     width: base.mediaRect.width * k,
     height: base.mediaRect.height * k,
+  };
+  const scale = windowRect.width / imageWidth;
+  const barHeight = barPixels * scale;
+  const mediaRect = {
+    x: windowRect.x,
+    y: windowRect.y + barHeight,
+    width: windowRect.width,
+    height: windowRect.height - barHeight,
   };
   // Same scaling the video frame uses (render.ts): values are authored at 1080p.
   const unit = canvasHeight / 1080;
@@ -108,11 +162,52 @@ export function getScreenshotGeometry(
     canvasWidth,
     canvasHeight,
     mediaRect,
-    scale: mediaRect.width / imageWidth,
-    cornerRadius: clampRadius(mediaRect, cornerRadius * unit),
+    windowRect,
+    barHeight,
+    windowPoints,
+    scale,
+    cornerRadius: clampRadius(windowRect, cornerRadius * unit),
     shadowBlur: shadowOpacity > 0 ? shadowBlur * unit : 0,
     shadowOpacity,
   };
+}
+
+const barThemeCache = new WeakMap<object, ResolvedWindowBarTheme>();
+
+/** Light or dark for an 'auto' bar: the brightness of the capture's top rows, read once per image. */
+export function screenshotBarTheme(
+  image: CanvasImageSource,
+  imageWidth: number,
+  imageHeight: number,
+): ResolvedWindowBarTheme {
+  const cached = barThemeCache.get(image as object);
+  if (cached) {
+    return cached;
+  }
+  let brightness: number | null = null;
+  try {
+    const rows = Math.min(AUTO_THEME_SAMPLE_ROWS, imageHeight);
+    const sample = document.createElement('canvas');
+    sample.width = Math.min(imageWidth, 256);
+    sample.height = rows;
+    const sctx = sample.getContext('2d', { willReadFrequently: true });
+    if (sctx) {
+      sctx.drawImage(image, 0, 0, imageWidth, rows, 0, 0, sample.width, rows);
+      brightness = topBandBrightness(
+        sctx.getImageData(0, 0, sample.width, rows).data,
+        sample.width,
+        rows,
+        rows,
+      );
+    }
+  } catch {
+    brightness = null;
+  }
+  const theme = resolveWindowBarTheme('auto', brightness);
+  if (brightness !== null) {
+    barThemeCache.set(image as object, theme);
+  }
+  return theme;
 }
 
 export function canvasPointFromImage(p: Point, g: ScreenshotGeometry): Point {
@@ -245,6 +340,8 @@ export interface RenderScreenshotOptions {
   shapes: readonly AnnotationShape[];
   /** Editor only: draws a dashed outline around this shape. Never set for export. */
   selectedId?: string | null;
+  /** The page the window bar describes: the capture's window title, when known. */
+  windowBarPage?: WindowBarPage | null;
 }
 
 /**
@@ -257,7 +354,8 @@ export function renderScreenshot(
   options: RenderScreenshotOptions,
 ): void {
   const { image, imageWidth, imageHeight, style, geometry, shapes, selectedId } = options;
-  const { canvasWidth, canvasHeight, mediaRect, scale, cornerRadius, shadowBlur } = geometry;
+  const { canvasWidth, canvasHeight, mediaRect, windowRect, scale, cornerRadius, shadowBlur } =
+    geometry;
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
@@ -273,16 +371,30 @@ export function renderScreenshot(
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = shadowBlur * 0.3;
       ctx.fillStyle = '#000';
-      roundRectPath(ctx, mediaRect, cornerRadius);
+      roundRectPath(ctx, windowRect, cornerRadius);
       ctx.fill();
       ctx.restore();
     }
   }
 
   ctx.save();
-  roundRectPath(ctx, mediaRect, cornerRadius);
+  roundRectPath(ctx, windowRect, cornerRadius);
   ctx.clip();
   ctx.drawImage(image, mediaRect.x, mediaRect.y, mediaRect.width, mediaRect.height);
+  if (style.windowBar && geometry.barHeight > 0) {
+    // The same bar videos get, as vectors at the output's own resolution.
+    const theme =
+      style.windowBar.theme === 'auto'
+        ? screenshotBarTheme(image, imageWidth, imageHeight)
+        : style.windowBar.theme;
+    const scene = layoutWindowBar({
+      settings: style.windowBar,
+      theme,
+      width: geometry.windowPoints,
+      page: options.windowBarPage ?? null,
+    });
+    drawWindowBar(ctx, scene, windowRect.x, windowRect.y, windowRect.width / scene.width);
+  }
 
   // Annotations are authored in screenshot pixels.
   ctx.translate(mediaRect.x, mediaRect.y);
