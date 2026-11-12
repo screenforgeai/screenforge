@@ -552,8 +552,12 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     cornerRadius: bgRadius,
     shadowOpacity: bgShadow,
   } = style.background;
-  const studioBackdrop = useMemo((): StudioBackdrop => {
+  const studioWall = style.studio?.studioWall === true;
+  const studioBackdrop = useMemo((): StudioBackdrop | null => {
     if (bgType === 'wallpaper') {
+      if (studioWall) {
+        return null;
+      }
       return { kind: 'image', url: resolveWallpaperPreset(wallpaperSeed).url };
     }
     if (bgType === 'gradient') {
@@ -577,6 +581,7 @@ export const ScreenshotEditor = ({ capture, onClose }: Props) => {
     gradientPresetId,
     gradientTo,
     solidColor,
+    studioWall,
     wallpaperSeed,
   ]);
   useEffect(() => {

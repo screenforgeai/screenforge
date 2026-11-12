@@ -34,6 +34,7 @@
   "look": "Rendu",
   "flat": "À plat",
   "studioHint": "Survolez l'anneau de mise au point ou la lumière pour plus d'options. Cliquez sur la capture pour faire la mise au point, faites glisser pour tourner la caméra, faites défiler pour zoomer et maintenez Espace pour la déplacer.",
+  "studioWall": "Studio",
   "resetPosition": "Réinitialiser la vue, la mise au point et la lumière",
   "lightHandle": "Lumière",
   "studioUnavailable": "Les rendus studio nécessitent WebGL 2, qui n'est pas disponible ici.",

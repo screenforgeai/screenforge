@@ -34,6 +34,7 @@
   "look": "Estilo",
   "flat": "Plano",
   "studioHint": "Pasa el puntero sobre el anillo de enfoque o la luz para ver más opciones. Haz clic en la captura para enfocar, arrastra para girar la cámara, desplázate para hacer zoom y mantén Espacio para moverla.",
+  "studioWall": "Estudio",
   "resetPosition": "Restablecer vista, enfoque y luz",
   "lightHandle": "Luz",
   "studioUnavailable": "Los estilos de estudio necesitan WebGL 2, que no está disponible aquí.",

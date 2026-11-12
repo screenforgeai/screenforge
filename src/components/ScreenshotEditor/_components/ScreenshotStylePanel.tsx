@@ -106,10 +106,26 @@ export const ScreenshotStylePanel = ({
     },
   });
 
+  /** A wallpaper tile, or the studio's own wall (index null). */
+  const pickWallpaper = (index: number | null) =>
+    onChange({
+      ...style,
+      background: index === null ? background : { ...background, wallpaperSeed: index },
+      ...(style.studio ? { studio: { ...style.studio, studioWall: index === null } } : {}),
+    });
+
   const backgroundLabel = (type: Exclude<BackgroundType, 'blur'>) =>
     type === 'gradient' ? t('gradient') : tFrame(type);
 
   const studio = style.studio ?? FLAT_STUDIO;
+  const studioWall = studio.lookId !== null && studio.studioWall === true;
+  const wallpaperTile = (selected: boolean) =>
+    cn(
+      'cursor-pointer overflow-hidden rounded-md border p-0 transition-all active:scale-[0.95]',
+      selected
+        ? 'border-sf-border-lt ring-1 ring-sf-border-lt'
+        : 'border-sf-border opacity-65 hover:opacity-90',
+    );
   const moved =
     studio.offset.x !== 0 ||
     studio.offset.y !== 0 ||
@@ -170,21 +186,30 @@ export const ScreenshotStylePanel = ({
 
       {background.type === 'wallpaper' && (
         <div className="grid grid-cols-5 gap-1.5">
+          {studio.lookId !== null && (
+            <button
+              type="button"
+              title={t('studioWall')}
+              aria-label={t('studioWall')}
+              aria-pressed={studioWall}
+              className={wallpaperTile(studioWall)}
+              style={{
+                aspectRatio: '1',
+                background: 'radial-gradient(circle at 50% 40%, #2a2c31 0%, #030304 78%)',
+              }}
+              onClick={() => pickWallpaper(null)}
+            />
+          )}
           {WALLPAPER_PRESETS.map((preset, index) => (
             <button
               key={preset.id}
               type="button"
               title={preset.label}
               aria-label={preset.label}
-              aria-pressed={background.wallpaperSeed === index}
-              className={cn(
-                'cursor-pointer overflow-hidden rounded-md border p-0 transition-all active:scale-[0.95]',
-                background.wallpaperSeed === index
-                  ? 'border-sf-border-lt ring-1 ring-sf-border-lt'
-                  : 'border-sf-border opacity-65 hover:opacity-90',
-              )}
+              aria-pressed={!studioWall && background.wallpaperSeed === index}
+              className={wallpaperTile(!studioWall && background.wallpaperSeed === index)}
               style={{ aspectRatio: '1' }}
-              onClick={() => patchBackground({ wallpaperSeed: index })}
+              onClick={() => pickWallpaper(index)}
             >
               <img
                 src={preset.url}
@@ -334,7 +359,14 @@ export const ScreenshotStylePanel = ({
                 variant="secondary"
                 size="sm"
                 onClick={() =>
-                  onChange({ ...style, studio: { ...FLAT_STUDIO, lookId: studio.lookId } })
+                  onChange({
+                    ...style,
+                    studio: {
+                      ...FLAT_STUDIO,
+                      lookId: studio.lookId,
+                      studioWall: studio.studioWall,
+                    },
+                  })
                 }
               >
                 {t('resetPosition')}

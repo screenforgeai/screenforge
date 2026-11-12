@@ -34,6 +34,7 @@
   "look": "Visual",
   "flat": "Plano",
   "studioHint": "Passe o ponteiro sobre o anel de foco ou a luz para mais opções. Clique na captura para focar, arraste para girar a câmera, role para dar zoom e segure Espaço para movê-la.",
+  "studioWall": "Estúdio",
   "resetPosition": "Redefinir vista, foco e luz",
   "lightHandle": "Luz",
   "studioUnavailable": "Os visuais de estúdio precisam de WebGL 2, que não está disponível aqui.",

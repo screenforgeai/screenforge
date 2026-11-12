@@ -34,6 +34,7 @@
   "look": "Look",
   "flat": "Flat",
   "studioHint": "Hover the focus ring or the light for more options. Click the screenshot to focus, drag to turn the camera, scroll to zoom, and hold Space to move it.",
+  "studioWall": "Studio",
   "resetPosition": "Reset view, focus and light",
   "lightHandle": "Light",
   "studioUnavailable": "Studio looks need WebGL 2, which isn't available here.",

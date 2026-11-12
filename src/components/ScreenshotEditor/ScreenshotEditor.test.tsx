@@ -246,6 +246,40 @@ describe('ScreenshotEditor', () => {
       );
     });
 
+    it("offers the macro lens's own dark studio wall among the wallpapers", async () => {
+      const user = userEvent.setup();
+      const renderer = await opened();
+      const wall = screen.getByRole('button', { name: /^studio$/i });
+      expect(wall).toHaveAttribute('aria-pressed', 'false');
+      await user.click(wall);
+      // No backdrop of its own: the renderer goes back to the look's wall.
+      await waitFor(() => expect(renderer.setBackdrop).toHaveBeenLastCalledWith(null));
+      expect(wall).toHaveAttribute('aria-pressed', 'true');
+      // A gradient still takes over, and the wallpaper tab comes back to the studio wall.
+      await user.click(screen.getByRole('radio', { name: /^gradient$/i }));
+      await waitFor(() =>
+        expect(renderer.setBackdrop).toHaveBeenLastCalledWith(
+          expect.objectContaining({ kind: 'gradient' }),
+        ),
+      );
+      await user.click(screen.getByRole('radio', { name: /^wallpaper$/i }));
+      await waitFor(() => expect(renderer.setBackdrop).toHaveBeenLastCalledWith(null));
+      // Picking a wallpaper leaves the studio wall.
+      const firstWallpaper = screen
+        .getAllByRole('button', { pressed: false })
+        .find((tile) => tile.querySelector('img'));
+      await user.click(firstWallpaper as HTMLElement);
+      await waitFor(() =>
+        expect(renderer.setBackdrop).toHaveBeenLastCalledWith(
+          expect.objectContaining({ kind: 'image' }),
+        ),
+      );
+      expect(screen.getByRole('button', { name: /^studio$/i })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    });
+
     it('hovering the focus ring offers a wider sharp area and more or less blur', async () => {
       studio.project = { x: 0.5, y: 0.5 };
       const user = userEvent.setup();

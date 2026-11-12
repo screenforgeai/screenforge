@@ -34,6 +34,7 @@
   "look": "Look",
   "flat": "Flach",
   "studioHint": "Fahre über den Fokusring oder das Licht für weitere Optionen. Klicke in den Screenshot zum Scharfstellen, ziehe zum Drehen der Kamera, scrolle zum Zoomen und halte die Leertaste zum Verschieben.",
+  "studioWall": "Studio",
   "resetPosition": "Ansicht, Fokus und Licht zurücksetzen",
   "lightHandle": "Licht",
   "studioUnavailable": "Studio-Looks brauchen WebGL 2, das hier nicht verfügbar ist.",

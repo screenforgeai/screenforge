@@ -69,6 +69,8 @@ export interface ScreenshotStudio {
   lightSize: number | null;
   /** Light handle position (fractions of the output), or null for the look's own light. */
   light: { x: number; y: number } | null;
+  /** Behind a wallpaper background, show the look's own studio wall instead of the wallpaper. */
+  studioWall?: boolean;
 }
 
 export interface ScreenshotStyle {
