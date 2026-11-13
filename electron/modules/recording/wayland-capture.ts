@@ -195,6 +195,8 @@ let shareEnded = false;
 let recorded: ShareRecorded | null = null;
 let waiters: Waiter[] = [];
 let moveListener: ((x: number, y: number) => void) | null = null;
+// The helper reports the pointer only when it moves: the last report is where it is now.
+let lastPointer: { x: number; y: number } | null = null;
 const endedListeners = new Set<() => void>();
 
 /** Where pointer moves go while a share is open. */
@@ -210,6 +212,11 @@ export function onWaylandShareEnded(listener: () => void): () => void {
   return () => {
     endedListeners.delete(listener);
   };
+}
+
+/** Where the pointer was last reported on the picked screen, or null before any report. */
+export function getWaylandSharePointer(): { x: number; y: number } | null {
+  return lastPointer;
 }
 
 /** A share is picked and still live. */
@@ -267,6 +274,7 @@ export function pickWaylandScreen(): Promise<ScreenPick> {
   share = null;
   shareEnded = false;
   recorded = null;
+  lastPointer = null;
   const child = spawn(binary, [], { stdio: 'pipe' });
   helper = child;
   let screen: ShareScreen | null = null;
@@ -299,6 +307,7 @@ export function pickWaylandScreen(): Promise<ScreenPick> {
       }
       switch (message.type) {
         case 'move':
+          lastPointer = { x: message.x, y: message.y };
           moveListener?.(message.x, message.y);
           return;
         case 'ready':

@@ -62,6 +62,7 @@ import {
   endWaylandShare,
   finishWaylandShareRecording,
   getWaylandShare,
+  getWaylandSharePointer,
   hasWaylandShare,
   pauseWaylandShareRecording,
   resumeWaylandShareRecording,
@@ -1634,6 +1635,11 @@ export async function startRecording(
       shareCaptureActive = true;
       emitRecordingActivityChanged();
       recordingStartTime = Date.now();
+      // A pointer that holds still sends no moves: start from where it was last reported.
+      const pointer = getWaylandSharePointer();
+      if (pointer) {
+        recordPointerMove(pointer.x, pointer.y);
+      }
       log.info('[recording:wayland] share capture started', {
         recordingStartTime,
         fps,
