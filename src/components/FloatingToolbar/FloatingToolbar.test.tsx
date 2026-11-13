@@ -65,6 +65,7 @@ import { FloatingToolbar } from './FloatingToolbar';
 
 class FakeVideoTrack {
   private listeners = new Map<string, Set<() => void>>();
+  readyState: 'live' | 'ended' = 'live';
   stop = vi.fn();
 
   getSettings() {
@@ -723,6 +724,48 @@ describe('FloatingToolbar recording widget', () => {
       expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0', area, {
         rendererCapture: true,
       });
+    });
+
+    it('lets go of the picked screen when its share ends while the area is drawn', async () => {
+      screenforge.selectAreaOnStill.mockImplementation(async () => {
+        portalTrack.readyState = 'ended';
+        portalTrack.dispatch('ended');
+        return { x: 1, y: 2, width: 300, height: 200, frame: { width: 2560, height: 1440 } };
+      });
+      await clickAreaOnPortal();
+      await waitFor(() => expect(portalTrack.stop).toHaveBeenCalled());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4400);
+      });
+
+      expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+      expect(FakeMediaRecorder.instances).toHaveLength(0);
+    });
+
+    it('opens one share dialog however often Record or Area is clicked while it is open', async () => {
+      let pick: (stream: FakeMediaStream) => void = () => undefined;
+      getDisplayMedia.mockReturnValue(
+        new Promise<FakeMediaStream>((resolve) => {
+          pick = resolve;
+        }),
+      );
+      await clickRecord();
+      await waitFor(() => expect(getDisplayMedia).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        pick(new FakeMediaStream(portalTrack));
+      });
+      await finishCountdown();
+      await waitForRecordingState();
+      expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+      expect(FakeMediaRecorder.instances).toHaveLength(1);
     });
 
     it('lets go of the picked screen when no area is drawn', async () => {

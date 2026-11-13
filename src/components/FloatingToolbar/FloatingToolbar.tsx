@@ -328,6 +328,8 @@ export const FloatingToolbar = () => {
   // (saving, handing the recording to the editor) the toolbar is still busy.
   // A count, so a second Record click can't end the first one's preparation.
   const [preparingRecordings, setPreparingRecordings] = useState(0);
+  // Wayland: set while the share dialog is open, so a second click cannot open another one.
+  const pickingShareRef = useRef(false);
   const [isSavingRecording, setIsSavingRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [countdown, setCountdown] = useState(3);
@@ -1126,7 +1128,7 @@ export const FloatingToolbar = () => {
   }
 
   async function handleAreaRecordClick() {
-    if (recordState !== 'idle') {
+    if (recordState !== 'idle' || pickingShareRef.current) {
       return;
     }
 
@@ -1163,6 +1165,9 @@ export const FloatingToolbar = () => {
   }
 
   async function handleRecordClick() {
+    if (pickingShareRef.current) {
+      return;
+    }
     setPreparingRecordings((n) => n + 1);
     try {
       try {
@@ -1507,6 +1512,10 @@ export const FloatingToolbar = () => {
    * user picks what to record before the countdown. Resolves false when nothing was picked.
    */
   async function pickWaylandShare(kind: 'screen' | 'window'): Promise<boolean> {
+    if (pickingShareRef.current) {
+      return false;
+    }
+    pickingShareRef.current = true;
     try {
       await openWaylandPortalStream(kind);
       return true;
@@ -1522,6 +1531,8 @@ export const FloatingToolbar = () => {
         message: getErrorMessage(err),
       });
       return false;
+    } finally {
+      pickingShareRef.current = false;
     }
   }
 
@@ -1538,7 +1549,11 @@ export const FloatingToolbar = () => {
       const stream = screenStreamRef.current;
       if (stream) {
         const area = await window.screenforge.selectAreaOnStill(await grabStreamStill(stream));
-        if (area) {
+        // The share may have been ended from the system indicator while the area was drawn.
+        const stillShared =
+          screenStreamRef.current === stream &&
+          stream.getVideoTracks().some((track) => track.readyState === 'live');
+        if (area && stillShared) {
           return area;
         }
       }

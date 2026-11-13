@@ -1,15 +1,15 @@
+import type { AreaSelectorStillRequest } from '../../../src/types/index';
+
 /** The largest still accepted: bigger than any screen, small enough to show. */
 const MAX_SIDE = 16_384;
 const MAX_BYTES = 200 * 1024 * 1024;
-
-export type AreaSelectorStillInput = { png: Uint8Array; width: number; height: number };
 
 function isSide(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_SIDE;
 }
 
 /** A still sent by the toolbar (Wayland), checked before it is shown full screen; null if not one. */
-export function toAreaSelectorStill(value: unknown): AreaSelectorStillInput | null {
+export function toAreaSelectorStill(value: unknown): AreaSelectorStillRequest | null {
   if (!value || typeof value !== 'object') {
     return null;
   }

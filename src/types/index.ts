@@ -99,6 +99,13 @@ export interface DesktopSource {
 export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
 
 /** A rectangle picked in the area selector, in DIPs of the display it was drawn on. */
+/** Wayland: a still of the picked screen to draw an area on, as PNG bytes and its pixel size. */
+export interface AreaSelectorStillRequest {
+  png: Uint8Array;
+  width: number;
+  height: number;
+}
+
 export interface SelectedArea {
   x: number;
   y: number;
@@ -869,11 +876,7 @@ export interface ScreenforgeAPI {
   /** `purpose` picks the confirm button: record (default) or take a screenshot. */
   openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
   /** Wayland: draw a recording area on a still of the screen picked in the share dialog. */
-  selectAreaOnStill: (still: {
-    png: Uint8Array;
-    width: number;
-    height: number;
-  }) => Promise<SelectedArea | null>;
+  selectAreaOnStill: (still: AreaSelectorStillRequest) => Promise<SelectedArea | null>;
   getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;
   /** The record shortcut asks an open toolbar to switch back to Video. */
   onVideoModeRequested: (cb: () => void) => () => void;
