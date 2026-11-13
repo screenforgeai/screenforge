@@ -13,6 +13,7 @@
 import { Container, Sprite, Graphics, Assets, Texture, Matrix } from 'pixi.js';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
 import { RECORDING_MASK_LABEL, RECORDING_VIDEO_SPRITE_LABEL } from '../../pixi/types';
+import { smoothWhenShrunk } from '../../pixi/smoothEdges';
 import { useStore } from '../../../store';
 import { getFrameGeometry, getFrameGeometryForPanel } from '../frame/analyze';
 import { getClipTransitionAlpha } from '../frame/index';
@@ -160,6 +161,12 @@ function svgCursorTexture(texture: Texture, state: CursorStyleState): CursorText
   };
 }
 
+/** Cursor textures are drawn larger than they show: a mip chain keeps their outlines smooth. */
+function shrinkableTexture(texture: Texture): Texture {
+  smoothWhenShrunk(texture.source);
+  return texture;
+}
+
 // Pixels per draw unit for vector cursor textures: sharp up to 4K at large sizes.
 const VECTOR_CURSOR_RESOLUTION = 6;
 // Redraw twinkling cursors at most this often (seconds).
@@ -207,7 +214,7 @@ function createVectorCursorTextures() {
         canvas,
         drawnAt: t,
         cursor: {
-          texture: Texture.from(canvas, true),
+          texture: shrinkableTexture(Texture.from(canvas, true)),
           anchorX: info.anchorX,
           anchorY: info.anchorY,
           unitsPerPixel: 1 / VECTOR_CURSOR_RESOLUTION,
@@ -293,9 +300,9 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
     ]);
 
     const svgTextures: Record<CursorStyleState, CursorTexture> = {
-      default: svgCursorTexture(texDefault, 'default'),
-      pointer: svgCursorTexture(texPointer, 'pointer'),
-      text: svgCursorTexture(texText, 'text'),
+      default: svgCursorTexture(shrinkableTexture(texDefault), 'default'),
+      pointer: svgCursorTexture(shrinkableTexture(texPointer), 'pointer'),
+      text: svgCursorTexture(shrinkableTexture(texText), 'text'),
     };
     const vectorTextures = createVectorCursorTextures();
 

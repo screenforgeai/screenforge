@@ -22,6 +22,7 @@ import { detectZoomClips } from './analyze';
 import { getZoomCrop, toCropSpacePoint, toCropSpaceRecording } from './crop-space';
 import { SharpenFilter } from '../../pixi/filters/SharpenFilter';
 import { CinematicZoomFilter } from '../../pixi/filters/CinematicZoomFilter';
+import { smoothFilterEdges } from '../../pixi/smoothEdges';
 import { sortMediaSegments } from '../../helpers/segments';
 import { getFrameGeometry } from '../frame/analyze';
 import type { CropRect } from '../frame';
@@ -697,13 +698,14 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
     // the FBO pass entirely when disabled, so there is zero rendering overhead
     // during unzoomed playback. On first zoom the FBO is allocated; after that
     // enable/disable is free and never causes a pipeline rebuild.
-    const sharpenFilter = new SharpenFilter(0.0);
+    // Both filters wrap the frame while zoomed: keep its rounded corners antialiased.
+    const sharpenFilter = smoothFilterEdges(new SharpenFilter(0.0));
     sharpenFilter.enabled = false;
     scene.app.stage.filters = [sharpenFilter];
 
     // Cinematic zoom is scoped to the preview surface so the backdrop stays flat
     // while the screen card and its shadow carry the optical treatment.
-    const cinematicZoomFilter = new CinematicZoomFilter();
+    const cinematicZoomFilter = smoothFilterEdges(new CinematicZoomFilter());
     cinematicZoomFilter.enabled = false;
     const cinematicFilterStack = [cinematicZoomFilter];
     const initScreen = scene.app.renderer.screen;

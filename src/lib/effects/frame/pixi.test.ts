@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MediaSegment } from 'src/types/timeline';
-import { computeFadeOutAlpha } from './pixi';
+import { computeFadeOutAlpha, uploadsWholeVideo } from './pixi';
 
 const segment = (id: string, timelineStart: number, timelineEnd: number): MediaSegment => ({
   id,
@@ -25,5 +25,25 @@ describe('computeFadeOutAlpha', () => {
     const segments = [segment('a', 0, 5), segment('b', 5, 10)];
 
     expect(computeFadeOutAlpha(6, segments).segIdx).toBe(1);
+  });
+});
+
+describe('uploadsWholeVideo', () => {
+  const full = { x: 0, y: 0, width: 1920, height: 1080 };
+  const video = document.createElement('video');
+
+  it('uploads a preview video whole when nothing is cropped', () => {
+    expect(uploadsWholeVideo(video, full, 1920, 1080)).toBe(true);
+  });
+
+  it('copies only the crop of a cropped preview video', () => {
+    // The mip chain is built from whatever is uploaded, so a whole-video
+    // upload would blend pixels from outside the crop into its edges.
+    expect(uploadsWholeVideo(video, { ...full, x: 10, width: 1900 }, 1920, 1080)).toBe(false);
+    expect(uploadsWholeVideo(video, { ...full, height: 1000 }, 1920, 1080)).toBe(false);
+  });
+
+  it('always copies the crop of a canvas source', () => {
+    expect(uploadsWholeVideo(document.createElement('canvas'), full, 1920, 1080)).toBe(false);
   });
 });
