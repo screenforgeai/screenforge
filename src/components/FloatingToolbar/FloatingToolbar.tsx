@@ -328,7 +328,8 @@ export const FloatingToolbar = () => {
   // (saving, handing the recording to the editor) the toolbar is still busy.
   // A count, so a second Record click can't end the first one's preparation.
   const [preparingRecordings, setPreparingRecordings] = useState(0);
-  // Wayland: set while the share dialog is open, so a second click cannot open another one.
+  // Wayland: set while the share dialog is open (and, for Area, until the area is drawn), so a
+  // second click cannot open another one.
   const pickingShareRef = useRef(false);
   const [isSavingRecording, setIsSavingRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -1545,6 +1546,9 @@ export const FloatingToolbar = () => {
     if (!(await pickWaylandShare('screen'))) {
       return null;
     }
+    // Held until the area is drawn: the still may open on another monitor, leaving the toolbar
+    // clickable.
+    pickingShareRef.current = true;
     try {
       const stream = screenStreamRef.current;
       if (stream) {
@@ -1560,6 +1564,8 @@ export const FloatingToolbar = () => {
     } catch (err) {
       console.error('[recording] drawing the area on the picked screen failed:', err);
       window.screenforge.systemWarning(getErrorMessage(err));
+    } finally {
+      pickingShareRef.current = false;
     }
     stopWaylandStream();
     return null;

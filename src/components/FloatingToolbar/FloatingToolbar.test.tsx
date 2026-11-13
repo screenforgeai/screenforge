@@ -768,6 +768,34 @@ describe('FloatingToolbar recording widget', () => {
       expect(FakeMediaRecorder.instances).toHaveLength(1);
     });
 
+    it('opens no other share dialog while the area is being drawn', async () => {
+      const area = { x: 1, y: 2, width: 300, height: 200, frame: { width: 2560, height: 1440 } };
+      let draw: (value: typeof area) => void = () => undefined;
+      screenforge.selectAreaOnStill.mockReturnValue(
+        new Promise<typeof area>((resolve) => {
+          draw = resolve;
+        }),
+      );
+      await clickAreaOnPortal();
+      await waitFor(() => expect(screenforge.selectAreaOnStill).toHaveBeenCalled());
+
+      // The still may open on another monitor, leaving the toolbar clickable.
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        draw(area);
+      });
+      await finishCountdown();
+      await waitForRecordingState();
+      expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+      expect(portalTrack.stop).not.toHaveBeenCalled();
+    });
+
     it('lets go of the picked screen when no area is drawn', async () => {
       await clickAreaOnPortal();
       await waitFor(() => expect(screenforge.selectAreaOnStill).toHaveBeenCalled());
