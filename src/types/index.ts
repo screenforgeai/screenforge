@@ -117,6 +117,9 @@ export interface ScreenshotCaptureRequest {
 }
 
 /** A still as the main process sends it: PNG bytes, never base64. */
+/** A screenshot taken, or a share dialog closed without a pick (Wayland). */
+export type ScreenshotCaptureOutcome = 'taken' | 'cancelled';
+
 export interface ScreenshotCaptureData {
   kind: ScreenshotCaptureKind;
   png: Uint8Array;
@@ -659,7 +662,7 @@ export interface ScreenforgeAPI {
   openSystemSettings: (permission: StartupPermission) => void;
   getSources: () => Promise<DesktopSource[]>;
   /** Wayland: what the next screen-share dialog asks for, a screen or a window. */
-  setShareKind: (kind: 'screen' | 'window') => void;
+  setShareKind: (kind: 'screen' | 'window') => Promise<void>;
   startRecording: (
     sourceId: string,
     cropArea?: SelectedArea | null,
@@ -822,7 +825,8 @@ export interface ScreenforgeAPI {
   submitFeedback: (feedback: FeedbackSubmission) => void;
   /** Writes PNG bytes to Pictures/Screenforge; resolves with the file path. */
   saveScreenshot: (png: Uint8Array) => Promise<string>;
-  captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<void>;
+  /** 'cancelled': the share dialog was closed without a pick (Wayland). */
+  captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<ScreenshotCaptureOutcome>;
   copyScreenshotToClipboard: (png: Uint8Array) => Promise<void>;
   /** Selects an area and takes a screenshot, as the global shortcut does. */
   takeScreenshot: () => Promise<void>;

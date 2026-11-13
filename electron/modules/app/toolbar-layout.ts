@@ -5,10 +5,8 @@ type LayoutInput = {
   platform: NodeJS.Platform;
   /** The desktop session is Wayland (XDG_SESSION_TYPE / WAYLAND_DISPLAY). */
   waylandSession: boolean;
-  /** Electron's --ozone-platform switch, if given. */
+  /** Electron's --ozone-platform switch, if given (Electron 38+ ignores the old env hint). */
   ozonePlatform?: string;
-  /** ELECTRON_OZONE_PLATFORM_HINT, if set. */
-  ozonePlatformHint?: string;
 };
 
 /**
@@ -27,12 +25,11 @@ export function getToolbarLayout({
   platform,
   waylandSession,
   ozonePlatform,
-  ozonePlatformHint,
 }: LayoutInput): ToolbarLayout {
   if (platform !== 'linux' || !waylandSession) {
     return 'overlay';
   }
-  if (ozonePlatform === 'x11' || (!ozonePlatform && ozonePlatformHint === 'x11')) {
+  if (ozonePlatform === 'x11') {
     return 'overlay';
   }
   return 'window';

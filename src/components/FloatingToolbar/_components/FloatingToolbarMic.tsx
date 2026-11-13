@@ -31,6 +31,10 @@ interface FloatingToolbarMicProps {
   onToggle: () => void;
   onSelectMicDevice: (deviceId: string) => void;
   onOpenMicMenu: () => void;
+  /** Where its menu and tooltips open: below the pill when the toolbar is its own window. */
+  popSide?: 'top' | 'bottom';
+  /** False when the toolbar is its own window: it grows to fit instead. */
+  avoidCollisions?: boolean;
 }
 
 export const FloatingToolbarMic = ({
@@ -45,6 +49,8 @@ export const FloatingToolbarMic = ({
   onToggle,
   onSelectMicDevice,
   onOpenMicMenu,
+  popSide = 'top',
+  avoidCollisions = true,
 }: FloatingToolbarMicProps) => {
   const { t } = useTranslation('toolbar');
   const isIdle = recordState === 'idle';
@@ -91,7 +97,7 @@ export const FloatingToolbarMic = ({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="top">
+        <TooltipContent side={popSide} avoidCollisions={avoidCollisions}>
           {tooltipLabel}
           {isIdle && systemAudioNotice && (
             <span className="mt-1 block max-w-60 text-xs text-sf-secondary">
@@ -122,11 +128,14 @@ export const FloatingToolbarMic = ({
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent side="top">{t('micSource')}</TooltipContent>
+          <TooltipContent side={popSide} avoidCollisions={avoidCollisions}>
+            {t('micSource')}
+          </TooltipContent>
         </Tooltip>
 
         <DropdownMenuContent
-          side="top"
+          side={popSide}
+          avoidCollisions={avoidCollisions}
           sideOffset={10}
           align="center"
           className="min-w-55 max-h-56"

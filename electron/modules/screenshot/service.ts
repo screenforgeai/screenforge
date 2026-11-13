@@ -27,6 +27,10 @@ import {
   pickSourceForCapture,
   resolveAreaDisplay,
 } from './capture-geometry';
+import {
+  WAYLAND_PICKED_SCREEN_ID,
+  WAYLAND_PICKED_WINDOW_ID,
+} from '../../../src/lib/recording/waylandPicker';
 
 const SCREENCAPTURE_PATH = '/usr/sbin/screencapture';
 const SCREENCAPTURE_TIMEOUT_MS = 10_000;
@@ -85,9 +89,24 @@ async function captureAreaWithScreencapture(
  * display. desktopCapturer thumbnails are real screen grabs, so asking for one
  * at native resolution avoids starting a capture stream for a single frame.
  */
+/**
+ * Wayland: the user closed the system share dialog without picking a screen or window. A cancel,
+ * not a failure.
+ */
+export class ShareDialogClosedError extends Error {
+  constructor() {
+    super('The share dialog was closed without picking a screen or window');
+    this.name = 'ShareDialogClosedError';
+  }
+}
+
+const isPickedInShareDialog = (sourceId: string) =>
+  sourceId === WAYLAND_PICKED_SCREEN_ID || sourceId === WAYLAND_PICKED_WINDOW_ID;
+
 export async function captureStill(
   request: ScreenshotCaptureRequest,
 ): Promise<ScreenshotCaptureData> {
+  const picked = isPickedInShareDialog(request.sourceId);
   if (request.kind === 'area' && !request.area) {
     throw new Error('Area capture requested without an area');
   }
@@ -115,15 +134,25 @@ export async function captureStill(
     }
   }
 
-  const sources = await desktopCapturer.getSources({
-    types: request.kind === 'window' ? ['window'] : ['screen'],
-    // Thumbnails are scaled to fill thumbnailSize: sized for another (larger)
-    // display, the area's display would be upscaled and resampled back, blurring it.
-    thumbnailSize: getCaptureThumbnailSize(
-      areaDisplayBefore ? [areaDisplayBefore] : displaysBefore,
-    ),
-    fetchWindowIcons: false,
-  });
+  let sources: Electron.DesktopCapturerSource[];
+  try {
+    sources = await desktopCapturer.getSources({
+      types: request.kind === 'window' ? ['window'] : ['screen'],
+      // Thumbnails are scaled to fill thumbnailSize: sized for another (larger)
+      // display, the area's display would be upscaled and resampled back, blurring it.
+      thumbnailSize: getCaptureThumbnailSize(
+        areaDisplayBefore ? [areaDisplayBefore] : displaysBefore,
+      ),
+      fetchWindowIcons: false,
+    });
+  } catch (error) {
+    // Wayland: dismissing the share dialog can reject the request.
+    if (picked) {
+      log.info('[screenshot] share dialog closed', { error });
+      throw new ShareDialogClosedError();
+    }
+    throw error;
+  }
   // Read the displays after getSources: on Linux it waits on the portal picker,
   // and a display can be added or change resolution while that's open. The
   // source is matched (and cropped) against the displays as they are now.
@@ -147,6 +176,10 @@ export async function captureStill(
     { target: areaDisplay, all: displays },
     (s) => s.thumbnail.getSize(),
   );
+  if (!source && picked) {
+    // Wayland: the share dialog returned nothing, so it was closed without a pick.
+    throw new ShareDialogClosedError();
+  }
   if (!source || source.thumbnail.isEmpty()) {
     throw new Error(`No image available for ${request.kind} capture (${request.sourceId})`);
   }
@@ -156,14 +189,17 @@ export async function captureStill(
   // the primary display's density (the closest guess without its bounds).
   let scaleFactor = primary.scaleFactor;
   if (request.kind !== 'window') {
-    const display =
+    const matched =
       request.kind === 'area'
         ? areaDisplay
-        : (displays.find((d) => String(d.id) === source.display_id) ?? primary);
+        : displays.find((d) => String(d.id) === source.display_id);
+    const display = matched ?? primary;
     // Thumbnails are fitted to thumbnailSize, so a display smaller than it comes back upscaled.
     scaleFactor = display.scaleFactor;
     const current = image.getSize();
-    const native = fitWithin(current, getDisplayPixelSize(display));
+    // Wayland: a screen picked in the share dialog names no display, so the primary's size says
+    // nothing about it (it would shrink a large picked screen to a small primary): keep its own.
+    const native = !matched && picked ? current : fitWithin(current, getDisplayPixelSize(display));
     // Crop first, so only the area (not the whole screen) is ever resampled or encoded.
     if (request.kind === 'area' && request.area) {
       const rect = areaToImageRect(request.area, display.size, current);

@@ -3,7 +3,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CH } from '../../channels';
 
-const serviceMock = vi.hoisted(() => ({ captureStill: vi.fn(), cropPng: vi.fn() }));
+const serviceMock = vi.hoisted(() => ({
+  captureStill: vi.fn(),
+  cropPng: vi.fn(),
+  ShareDialogClosedError: class ShareDialogClosedError extends Error {},
+}));
 
 vi.mock('../../lib/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -300,9 +304,7 @@ describe('takePickedAreaScreenshot (Wayland)', () => {
   });
 
   it('treats a closed share dialog as a cancel, without a warning', async () => {
-    serviceMock.captureStill.mockRejectedValue(
-      new Error('No image available for display capture (screen:wayland)'),
-    );
+    serviceMock.captureStill.mockRejectedValue(new serviceMock.ShareDialogClosedError());
     const { deps, toolbar } = makePickedDeps();
 
     await expect(takePickedAreaScreenshot(deps)).resolves.toBe('cancelled');
@@ -312,6 +314,17 @@ describe('takePickedAreaScreenshot (Wayland)', () => {
     expect(toolbar.show).toHaveBeenCalled();
   });
 
+  it('warns when the picked screen comes back empty: that is a failure, not a cancel', async () => {
+    serviceMock.captureStill.mockRejectedValue(
+      new Error('No image available for display capture (screen:wayland)'),
+    );
+    const { deps } = makePickedDeps();
+
+    await expect(takePickedAreaScreenshot(deps)).resolves.toBe('failed');
+
+    expect(deps.warn).toHaveBeenCalledWith(SCREENSHOT_FAILED_MESSAGE);
+  });
+
   it('warns when the capture itself fails', async () => {
     serviceMock.captureStill.mockRejectedValue(new Error('portal crashed'));
     const { deps } = makePickedDeps();
@@ -319,5 +332,27 @@ describe('takePickedAreaScreenshot (Wayland)', () => {
     await expect(takePickedAreaScreenshot(deps)).resolves.toBe('failed');
 
     expect(deps.warn).toHaveBeenCalledWith(SCREENSHOT_FAILED_MESSAGE);
+  });
+});
+
+describe('captureAndOpenEditor on Wayland', () => {
+  it('brings the toolbar back, as a cancel, when the share dialog is closed', async () => {
+    serviceMock.captureStill.mockRejectedValue(new serviceMock.ShareDialogClosedError());
+    const mainWindow = makeWindow(false);
+    const toolbar = makeWindow(true);
+
+    await expect(
+      captureAndOpenEditor(
+        { kind: 'window', sourceId: 'window:wayland' },
+        {
+          getMainWindow: () => mainWindow as never,
+          getToolbarWindow: () => toolbar as never,
+          setToolbarWindow: vi.fn(),
+        },
+      ),
+    ).resolves.toBe('cancelled');
+
+    expect(toolbar.show).toHaveBeenCalled();
+    expect(mainWindow.webContents.send).not.toHaveBeenCalled();
   });
 });

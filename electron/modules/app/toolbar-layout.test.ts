@@ -18,9 +18,6 @@ describe('getToolbarLayout', () => {
     expect(
       getToolbarLayout({ platform: 'linux', waylandSession: true, ozonePlatform: 'x11' }),
     ).toBe('overlay');
-    expect(
-      getToolbarLayout({ platform: 'linux', waylandSession: true, ozonePlatformHint: 'x11' }),
-    ).toBe('overlay');
   });
 });
 

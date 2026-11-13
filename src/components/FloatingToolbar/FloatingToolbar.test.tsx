@@ -203,7 +203,7 @@ function createScreenforgeMock(backend: CaptureBackend) {
     setToolbarMouseInteractivity: vi.fn(),
     setToolbarShape: vi.fn(),
     getToolbarLayout: vi.fn().mockResolvedValue('overlay'),
-    setShareKind: vi.fn(),
+    setShareKind: vi.fn().mockResolvedValue(undefined),
     takeScreenshot: vi.fn().mockResolvedValue(undefined),
     setToolbarSize: vi.fn(),
     minimizeToDock: vi.fn(),
@@ -575,6 +575,17 @@ describe('FloatingToolbar recording widget', () => {
           sourceId: 'window:wayland',
         }),
       );
+    });
+
+    it('says nothing when the share dialog is closed without a pick', async () => {
+      screenforge.captureScreenshot.mockResolvedValue('cancelled');
+      await screenshotModeOnPortal();
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      await waitFor(() => expect(screenforge.captureScreenshot).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
     });
 
     it('starts an area screenshot by picking the screen first, not by drawing on the live one', async () => {

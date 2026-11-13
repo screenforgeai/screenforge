@@ -335,7 +335,6 @@ const toolbarLayout = getToolbarLayout({
   platform: process.platform,
   waylandSession: process.platform === 'linux' && isWaylandSession(),
   ozonePlatform: app.commandLine.getSwitchValue('ozone-platform') || undefined,
-  ozonePlatformHint: process.env.ELECTRON_OZONE_PLATFORM_HINT,
 });
 
 function createToolbarWindow(): BrowserWindow {

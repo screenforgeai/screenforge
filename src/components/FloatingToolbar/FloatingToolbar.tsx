@@ -1054,7 +1054,11 @@ export const FloatingToolbar = () => {
 
   async function takePhoto(request: ScreenshotCaptureRequest) {
     try {
-      await window.screenforge.captureScreenshot(request);
+      const outcome = await window.screenforge.captureScreenshot(request);
+      // Wayland: the share dialog was closed without a pick. Nothing to warn about.
+      if (outcome === 'cancelled') {
+        return;
+      }
       trackEvent('screenshot_taken', { kind: request.kind });
     } catch (err) {
       window.screenforge.writeDiagnosticLog('toolbar.screenshot.failed', {
@@ -1482,7 +1486,8 @@ export const FloatingToolbar = () => {
 
   async function startWaylandPortalCapture(kind: 'screen' | 'window'): Promise<void> {
     // Opens the OS screen-share picker, on its screens or (from the Window tab) its windows.
-    window.screenforge.setShareKind(kind);
+    // Stored before the share request below reads it.
+    await window.screenforge.setShareKind(kind);
     const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: false,
       video: { frameRate: { ideal: 60, max: 60 } },
@@ -2247,6 +2252,8 @@ export const FloatingToolbar = () => {
                               systemAudioNoticeKey ? t(systemAudioNoticeKey) : null
                             }
                             onMenuOpenChange={setMicMenuOpen}
+                            popSide={popSide}
+                            avoidCollisions={!asWindow}
                             onToggle={handleMicToggle}
                             onSelectMicDevice={(deviceId) => {
                               void handleMicDeviceSelect(deviceId);
