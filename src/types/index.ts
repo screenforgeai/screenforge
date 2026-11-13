@@ -675,6 +675,10 @@ export interface ScreenforgeAPI {
   getSources: () => Promise<DesktopSource[]>;
   /** Wayland: what the next screen-share dialog asks for, a screen or a window. */
   setShareKind: (kind: 'screen' | 'window') => Promise<void>;
+  pickScreen: () => Promise<'picked' | 'cancelled' | 'unavailable'>;
+  screenStill: () => Promise<AreaSelectorStillRequest>;
+  endShare: () => Promise<void>;
+  onShareEnded: (cb: () => void) => () => void;
   startRecording: (
     sourceId: string,
     cropArea?: SelectedArea | null,

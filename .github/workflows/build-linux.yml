@@ -76,6 +76,12 @@ jobs:
       - name: Download Linux FFmpeg
         run: bash scripts/download-ffmpeg-linux.sh x86_64
 
+      - name: Build the Wayland capture helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpipewire-0.3-dev libglib2.0-dev
+          bash scripts/build-native-linux.sh
+
       - name: Install PostHog CLI for source maps
         shell: bash
         env:

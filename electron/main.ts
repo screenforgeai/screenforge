@@ -73,6 +73,7 @@ import {
 import { isWaylandSession } from './lib/linux-capture';
 import { getToolbarLayout, getToolbarWindowSize } from './modules/app/toolbar-layout';
 import { takeShareKind } from './modules/sources/share-kind';
+import { onWaylandShareEnded } from './modules/recording/wayland-capture';
 import { registerCaptureShortcutChannels } from './modules/capture-shortcuts/channel';
 import {
   isToolbarRecording,
@@ -550,6 +551,9 @@ app.on('ready', async () => {
   });
   onRecordingSourceLost((info) => {
     toolbarWindow?.webContents.send(CH.recording.SOURCE_LOST, info);
+  });
+  onWaylandShareEnded(() => {
+    toolbarWindow?.webContents.send(CH.sources.SHARE_ENDED);
   });
   onExportActivityChanged(() => notifyUpdaterActivityChanged());
 

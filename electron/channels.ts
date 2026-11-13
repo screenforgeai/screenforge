@@ -7,6 +7,10 @@ export const CH = {
   sources: {
     GET: 'sources:get',
     SET_SHARE_KIND: 'sources:set-share-kind',
+    PICK_SCREEN: 'sources:pick-screen',
+    SCREEN_STILL: 'sources:screen-still',
+    END_SHARE: 'sources:end-share',
+    SHARE_ENDED: 'sources:share-ended',
   },
   recording: {
     START: 'recording:start',

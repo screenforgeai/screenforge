@@ -104,6 +104,9 @@ native/bin/ffmpeg/win32-x64/
 # is over GitHub's 100 MB file limit)
 native/bin/ffmpeg/linux-x64/
 
+# Linux cursor helper — built by scripts/build-native-linux.sh
+native/bin/linux-*/
+
 # Secrets — never commit real credentials (only .env.example is tracked)
 .env.*
 !.env.example
