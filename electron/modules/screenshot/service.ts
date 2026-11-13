@@ -3,7 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ClipboardItem, clipboard, desktopCapturer, screen, type Display } from 'electron';
+import {
+  ClipboardItem,
+  clipboard,
+  desktopCapturer,
+  nativeImage,
+  screen,
+  type Display,
+} from 'electron';
 import log from '../../lib/logger';
 import { isPng, readPngSize } from '../../lib/png';
 import type {
@@ -185,6 +192,21 @@ export async function captureStill(
     // A window source's name is its title: the page's title, for its window bar.
     ...(request.kind === 'window' && source.name && { windowTitle: source.name }),
   };
+}
+
+/** Crops a PNG to a rect in its own pixels (clamped to it). */
+export function cropPng(
+  png: Uint8Array,
+  rect: { x: number; y: number; width: number; height: number },
+): { png: Uint8Array; width: number; height: number } {
+  const image = nativeImage.createFromBuffer(Buffer.from(png));
+  const size = image.getSize();
+  const x = Math.max(0, Math.min(size.width - 1, Math.round(rect.x)));
+  const y = Math.max(0, Math.min(size.height - 1, Math.round(rect.y)));
+  const width = Math.max(1, Math.min(size.width - x, Math.round(rect.width)));
+  const height = Math.max(1, Math.min(size.height - y, Math.round(rect.height)));
+  const cropped = image.crop({ x, y, width, height });
+  return { png: cropped.toPNG(), width, height };
 }
 
 export async function copyImageToClipboard(png: Uint8Array): Promise<void> {

@@ -509,6 +509,7 @@ export interface ExportRuntimeStats {
   sampledAt: number;
 }
 
+export type ToolbarLayout = 'overlay' | 'window';
 export type ToolbarViewportMode = 'compact' | 'expanded';
 
 /** Interactive region of the toolbar window, in window (CSS pixel) coordinates. */
@@ -625,7 +626,15 @@ export interface TextClip {
   animationOutDuration: number;
 }
 
-export type AreaSelectorPurpose = 'record' | 'screenshot';
+/** 'screenshot-still': Wayland, drawing on a still of the screen picked in the share dialog. */
+export type AreaSelectorPurpose = 'record' | 'screenshot' | 'screenshot-still';
+
+/** Wayland: the still an area is drawn on, and its size in pixels. */
+export interface AreaSelectorStill {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
 
 /** Global capture shortcuts that registered, as accelerators; one another app holds is missing. */
 export type RegisteredCaptureShortcuts = Partial<Record<CaptureShortcutAction, string>>;
@@ -649,6 +658,8 @@ export interface ScreenforgeAPI {
   relaunchApp: () => void;
   openSystemSettings: (permission: StartupPermission) => void;
   getSources: () => Promise<DesktopSource[]>;
+  /** Wayland: what the next screen-share dialog asks for, a screen or a window. */
+  setShareKind: (kind: 'screen' | 'window') => void;
   startRecording: (
     sourceId: string,
     cropArea?: SelectedArea | null,
@@ -795,6 +806,10 @@ export interface ScreenforgeAPI {
   setToolbarMouseInteractivity: (interactive: boolean) => void;
   setToolbarShape: (rects: ToolbarShapeRect[]) => void;
   setToolbarViewport: (mode: ToolbarViewportMode) => void;
+  /** How the toolbar's window is laid out (see electron/modules/app/toolbar-layout.ts). */
+  getToolbarLayout: () => Promise<ToolbarLayout>;
+  /** 'window' layout: size the toolbar window to its content (pill plus any open menu). */
+  setToolbarSize: (size: { width: number; height: number }) => void;
   focusWindow: (target: WindowFocusTarget) => void;
   showMain: () => void;
   showToolbar: () => void;
@@ -840,6 +855,8 @@ export interface ScreenforgeAPI {
     height: number;
   }) => Promise<void>;
   cancelAreaSelection: () => void;
+  /** Wayland: the still the open area selector draws on, if any. */
+  getAreaSelectorStill: () => Promise<AreaSelectorStill | null>;
   /** `purpose` picks the confirm button: record (default) or take a screenshot. */
   openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
   getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;

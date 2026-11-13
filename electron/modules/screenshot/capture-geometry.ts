@@ -2,6 +2,7 @@
  * Pure helpers for still captures (no Electron imports, unit-tested).
  */
 import type { ScreenshotCaptureRequest, SelectedArea } from '../../../src/types/index';
+import { WAYLAND_PICKED_WINDOW_ID } from '../../../src/lib/recording/waylandPicker';
 
 export interface Size {
   width: number;
@@ -139,6 +140,12 @@ export function pickSourceForCapture<T extends SourceLike>(
   }
   if (request.kind === 'display') {
     return onlyScreen;
+  }
+  // Wayland: the window was picked in the share dialog, which returns only that one. A real
+  // window id that is gone never falls back to another window.
+  if (request.sourceId === WAYLAND_PICKED_WINDOW_ID) {
+    const windows = sources.filter((source) => source.id.startsWith('window:'));
+    return windows.length === 1 ? windows[0] : null;
   }
   return null;
 }

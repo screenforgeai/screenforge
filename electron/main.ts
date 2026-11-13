@@ -60,9 +60,19 @@ import { registerAreaSelectorChannels } from './modules/area-selector/channel';
 import { registerImportChannels } from './modules/import/channel';
 import { registerScreenshotChannels } from './modules/screenshot/channel';
 import { pickAndImportVideo } from './modules/import/service';
-import { getAreaSelectorWindow, openAreaSelector } from './modules/area-selector/service';
-import { isAreaScreenshotInFlight, takeAreaScreenshot } from './modules/screenshot/flow';
+import {
+  getAreaSelectorWindow,
+  openAreaSelector,
+  openAreaSelectorOnStill,
+} from './modules/area-selector/service';
+import {
+  isAreaScreenshotInFlight,
+  takeAreaScreenshot,
+  takePickedAreaScreenshot,
+} from './modules/screenshot/flow';
 import { isWaylandSession } from './lib/linux-capture';
+import { getToolbarLayout, getToolbarWindowSize } from './modules/app/toolbar-layout';
+import { takeShareKind } from './modules/sources/share-kind';
 import { registerCaptureShortcutChannels } from './modules/capture-shortcuts/channel';
 import {
   isToolbarRecording,
@@ -321,8 +331,19 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
+const toolbarLayout = getToolbarLayout({
+  platform: process.platform,
+  waylandSession: process.platform === 'linux' && isWaylandSession(),
+  ozonePlatform: app.commandLine.getSwitchValue('ozone-platform') || undefined,
+  ozonePlatformHint: process.env.ELECTRON_OZONE_PLATFORM_HINT,
+});
+
 function createToolbarWindow(): BrowserWindow {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const overlay = toolbarLayout === 'overlay';
+  const { width, height } = getToolbarWindowSize(
+    toolbarLayout,
+    screen.getPrimaryDisplay().workAreaSize,
+  );
 
   const win = new BrowserWindow({
     width,
@@ -336,6 +357,17 @@ function createToolbarWindow(): BrowserWindow {
     resizable: false,
     movable: false,
     hasShadow: false,
+    // Native Wayland only: a window that is just the toolbar, sized to its content (see
+    // SET_TOOLBAR_SIZE) and dragged by its handle. Everywhere else, the overlay as before.
+    ...(overlay
+      ? {}
+      : {
+          resizable: true,
+          movable: true,
+          minimizable: false,
+          maximizable: false,
+          fullscreenable: false,
+        }),
     webPreferences: {
       preload: PRELOAD_PATH,
       contextIsolation: true,
@@ -343,14 +375,18 @@ function createToolbarWindow(): BrowserWindow {
     },
   });
 
-  win.setPosition(0, 0);
+  if (overlay) {
+    win.setPosition(0, 0);
+  }
   pinWindowToAllWorkspaces(win);
   // setVisibleOnAllWorkspaces can switch the app into accessory activation policy
   // on macOS 14+, hiding the Dock icon. Re-show it explicitly.
   app.dock?.show();
   win.setAlwaysOnTop(true, 'floating');
-  resetToolbarShapeState();
-  resetToolbarMousePassthrough(win);
+  if (overlay) {
+    resetToolbarShapeState();
+    resetToolbarMousePassthrough(win);
+  }
   // Give the toolbar a stable title so the native SCK helper can exclude it by name.
   win.setTitle('ScreenforgeToolbar');
 
@@ -382,12 +418,13 @@ app.on('ready', async () => {
   );
 
   // Linux/Wayland: getDisplayMedia in the toolbar drives screen capture.
-  // Requesting a screen source from desktopCapturer triggers the
-  // xdg-desktop-portal picker, where the user chooses a screen or window.
+  // Requesting a source from desktopCapturer triggers the xdg-desktop-portal
+  // picker: a screen, or a window when the toolbar's Window tab asked for one
+  // (apps there cannot list other apps' windows themselves).
   if (process.platform === 'linux') {
     session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
       desktopCapturer
-        .getSources({ types: ['screen'] })
+        .getSources({ types: [takeShareKind()] })
         .then((sources) => {
           if (sources.length > 0) {
             callback({ video: sources[0] });
@@ -500,6 +537,7 @@ app.on('ready', async () => {
       toolbarWindow = window;
     },
     createToolbarWindow,
+    getToolbarLayout: () => toolbarLayout,
   });
   onRecordingActivityChanged(() => notifyUpdaterActivityChanged());
   onRecordingActivityChanged(() => {
@@ -550,23 +588,36 @@ app.on('ready', async () => {
     if (!toolbarWindow) {
       toolbarWindow = createToolbarWindow();
     } else {
-      resetToolbarMousePassthrough(toolbarWindow);
+      if (toolbarLayout === 'overlay') {
+        resetToolbarMousePassthrough(toolbarWindow);
+      }
       toolbarWindow.show();
       toolbarWindow.focus();
     }
   };
-  const takeScreenshot = (trigger: 'shortcut' | 'menu' = 'shortcut') => {
-    void takeAreaScreenshot({
+  const takeScreenshot = (trigger: 'shortcut' | 'menu' | 'toolbar' = 'shortcut') => {
+    const deps = {
       getMainWindow: () => mainWindow,
       getToolbarWindow: () => toolbarWindow,
-      setToolbarWindow: (window) => {
+      setToolbarWindow: (window: BrowserWindow | null) => {
         toolbarWindow = window;
       },
       isBusy: () => isRecordingBusy() || isToolbarRecording(),
       preparePermissions: prepareScreenshotPermissions,
-      selectArea: () => openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot'),
       warn: showSystemWarning,
-    }).then((result) => {
+    };
+    // Wayland: pick the screen in the share dialog first, then draw the area on a still of it.
+    const taken =
+      process.platform === 'linux' && isWaylandSession()
+        ? takePickedAreaScreenshot({
+            ...deps,
+            selectAreaOnStill: (still) => openAreaSelectorOnStill(PRELOAD_PATH, loadURL, still),
+          })
+        : takeAreaScreenshot({
+            ...deps,
+            selectArea: () => openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot'),
+          });
+    void taken.then((result) => {
       if (result === 'taken') {
         trackEvent('screenshot_taken', { kind: 'area', trigger });
       } else if (result === 'failed') {

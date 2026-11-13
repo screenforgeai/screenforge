@@ -9,6 +9,7 @@ import {
   getDisplayPixelSize,
   pickSourceForCapture,
 } from './capture-geometry';
+import { WAYLAND_PICKED_WINDOW_ID } from '../../../src/lib/recording/waylandPicker';
 
 const display = (id: number, width: number, height: number, scaleFactor = 1) => ({
   id,
@@ -59,6 +60,25 @@ describe('pickSourceForCapture', () => {
     expect(
       pickSourceForCapture(sources, { kind: 'display', sourceId: 'screen:2:0' }, twoDisplays)?.id,
     ).toBe('screen:2:0');
+  });
+
+  it('on Wayland, takes the one window the share dialog returned', () => {
+    // Apps there cannot list windows: the user picks one in the dialog, which returns just it.
+    const picked = [{ id: 'window:77:0', display_id: '' }];
+    expect(
+      pickSourceForCapture(
+        picked,
+        { kind: 'window', sourceId: WAYLAND_PICKED_WINDOW_ID },
+        twoDisplays,
+      )?.id,
+    ).toBe('window:77:0');
+  });
+
+  it('never swaps in another window for one that is gone', () => {
+    const others = [{ id: 'window:77:0', display_id: '' }];
+    expect(
+      pickSourceForCapture(others, { kind: 'window', sourceId: 'window:42:0' }, twoDisplays),
+    ).toBeNull();
   });
 
   it('uses the primary display for an area (the selector covers the primary display)', () => {

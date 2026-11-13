@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AreaSelector } from './AreaSelector';
 
 const screenforge = {
   confirmAreaSelection: vi.fn().mockResolvedValue(undefined),
   cancelAreaSelection: vi.fn(),
+  getAreaSelectorStill: vi.fn().mockResolvedValue(null),
 };
 
 beforeEach(() => {
@@ -71,5 +72,24 @@ describe('AreaSelector', () => {
     render(<AreaSelector purpose="screenshot" />);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screenforge.cancelAreaSelection).toHaveBeenCalledOnce();
+  });
+
+  it('on Wayland, draws on a still of the picked screen and answers in its pixels', async () => {
+    screenforge.getAreaSelectorStill.mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,AA==',
+      width: 2560,
+      height: 1440,
+    });
+    const { container } = render(<AreaSelector purpose="screenshot-still" />);
+    await waitFor(() => expect(container.querySelector('img')).toBeInTheDocument());
+
+    // Nothing drawn: Enter takes the whole still, not the window it is shown in.
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(screenforge.confirmAreaSelection).toHaveBeenCalledWith({
+      x: 0,
+      y: 0,
+      width: 2560,
+      height: 1440,
+    });
   });
 });
