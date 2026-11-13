@@ -1,5 +1,14 @@
 # screenforge
 
+## 0.9.1
+
+### Patch Changes
+
+- 27a7ae1: Smoother edges in the preview and in exports: the cursor's outline and name tag, the window's rounded corners and traffic lights, the webcam bubble, click rings, captions and key caps no longer look jagged, including while zoomed in. Small text in a Retina recording no longer shimmers in the preview.
+- 4a22ac8: Screenshots now open in a lit 3D studio, seen through a macro lens: the screenshot sits on a thin glass panel with soft reflections, a shadow on the backdrop and a soft focus band. Everything happens on the canvas: click to focus (it starts on the most detailed part of the screenshot), scroll over the focus ring to widen what stays sharp, drag to turn the camera, scroll to zoom, hold Space and drag or scroll to move the screenshot, and drag the sun to move the light (scroll over it for brightness). Hover the focus ring or the sun for a few more options: a wider or narrower sharp area, more or less blur, a brighter or dimmer light, and softer or crisper shadows. The Style sidebar sets the aspect ratio (16:9 to start), the background behind the screenshot (the dark studio wall to start, one of the recording wallpapers or a solid colour), the padding, the corner radius (square to start), the shadow and the window bar. Double-click empty space to reset the view. Annotations are drawn straight onto the tilted screen, and Copy and Save export the finished image at full quality. Without 3D support (no WebGL 2), the editor falls back to the flat frame. To edit a screenshot you already have, choose Import image from the + menu, next to Take screenshot.
+- fde8727: On Linux with Wayland, Display and Area recordings now show the drawn cursor in your chosen style, following your pointer, with the system pointer kept out of the video so only one cursor shows. You still pick the screen in the system share dialog. If Screenforge can't record the screen this way on your desktop (its Wayland recorder is missing or can't run, or the desktop's screen sharing can't keep the pointer apart), recordings work as before, with the system pointer and no drawn cursor. Clicks aren't recorded on Wayland yet, and Window recordings work as before.
+- c35cc4c: On Linux with Wayland, pressing Record now opens the system's share dialog straight away, and the countdown starts only after you pick a screen or window. Closing the dialog simply cancels. Area recording works the same way: pick the screen first, then draw the area on a still of it, and the recording is cropped to exactly that area on any monitor. The Window button no longer opens an empty list; its tooltip says you choose the app when recording starts.
+
 ## 0.9.0
 
 ### Minor Changes
