@@ -784,6 +784,33 @@ describe('FloatingToolbar recording widget', () => {
       await waitFor(() => expect(getDisplayMedia).toHaveBeenCalledTimes(2));
     });
 
+    it('on Linux, ignores Record until it knows whether the share dialog is used', async () => {
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+      try {
+        let answer: (backend: CaptureBackend) => void = () => undefined;
+        screenforge.getCaptureBackend.mockReturnValue(
+          new Promise<CaptureBackend>((resolve) => {
+            answer = resolve;
+          }),
+        );
+        render(<FloatingToolbar />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Record' }));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+        expect(screenforge.prepareRecordingStartPermissions).not.toHaveBeenCalled();
+
+        await act(async () => {
+          answer('wayland-portal');
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+        await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+        expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+      } finally {
+        delete (navigator as { platform?: string }).platform;
+      }
+    });
+
     it('opens one share dialog when Record is clicked twice before it appears', async () => {
       render(<FloatingToolbar />);
       await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
