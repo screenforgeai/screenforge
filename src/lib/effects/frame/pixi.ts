@@ -298,6 +298,27 @@ function isHTMLVideoSource(source: CanvasImageSource): source is HTMLVideoElemen
   return typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement;
 }
 
+/**
+ * Whether the screen video can go to the GPU whole. Only an uncropped preview
+ * video can: its mip chain is built from everything uploaded, so with a crop
+ * the levels would blend pixels from outside it into its edges, and the media
+ * mask cannot take them back out. Everything else copies just the crop.
+ */
+export function uploadsWholeVideo(
+  source: CanvasImageSource,
+  crop: { x: number; y: number; width: number; height: number },
+  sourceWidth: number,
+  sourceHeight: number,
+): source is HTMLVideoElement {
+  return (
+    isHTMLVideoSource(source) &&
+    crop.x === 0 &&
+    crop.y === 0 &&
+    crop.width === sourceWidth &&
+    crop.height === sourceHeight
+  );
+}
+
 // ── Frame effect ──────────────────────────────────────────────────────────────
 
 export const framePixiEffect: PixiEffect<null> = {
@@ -430,8 +451,10 @@ export const framePixiEffect: PixiEffect<null> = {
     let videoBridgeSource: CanvasSource | null = null;
     let videoElementSource: VideoSource | null = null;
     let videoElementSourceElement: HTMLVideoElement | null = null;
+    let videoElementTexture: Texture | null = null;
+    let videoBridgeTexture: Texture | null = null;
     let currentVideoTexture: Texture | null = null;
-    // True when the texture holds only the crop (the export bridge), so the
+    // True when the texture holds only the crop (the bridge canvas), so the
     // sprite fills the media rect instead of being offset behind its mask.
     let videoTextureIsCrop = false;
 
@@ -657,17 +680,19 @@ export const framePixiEffect: PixiEffect<null> = {
       );
 
       // ── Update video texture from renderContext ──────────────────────────
-      // Preview uses the HTMLVideoElement directly. Export/canvas sources use a
-      // 1:1 bridge canvas so the copy stays unsmoothed before GPU upload. The
-      // bridge copies only the crop's exact pixels: scaling a full-source
-      // texture behind the media mask let the GPU blend in pixels from just
-      // outside the crop along its edges (and shifted it by a fraction of a
-      // pixel), which an area recording must never show.
+      // An uncropped preview uses the HTMLVideoElement directly. Everything else
+      // (export, and a cropped preview) goes through a 1:1 bridge canvas so the
+      // copy stays unsmoothed before GPU upload. The bridge copies only the
+      // crop's exact pixels: scaling a full-source texture behind the media mask
+      // let the GPU blend in pixels from just outside the crop along its edges
+      // (and shifted it by a fraction of a pixel), and the mip chain built from
+      // a full-source upload does the same; an area recording must show neither.
       const videoSrc = renderContext.videoSource;
       if (videoSrc?.ready && videoSrc.source && videoSrc.width > 0 && videoSrc.height > 0) {
         const srcW = videoSrc.width;
         const srcH = videoSrc.height;
-        if (isHTMLVideoSource(videoSrc.source)) {
+        const crop = getFrameGeometry(effectiveFrame, srcW, srcH).cropRectPixels;
+        if (uploadsWholeVideo(videoSrc.source, crop, srcW, srcH)) {
           videoTextureIsCrop = false;
           if (videoElementSourceElement !== videoSrc.source) {
             videoElementSource = new VideoSource({
@@ -687,12 +712,16 @@ export const framePixiEffect: PixiEffect<null> = {
             });
             videoElementSource.autoUpdate = false;
             videoElementSourceElement = videoSrc.source;
-            currentVideoTexture = new Texture({ source: videoElementSource });
+            videoElementTexture = new Texture({ source: videoElementSource });
+          }
+          // Set every frame: cropping and uncropping switch between this and
+          // the bridge texture without either being rebuilt.
+          currentVideoTexture = videoElementTexture;
+          if (currentVideoTexture) {
             videoSprite.texture = currentVideoTexture;
           }
           videoElementSource?.update();
         } else if (videoBridgeCtx) {
-          const crop = getFrameGeometry(effectiveFrame, srcW, srcH).cropRectPixels;
           if (videoBridgeCanvas.width !== crop.width || videoBridgeCanvas.height !== crop.height) {
             videoBridgeCanvas.width = crop.width;
             videoBridgeCanvas.height = crop.height;
@@ -714,7 +743,10 @@ export const framePixiEffect: PixiEffect<null> = {
           );
           if (!videoBridgeSource) {
             videoBridgeSource = createScreenVideoCanvasSource(videoBridgeCanvas);
-            currentVideoTexture = new Texture({ source: videoBridgeSource });
+            videoBridgeTexture = new Texture({ source: videoBridgeSource });
+          }
+          currentVideoTexture = videoBridgeTexture;
+          if (currentVideoTexture) {
             videoSprite.texture = currentVideoTexture;
           }
           videoBridgeSource.update();
