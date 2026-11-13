@@ -1563,7 +1563,13 @@ export const FloatingToolbar = () => {
       }
     } catch (err) {
       console.error('[recording] drawing the area on the picked screen failed:', err);
-      window.screenforge.systemWarning(getErrorMessage(err));
+      // Ended from the system indicator: the user stopped it, nothing to warn about.
+      const shared = screenStreamRef.current
+        ?.getVideoTracks()
+        .some((track) => track.readyState === 'live');
+      if (shared) {
+        window.screenforge.systemWarning(getErrorMessage(err));
+      }
     } finally {
       pickingShareRef.current = false;
     }

@@ -768,6 +768,22 @@ describe('FloatingToolbar recording widget', () => {
       expect(FakeMediaRecorder.instances).toHaveLength(1);
     });
 
+    it('can record again when the share ends before its still is taken', async () => {
+      const { grabStreamStill } = await import('src/lib/recording/streamStill');
+      vi.mocked(grabStreamStill).mockRejectedValueOnce(new Error('Sharing stopped.'));
+      portalTrack.readyState = 'ended';
+      await clickAreaOnPortal();
+      await waitFor(() => expect(portalTrack.stop).toHaveBeenCalled());
+      // Ended by the user from the system indicator: nothing to warn about.
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
+      expect(screenforge.selectAreaOnStill).not.toHaveBeenCalled();
+
+      // The share dialog guard was let go: Record opens the dialog again.
+      portalTrack.readyState = 'live';
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      await waitFor(() => expect(getDisplayMedia).toHaveBeenCalledTimes(2));
+    });
+
     it('opens no other share dialog while the area is being drawn', async () => {
       const area = { x: 1, y: 2, width: 300, height: 200, frame: { width: 2560, height: 1440 } };
       let draw: (value: typeof area) => void = () => undefined;
