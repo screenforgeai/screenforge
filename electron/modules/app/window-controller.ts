@@ -1,8 +1,13 @@
 import { app } from 'electron';
 import type { BrowserWindow } from 'electron';
-import type { RecordingResult, ToolbarShapeRect, ToolbarViewportMode } from '../../../src/types';
+import type {
+  RecordingResult,
+  ToolbarLayout,
+  ToolbarShapeRect,
+  ToolbarViewportMode,
+} from '../../../src/types';
 import { CH } from '../../channels';
-import { listenChannel } from '../../lib/ipc-main';
+import { handleChannel, listenChannel } from '../../lib/ipc-main';
 import log from '../../lib/logger';
 import { destroyRecordingTray, startRecordingTray } from '../recording/utils/tray';
 import { closeCameraPreview } from '../camera-preview/service';
@@ -17,7 +22,12 @@ type WindowControllerOptions = {
   getToolbarWindow: () => BrowserWindow | null;
   setToolbarWindow: (window: BrowserWindow | null) => void;
   createToolbarWindow: () => BrowserWindow;
+  /** 'window': the toolbar window is just the toolbar, with no click-through to manage. */
+  getToolbarLayout: () => ToolbarLayout;
 };
+
+/** The largest the toolbar window grows to fit an open menu. */
+const MAX_TOOLBAR_WINDOW = { width: 1600, height: 900 };
 
 function setToolbarViewport(window: BrowserWindow, mode: ToolbarViewportMode): void {
   const currentBounds = window.getBounds();
@@ -36,7 +46,26 @@ export function registerWindowChannels({
   getToolbarWindow,
   setToolbarWindow,
   createToolbarWindow,
+  getToolbarLayout,
 }: WindowControllerOptions): void {
+  const isOverlay = () => getToolbarLayout() === 'overlay';
+
+  handleChannel<[], ToolbarLayout>(CH.app.GET_TOOLBAR_LAYOUT, () => getToolbarLayout());
+
+  listenChannel<[{ width: number; height: number }]>(CH.app.SET_TOOLBAR_SIZE, (size) => {
+    const toolbarWindow = getToolbarWindow();
+    if (!toolbarWindow || isOverlay()) {
+      return;
+    }
+    const width = Math.round(Math.min(Math.max(size.width, 1), MAX_TOOLBAR_WINDOW.width));
+    const height = Math.round(Math.min(Math.max(size.height, 1), MAX_TOOLBAR_WINDOW.height));
+    const [currentWidth, currentHeight] = toolbarWindow.getContentSize();
+    if (width !== currentWidth || height !== currentHeight) {
+      // Grows from its top-left corner: Wayland keeps a window where the user put it.
+      toolbarWindow.setContentSize(width, height);
+    }
+  });
+
   listenChannel(CH.app.MINIMIZE_TO_DOCK, () => {
     closeCameraPreview();
     getToolbarWindow()?.close();
@@ -62,14 +91,16 @@ export function registerWindowChannels({
       return;
     }
 
-    setToolbarMouseInteractivity(toolbarWindow, false);
+    if (isOverlay()) {
+      setToolbarMouseInteractivity(toolbarWindow, false);
+    }
     toolbarWindow.show();
     toolbarWindow.focus();
   });
 
   listenChannel<[boolean]>(CH.app.SET_TOOLBAR_MOUSE_INTERACTIVITY, (interactive) => {
     const toolbarWindow = getToolbarWindow();
-    if (!toolbarWindow) {
+    if (!toolbarWindow || !isOverlay()) {
       return;
     }
 
@@ -78,7 +109,7 @@ export function registerWindowChannels({
 
   listenChannel<[ToolbarShapeRect[]]>(CH.app.SET_TOOLBAR_SHAPE, (rects) => {
     const toolbarWindow = getToolbarWindow();
-    if (!toolbarWindow) {
+    if (!toolbarWindow || !isOverlay()) {
       return;
     }
 

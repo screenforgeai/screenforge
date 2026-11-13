@@ -1,6 +1,6 @@
 import { CH } from '../../channels';
 import { handleChannel } from '../../lib/ipc-main';
-import type { ScreenshotCaptureRequest } from '../../../src/types/index';
+import type { ScreenshotCaptureOutcome, ScreenshotCaptureRequest } from '../../../src/types/index';
 import { captureAndOpenEditor, type ScreenshotWindows } from './flow';
 import { copyImageToClipboard } from './service';
 
@@ -44,12 +44,15 @@ export function registerScreenshotChannels(
   windows: ScreenshotWindows,
   actions: ScreenshotActions = {},
 ): void {
-  handleChannel<[ScreenshotCaptureRequest], void>(CH.screenshot.CAPTURE, async (request) => {
-    if (!isValidCaptureRequest(request)) {
-      throw new Error('Invalid screenshot capture request');
-    }
-    await captureAndOpenEditor(request, windows);
-  });
+  handleChannel<[ScreenshotCaptureRequest], ScreenshotCaptureOutcome>(
+    CH.screenshot.CAPTURE,
+    async (request) => {
+      if (!isValidCaptureRequest(request)) {
+        throw new Error('Invalid screenshot capture request');
+      }
+      return captureAndOpenEditor(request, windows);
+    },
+  );
 
   handleChannel<[Uint8Array], void>(CH.screenshot.COPY, (png) => copyImageToClipboard(png));
 

@@ -69,7 +69,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-import { captureStill, copyImageToClipboard } from './service';
+import { ShareDialogClosedError, captureStill, copyImageToClipboard } from './service';
 
 const primary = {
   id: 1,
@@ -114,6 +114,49 @@ describe('screenshot service', () => {
       }),
     );
     expect(capture).toMatchObject({ kind: 'display', width: 2880, height: 1800 });
+  });
+
+  describe('Wayland: a screen or window picked in the share dialog', () => {
+    it('keeps the picked screen at its own size, whichever display Electron calls primary', async () => {
+      // The portal's source names no display; resizing it to the primary's pixels would shrink
+      // a large picked screen to a small primary one.
+      const portrait = {
+        id: 3,
+        bounds: { x: 0, y: 0, width: 1080, height: 1920 },
+        size: { width: 1080, height: 1920 },
+        scaleFactor: 1,
+      };
+      electronMock.getAllDisplays.mockReturnValue([portrait, secondary]);
+      electronMock.getPrimaryDisplay.mockReturnValue(portrait);
+      electronMock.getSources.mockResolvedValue([
+        { id: 'screen:99:0', display_id: '', thumbnail: fakeImage(2560, 1440) },
+      ]);
+
+      const capture = await captureStill({ kind: 'display', sourceId: 'screen:wayland' });
+
+      expect(capture).toMatchObject({ kind: 'display', width: 2560, height: 1440 });
+    });
+
+    it('reports a closed share dialog as such, not as a failure', async () => {
+      electronMock.getSources.mockResolvedValue([]);
+      await expect(
+        captureStill({ kind: 'window', sourceId: 'window:wayland' }),
+      ).rejects.toBeInstanceOf(ShareDialogClosedError);
+
+      electronMock.getSources.mockRejectedValue(new Error('Failed to get sources.'));
+      await expect(
+        captureStill({ kind: 'display', sourceId: 'screen:wayland' }),
+      ).rejects.toBeInstanceOf(ShareDialogClosedError);
+    });
+
+    it('still fails on an empty image', async () => {
+      electronMock.getSources.mockResolvedValue([
+        { id: 'screen:99:0', display_id: '', thumbnail: fakeImage(0, 0) },
+      ]);
+      const failure = captureStill({ kind: 'display', sourceId: 'screen:wayland' });
+      await expect(failure).rejects.toThrow();
+      await expect(failure).rejects.not.toBeInstanceOf(ShareDialogClosedError);
+    });
   });
 
   it('crops an area from the primary display in native pixels', async () => {

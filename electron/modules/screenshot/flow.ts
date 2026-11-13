@@ -1,9 +1,15 @@
 import type { BrowserWindow } from 'electron';
 import { CH } from '../../channels';
 import log from '../../lib/logger';
-import type { ScreenshotCaptureRequest, SelectedArea } from '../../../src/types/index';
+import type {
+  ScreenshotCaptureData,
+  ScreenshotCaptureOutcome,
+  ScreenshotCaptureRequest,
+  SelectedArea,
+} from '../../../src/types/index';
+import { WAYLAND_PICKED_SCREEN_ID } from '../../../src/lib/recording/waylandPicker';
 import { closeCameraPreview } from '../camera-preview/service';
-import { captureStill } from './service';
+import { ShareDialogClosedError, captureStill, cropPng } from './service';
 
 // Time for the compositor to drop the hidden toolbar / area selector from the
 // screen before the still is grabbed.
@@ -20,12 +26,13 @@ export type ScreenshotWindows = {
 
 /**
  * Hides the toolbar, grabs the still and opens it in the main window's
- * Screenshot editor. On failure the toolbar comes back and the error is rethrown.
+ * Screenshot editor. On failure the toolbar comes back and the error is rethrown;
+ * a share dialog closed without a pick (Wayland) brings it back as a cancel.
  */
 export async function captureAndOpenEditor(
   request: ScreenshotCaptureRequest,
   { getMainWindow, getToolbarWindow, setToolbarWindow }: ScreenshotWindows,
-): Promise<void> {
+): Promise<ScreenshotCaptureOutcome> {
   const toolbar = getToolbarWindow();
   toolbar?.hide();
   closeCameraPreview();
@@ -35,11 +42,25 @@ export async function captureAndOpenEditor(
   try {
     capture = await captureStill(request);
   } catch (error) {
-    log.error('[screenshot] capture failed', { kind: request.kind, error });
     toolbar?.show();
+    if (error instanceof ShareDialogClosedError) {
+      log.info('[screenshot] share dialog closed', { kind: request.kind });
+      return 'cancelled';
+    }
+    log.error('[screenshot] capture failed', { kind: request.kind, error });
     throw error;
   }
 
+  openInEditor(capture, toolbar, { getMainWindow, getToolbarWindow, setToolbarWindow });
+  return 'taken';
+}
+
+/** Sends a still to the main window's Screenshot editor and closes the toolbar it came from. */
+function openInEditor(
+  capture: ScreenshotCaptureData,
+  toolbar: BrowserWindow | null,
+  { getMainWindow, getToolbarWindow, setToolbarWindow }: ScreenshotWindows,
+): void {
   log.info('[screenshot] captured', {
     kind: capture.kind,
     width: capture.width,
@@ -137,6 +158,110 @@ export async function takeAreaScreenshot(deps: AreaScreenshotDeps): Promise<Area
     } catch {
       deps.warn(SCREENSHOT_FAILED_MESSAGE);
       restoreMainWindow();
+      return 'failed';
+    }
+  } finally {
+    areaScreenshotInFlight = false;
+  }
+}
+
+export type PickedAreaScreenshotDeps = Omit<AreaScreenshotDeps, 'selectArea'> & {
+  /** Shows the still to draw an area on; the area in the still's pixels, null when cancelled. */
+  selectAreaOnStill: (still: ScreenshotCaptureData) => Promise<SelectedArea | null>;
+};
+
+/**
+ * Wayland's area screenshot: the screen is picked in the system share dialog first, then the
+ * area is drawn on a still of it. Apps there cannot place an overlay on a chosen monitor, so
+ * drawing on the live screen could land on the wrong one; a still can be shown anywhere.
+ */
+export async function takePickedAreaScreenshot(
+  deps: PickedAreaScreenshotDeps,
+): Promise<AreaScreenshotResult> {
+  if (areaScreenshotInFlight || deps.isBusy()) {
+    return 'skipped';
+  }
+  areaScreenshotInFlight = true;
+
+  const mainWindow = deps.getMainWindow();
+  const mainWasVisible = !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
+  const toolbar = deps.getToolbarWindow();
+  const restore = () => {
+    if (toolbar && !toolbar.isDestroyed()) {
+      toolbar.show();
+    }
+    if (mainWasVisible && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+    }
+  };
+
+  try {
+    try {
+      await deps.preparePermissions();
+    } catch (error) {
+      log.warn('[screenshot] picked area: permissions not ready', { error });
+      deps.warn(error instanceof Error ? error.message : SCREENSHOT_FAILED_MESSAGE);
+      return 'failed';
+    }
+
+    if (mainWasVisible) {
+      mainWindow.hide();
+    }
+    toolbar?.hide();
+    closeCameraPreview();
+    await new Promise((resolve) => setTimeout(resolve, HIDE_SETTLE_MS));
+
+    let still: ScreenshotCaptureData;
+    try {
+      still = await captureStill({ kind: 'display', sourceId: WAYLAND_PICKED_SCREEN_ID });
+    } catch (error) {
+      restore();
+      // Closing the share dialog is a cancel, not a failure.
+      if (error instanceof ShareDialogClosedError) {
+        log.info('[screenshot] picked area: share dialog closed');
+        return 'cancelled';
+      }
+      log.error('[screenshot] picked area: capture failed', { error });
+      deps.warn(SCREENSHOT_FAILED_MESSAGE);
+      return 'failed';
+    }
+
+    let area: SelectedArea | null;
+    try {
+      area = await deps.selectAreaOnStill(still);
+    } catch (error) {
+      log.error('[screenshot] picked area: selector failed', { error });
+      restore();
+      deps.warn(SCREENSHOT_FAILED_MESSAGE);
+      return 'failed';
+    }
+    if (!area) {
+      restore();
+      return 'cancelled';
+    }
+    if (deps.isBusy()) {
+      restore();
+      return 'skipped';
+    }
+
+    try {
+      const cropped = cropPng(still.png, area);
+      openInEditor(
+        {
+          kind: 'area',
+          png: cropped.png,
+          width: cropped.width,
+          height: cropped.height,
+          scaleFactor: still.scaleFactor,
+        },
+        toolbar,
+        deps,
+      );
+      return 'taken';
+    } catch (error) {
+      log.error('[screenshot] picked area: could not open the still', { error });
+      restore();
+      deps.warn(SCREENSHOT_FAILED_MESSAGE);
       return 'failed';
     }
   } finally {

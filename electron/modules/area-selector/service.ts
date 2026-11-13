@@ -1,12 +1,18 @@
 import { BrowserWindow, screen } from 'electron';
 import log from '../../lib/logger';
 import { pinWindowToAllWorkspaces } from '../../lib/workspace-pin';
-import type { SelectedArea } from '../../../src/types/index';
+import type { AreaSelectorStill, SelectedArea } from '../../../src/types/index';
 
 let selectorWindow: BrowserWindow | null = null;
 let pendingResolve: ((area: SelectedArea | null) => void) | null = null;
 /** The display the open selector covers, so a capture can crop that one and no other. */
 let selectorDisplay: SelectedArea['display'] | null = null;
+/** Wayland: the still the open selector shows, for its page to fetch. */
+let selectorStill: AreaSelectorStill | null = null;
+
+export function getAreaSelectorStill(): AreaSelectorStill | null {
+  return selectorStill;
+}
 
 function isAlive(): boolean {
   return selectorWindow !== null && !selectorWindow.isDestroyed();
@@ -37,6 +43,7 @@ export function openAreaSelector(
 
     const { x, y, width, height } = primaryDisplay.bounds;
     selectorDisplay = { id: primaryDisplay.id, width, height };
+    selectorStill = null;
 
     const win = new BrowserWindow({
       x,
@@ -91,6 +98,59 @@ export function openAreaSelector(
 
     selectorWindow = win;
     log.info('[area-selector] BrowserWindow created with bounds', { x, y, width, height });
+  });
+}
+
+/**
+ * Wayland: draw the area on a still of the screen the user picked in the share dialog, shown
+ * full screen wherever the compositor puts the window. The area comes back in the still's own
+ * pixels (the page maps it), so which monitor shows it does not matter.
+ */
+export function openAreaSelectorOnStill(
+  preloadPath: string,
+  loadURL: (win: BrowserWindow, hash: string) => void,
+  still: { png: Uint8Array; width: number; height: number },
+): Promise<SelectedArea | null> {
+  if (isAlive()) {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve) => {
+    pendingResolve = resolve;
+    selectorDisplay = null;
+    selectorStill = {
+      dataUrl: `data:image/png;base64,${Buffer.from(still.png).toString('base64')}`,
+      width: still.width,
+      height: still.height,
+    };
+
+    const win = new BrowserWindow({
+      frame: false,
+      backgroundColor: '#000000',
+      fullscreen: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      webPreferences: {
+        preload: preloadPath,
+        contextIsolation: true,
+        sandbox: false,
+      },
+    });
+    win.setAlwaysOnTop(true, 'screen-saver');
+    loadURL(win, 'area-selector-still');
+
+    win.on('closed', () => {
+      selectorWindow = null;
+      selectorStill = null;
+      if (pendingResolve) {
+        pendingResolve(null);
+        pendingResolve = null;
+      }
+    });
+
+    selectorWindow = win;
+    log.info('[area-selector] still selector opened', { width: still.width, height: still.height });
   });
 }
 
