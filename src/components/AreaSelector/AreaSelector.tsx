@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { IconCamera, IconPlayerRecordFilled, IconRestart } from 'src/lib/icons';
@@ -87,6 +87,9 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
   // here, and sent back in the still's own pixels.
   const onStill = purpose === 'screenshot-still' || purpose === 'record-still';
   const [still, setStill] = useState<AreaSelectorStill | null>(null);
+  // Read by confirm: the key handler that calls it is re-attached only after a render, so a key
+  // pressed just as the still arrives would otherwise see none.
+  const stillRef = useRef<AreaSelectorStill | null>(null);
   useEffect(() => {
     if (!onStill) {
       return;
@@ -94,6 +97,7 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
     let live = true;
     void window.screenforge.getAreaSelectorStill().then((next) => {
       if (live) {
+        stillRef.current = next;
         setStill(next);
       }
     });
@@ -109,19 +113,20 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
         void window.screenforge.confirmAreaSelection(rect);
         return;
       }
-      if (!still) {
+      const shown = stillRef.current;
+      if (!shown) {
         return;
       }
       const onImage = selectionToImageRect(
         rect,
         { width: window.innerWidth, height: window.innerHeight },
-        still,
+        shown,
       );
       if (onImage) {
         void window.screenforge.confirmAreaSelection(onImage);
       }
     },
-    [onStill, still],
+    [onStill],
   );
   const [confirmedRect, setConfirmedRect] = useState<SelectionRect | null>(null);
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
