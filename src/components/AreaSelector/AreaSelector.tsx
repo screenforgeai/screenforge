@@ -82,10 +82,10 @@ type Props = {
 };
 
 export const AreaSelector = ({ purpose = 'record' }: Props) => {
-  const isScreenshot = purpose !== 'record';
+  const isScreenshot = purpose === 'screenshot' || purpose === 'screenshot-still';
   // Wayland: the area is drawn on a still of the screen picked in the share dialog, shown fitted
   // here, and sent back in the still's own pixels.
-  const onStill = purpose === 'screenshot-still';
+  const onStill = purpose === 'screenshot-still' || purpose === 'record-still';
   const [still, setStill] = useState<AreaSelectorStill | null>(null);
   useEffect(() => {
     if (!onStill) {

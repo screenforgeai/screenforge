@@ -141,6 +141,8 @@ export const CH = {
     CANCEL: 'area-selector:cancel',
     // Wayland: the still the area is drawn on (picked in the share dialog first)
     GET_STILL: 'area-selector:get-still',
+    // Toolbar → main (Wayland): draw a recording area on a still of the picked screen
+    OPEN_ON_STILL: 'area-selector:open-on-still',
   },
   captureShortcuts: {
     // Renderer → main: which global capture shortcuts are live

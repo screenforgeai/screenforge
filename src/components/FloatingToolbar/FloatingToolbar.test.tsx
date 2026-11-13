@@ -6,6 +6,14 @@ import type { CaptureBackend } from '../../types/index';
 // framer-motion's AnimatePresence exit animations never complete under jsdom
 // fake timers, leaving the recording controls unmounted. Replace motion
 // components with plain elements so state transitions render synchronously.
+vi.mock('src/lib/recording/streamStill', () => ({
+  grabStreamStill: vi.fn().mockResolvedValue({
+    png: new Uint8Array([137, 80, 78, 71]),
+    width: 2560,
+    height: 1440,
+  }),
+}));
+
 vi.mock('framer-motion', () => {
   const MOTION_ONLY_PROPS = [
     'initial',
@@ -205,6 +213,7 @@ function createScreenforgeMock(backend: CaptureBackend) {
     getToolbarLayout: vi.fn().mockResolvedValue('overlay'),
     setShareKind: vi.fn().mockResolvedValue(undefined),
     takeScreenshot: vi.fn().mockResolvedValue(undefined),
+    selectAreaOnStill: vi.fn().mockResolvedValue(null),
     setToolbarSize: vi.fn(),
     minimizeToDock: vi.fn(),
     showMain: vi.fn(),
@@ -254,6 +263,11 @@ function latestSourceLostHandler(): (info: { reason: 'display-removed' }) => voi
 }
 
 async function clickRecordAndFinishCountdown(): Promise<void> {
+  await clickRecord();
+  await finishCountdown();
+}
+
+async function clickRecord(): Promise<void> {
   render(<FloatingToolbar />);
   await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
 
@@ -271,7 +285,9 @@ async function clickRecordAndFinishCountdown(): Promise<void> {
     },
     { timeout: ASYNC_UI_TIMEOUT_MS },
   );
+}
 
+async function finishCountdown(): Promise<void> {
   // Record awaits the append-mode and permission checks before the countdown
   // starts. Wait for it, or the timer advances below can run before it
   // exists (seen on slower CI runners) and recording never starts in time.
@@ -529,9 +545,16 @@ describe('FloatingToolbar recording widget', () => {
       });
       // The Window tab selects window capture without a list (it could only ever be empty).
       const windowTab = screen.getByRole('button', { name: 'Window' });
+      // It says when the app is chosen instead.
+      fireEvent.focus(windowTab);
+      expect(
+        await screen.findAllByText("Window: you'll choose the app when recording starts"),
+      ).not.toHaveLength(0);
+      fireEvent.blur(windowTab);
       fireEvent.pointerDown(windowTab, { button: 0, pointerType: 'mouse' });
       fireEvent.click(windowTab);
       expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      expect(windowTab).not.toHaveAttribute('aria-haspopup');
       expect(screen.getByRole('button', { name: 'Record' })).toBeEnabled();
 
       const appendModeCalls = screenforge.getAppendMode.mock.calls.length;
@@ -595,15 +618,124 @@ describe('FloatingToolbar recording widget', () => {
       expect(screenforge.openAreaSelector).not.toHaveBeenCalled();
     });
 
-    it('returns to idle with a warning when the user cancels the portal dialog', async () => {
-      getDisplayMedia.mockRejectedValue(new Error('Permission denied by the screen-share dialog'));
+    it('opens the share dialog before the countdown, and records once the countdown ends', async () => {
+      let pick: (stream: FakeMediaStream) => void = () => undefined;
+      getDisplayMedia.mockReturnValue(
+        new Promise<FakeMediaStream>((resolve) => {
+          pick = resolve;
+        }),
+      );
+      await clickRecord();
+      await waitFor(() => expect(getDisplayMedia).toHaveBeenCalledTimes(1));
+      // The dialog is open: nothing counts down while the user is still choosing.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4400);
+      });
+      expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
 
-      await clickRecordAndFinishCountdown();
+      await act(async () => {
+        pick(new FakeMediaStream(portalTrack));
+      });
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+      // Picked, but not recorded yet: the countdown comes first.
+      expect(FakeMediaRecorder.instances).toHaveLength(0);
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+
+      await finishCountdown();
+      await waitForRecordingState();
+      expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+      expect(FakeMediaRecorder.instances).toHaveLength(1);
+      expect(FakeMediaRecorder.instances[0].state).toBe('recording');
+    });
+
+    it('goes back to idle, without a countdown or a warning, when the share dialog is closed', async () => {
+      getDisplayMedia.mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'));
+
+      await clickRecord();
+      await waitFor(() => expect(getDisplayMedia).toHaveBeenCalled());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4400);
+      });
+
+      expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
+      expect(await screen.findByRole('button', { name: 'Record' })).toBeEnabled();
+    });
+
+    it('warns, without a countdown, when the share dialog fails', async () => {
+      getDisplayMedia.mockRejectedValue(new Error('PipeWire is not running'));
+
+      await clickRecord();
 
       await waitFor(() => expect(screenforge.systemWarning).toHaveBeenCalled());
+      expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
       expect(screenforge.startRecording).not.toHaveBeenCalled();
-      // Back to idle: the record button is available again.
       expect(await screen.findByRole('button', { name: 'Record' })).toBeInTheDocument();
+    });
+
+    it('cancels the countdown when the share is ended from the system indicator', async () => {
+      await clickRecord();
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+
+      act(() => {
+        portalTrack.dispatch('ended');
+      });
+      expect(await screen.findByRole('button', { name: 'Record' })).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4400);
+      });
+
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+      expect(FakeMediaRecorder.instances).toHaveLength(0);
+    });
+
+    const clickAreaOnPortal = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+    };
+
+    it('records an area by picking the screen first, then drawing on a still of it', async () => {
+      const area = { x: 1, y: 2, width: 300, height: 200, frame: { width: 2560, height: 1440 } };
+      screenforge.selectAreaOnStill.mockResolvedValue(area);
+      await clickAreaOnPortal();
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+
+      // Not drawn on the live screen: Wayland would put that selector on any monitor.
+      expect(screenforge.openAreaSelector).not.toHaveBeenCalled();
+      expect(screenforge.setShareKind).toHaveBeenCalledWith('screen');
+      expect(getDisplayMedia.mock.invocationCallOrder[0]).toBeLessThan(
+        screenforge.selectAreaOnStill.mock.invocationCallOrder[0],
+      );
+      expect(screenforge.selectAreaOnStill).toHaveBeenCalledWith({
+        png: expect.any(Uint8Array),
+        width: 2560,
+        height: 1440,
+      });
+
+      await finishCountdown();
+      await waitForRecordingState();
+      expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0', area, {
+        rendererCapture: true,
+      });
+    });
+
+    it('lets go of the picked screen when no area is drawn', async () => {
+      await clickAreaOnPortal();
+      await waitFor(() => expect(screenforge.selectAreaOnStill).toHaveBeenCalled());
+      await waitFor(() => expect(portalTrack.stop).toHaveBeenCalled());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4400);
+      });
+
+      expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
     });
 
     it('pauses and resumes the portal recorder together with the main process', async () => {

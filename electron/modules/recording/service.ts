@@ -1162,7 +1162,13 @@ async function stopNativeCapture(): Promise<string> {
 
 // ── Crop recording ────────────────────────────────────────────────────────────
 
-let activeCropArea: { x: number; y: number; width: number; height: number } | null = null;
+let activeCropArea: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  frame?: { width: number; height: number };
+} | null = null;
 // The display the crop area was drawn on, fixed at start: the crop is in its
 // logical pixels, and the primary display can change while recording.
 let activeCropDisplay: Pick<Electron.Display, 'bounds' | 'scaleFactor'> | null = null;
@@ -1172,6 +1178,7 @@ export function setActiveCropArea(area: {
   y: number;
   width: number;
   height: number;
+  frame?: { width: number; height: number };
 }): void {
   activeCropArea = area;
 }
@@ -1755,18 +1762,22 @@ export async function stopRecording(rendererCapture?: {
               width: Math.round(areaDisplay.bounds.width * scaleFactor),
               height: Math.round(areaDisplay.bounds.height * scaleFactor),
             };
-    // The picker gives no monitor id, so a picker stream must be the area
+    // Drawn on a still of the picked stream (Wayland): the video is that picture, maybe scaled.
+    // Otherwise the picker gives no monitor id, so a picker stream must be the area
     // display at its exact pixel size; a capture of that display only needs
     // its shape (it may be scaled down). Identical monitors still can't be
     // told apart from a picker stream.
+    const drawnOn = selectedArea.frame ?? areaDisplay.bounds;
     const isAreaDisplay =
       video !== null &&
-      (fromScreenSharePicker
-        ? matchesDisplaySize(video, areaDisplay.bounds, scaleFactor)
-        : matchesDisplayShape(video, areaDisplay.bounds));
+      (selectedArea.frame
+        ? matchesDisplayShape(video, selectedArea.frame)
+        : fromScreenSharePicker
+          ? matchesDisplaySize(video, areaDisplay.bounds, scaleFactor)
+          : matchesDisplayShape(video, areaDisplay.bounds));
     if (video && isAreaDisplay) {
       areaCrop = {
-        ...computeAreaCropPixels(selectedArea, areaDisplay.bounds, video),
+        ...computeAreaCropPixels(selectedArea, drawnOn, video),
         sourceWidth: video.width,
         sourceHeight: video.height,
       };

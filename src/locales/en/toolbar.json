@@ -3,7 +3,7 @@
   "home": "Home",
   "display": "Display",
   "window": "Window",
-  "windowPickOnRecord": "Window: pick it when you start recording",
+  "windowPickOnRecord": "Window: you'll choose the app when recording starts",
   "noWindows_title": "No windows available",
   "noWindows_desc": "Open a window you want to record and it will appear here.",
   "noCameras_title": "No cameras found",

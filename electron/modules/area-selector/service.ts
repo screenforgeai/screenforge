@@ -110,6 +110,7 @@ export function openAreaSelectorOnStill(
   preloadPath: string,
   loadURL: (win: BrowserWindow, hash: string) => void,
   still: { png: Uint8Array; width: number; height: number },
+  purpose: 'record' | 'screenshot' = 'screenshot',
 ): Promise<SelectedArea | null> {
   if (isAlive()) {
     return Promise.resolve(null);
@@ -138,7 +139,7 @@ export function openAreaSelectorOnStill(
       },
     });
     win.setAlwaysOnTop(true, 'screen-saver');
-    loadURL(win, 'area-selector-still');
+    loadURL(win, purpose === 'record' ? 'area-selector-record-still' : 'area-selector-still');
 
     win.on('closed', () => {
       selectorWindow = null;

@@ -92,4 +92,28 @@ describe('AreaSelector', () => {
       height: 1440,
     });
   });
+
+  it('on Wayland, records an area drawn on a still of the picked screen, in its pixels', async () => {
+    screenforge.getAreaSelectorStill.mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,AA==',
+      width: window.innerWidth * 2,
+      height: window.innerHeight * 2,
+    });
+    const { container } = render(<AreaSelector purpose="record-still" />);
+    await waitFor(() => expect(container.querySelector('img')).toBeInTheDocument());
+    expect(screen.getByText(/select a recording area/i)).toBeInTheDocument();
+
+    const surface = container.firstChild as HTMLElement;
+    fireEvent.mouseDown(surface, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(surface, { clientX: 300, clientY: 200 });
+    fireEvent.mouseUp(surface, { clientX: 300, clientY: 200 });
+    fireEvent.click(screen.getByRole('button', { name: 'Start Recording' }));
+
+    expect(screenforge.confirmAreaSelection).toHaveBeenCalledWith({
+      x: 200,
+      y: 200,
+      width: 400,
+      height: 200,
+    });
+  });
 });
