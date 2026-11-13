@@ -63,6 +63,34 @@ vi.mock('../../lib/logger', () => ({
   default: loggerMock,
 }));
 
+// The capture helper's share: its pointer moves are fed in by hand.
+const shareMock = vi.hoisted(() => ({
+  moveListener: null as ((x: number, y: number) => void) | null,
+  live: false,
+  share: null as null | {
+    screen: { x: number; y: number; width: number; height: number };
+    video: { width: number; height: number; format: string };
+  },
+  start: vi.fn(),
+  finish: vi.fn(),
+  pause: vi.fn(),
+  resume: vi.fn(),
+  end: vi.fn(),
+}));
+
+vi.mock('./wayland-capture', () => ({
+  setWaylandShareMoveListener: (listener: ((x: number, y: number) => void) | null) => {
+    shareMock.moveListener = listener;
+  },
+  hasWaylandShare: () => shareMock.live,
+  getWaylandShare: () => shareMock.share,
+  startWaylandShareRecording: shareMock.start,
+  finishWaylandShareRecording: shareMock.finish,
+  pauseWaylandShareRecording: shareMock.pause,
+  resumeWaylandShareRecording: shareMock.resume,
+  endWaylandShare: shareMock.end,
+}));
+
 vi.mock('../../lib/telemetry', () => ({
   trackMemorySnapshot: vi.fn(),
 }));
@@ -217,6 +245,98 @@ describe('recording service on Linux', () => {
       expect(result.durationMs).toBe(3000);
       expect(result.hasEmbeddedAudio).toBe(false);
       expect(result.events).toEqual([]);
+    });
+
+    describe('screen picked through the capture helper', () => {
+      const wide = { x: 1080, y: 272, width: 2560, height: 1440 };
+
+      beforeEach(() => {
+        shareMock.live = true;
+        shareMock.share = { screen: wide, video: { width: 2560, height: 1440, format: 'bgr0' } };
+        shareMock.start.mockResolvedValue({ fps: 60 });
+        shareMock.finish.mockResolvedValue({ ok: true, frames: 180, late: 0 });
+      });
+
+      afterEach(() => {
+        shareMock.live = false;
+        shareMock.share = null;
+      });
+
+      it('records it through the helper, with the pointer moves made while recording', async () => {
+        const { startRecording, stopRecording, isRecordingBusy } = await loadService();
+
+        shareMock.moveListener?.(50, 50); // before recording: not kept
+        await startRecording('screen:wayland', null);
+        expect(isRecordingBusy()).toBe(true);
+        const outPath = shareMock.start.mock.calls[0][1] as string;
+        expect(shareMock.start).toHaveBeenCalledWith('/usr/bin/ffmpeg', outPath);
+        expect(outPath).toMatch(/screenforge-wayland-.*\.mp4$/);
+        shareMock.moveListener?.(1500, 600);
+
+        const result = await stopRecording();
+
+        expect(isRecordingBusy()).toBe(false);
+        expect(result.filePath).toBe(outPath);
+        // Already H.264: no transcode.
+        expect(ffmpegRunnerMock.runFFmpeg).not.toHaveBeenCalled();
+        // The moves are in desktop coordinates, the picked screen's own space.
+        expect(result.recordingArea).toEqual(wide);
+        expect(result.events).toEqual([expect.objectContaining({ type: 'move', x: 1500, y: 600 })]);
+        expect(shareMock.end).toHaveBeenCalled();
+      });
+
+      it('fails the stop when the helper could not save the recording', async () => {
+        shareMock.finish.mockResolvedValue({ ok: false, frames: 0, late: 0 });
+        const { startRecording, stopRecording, isRecordingBusy } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        await expect(stopRecording()).rejects.toThrow(/could not be saved/);
+        expect(isRecordingBusy()).toBe(false);
+      });
+
+      it('passes pause and resume on to the helper', async () => {
+        const { startRecording, pauseRecording, resumeRecording } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        pauseRecording();
+        resumeRecording();
+
+        expect(shareMock.pause).toHaveBeenCalledTimes(1);
+        expect(shareMock.resume).toHaveBeenCalledTimes(1);
+      });
+
+      it('lets the share go when the recording is discarded', async () => {
+        const { startRecording, discardRecording, isRecordingBusy } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        await discardRecording();
+
+        expect(shareMock.end).toHaveBeenCalled();
+        expect(isRecordingBusy()).toBe(false);
+      });
+
+      it('crops an area drawn on a still of the picked screen', async () => {
+        const { startRecording, stopRecording } = await loadService();
+        const { probeExportSource } = await import('../export/service');
+        vi.mocked(probeExportSource).mockResolvedValue({
+          fps: 60,
+          duration: 3,
+          width: 2560,
+          height: 1440,
+        });
+        const area = {
+          x: 100,
+          y: 50,
+          width: 800,
+          height: 600,
+          frame: { width: 2560, height: 1440 },
+        };
+
+        await startRecording('screen:wayland', area);
+        const result = await stopRecording();
+
+        expect(result.areaCrop).toMatchObject({ sourceWidth: 2560, sourceHeight: 1440 });
+      });
     });
 
     describe('area recording', () => {

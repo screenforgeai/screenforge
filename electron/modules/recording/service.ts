@@ -58,6 +58,16 @@ import {
   type CaptureSegment,
 } from './capture-args';
 import { getX11WindowGeometry } from './x11-window-geometry';
+import {
+  endWaylandShare,
+  finishWaylandShareRecording,
+  getWaylandShare,
+  hasWaylandShare,
+  pauseWaylandShareRecording,
+  resumeWaylandShareRecording,
+  setWaylandShareMoveListener,
+  startWaylandShareRecording,
+} from './wayland-capture';
 import { getSystemAudioSupport } from './system-audio';
 import {
   normalizeKeyboardModifiers,
@@ -132,6 +142,10 @@ let nativeMediaStartTime: number | null = null;
 // MediaRecorder and hands the finished webm back at stop time. The main
 // process only tracks timing and transcodes the result.
 let rendererCaptureActive = false;
+// Wayland: the capture helper records the screen picked in its share dialog
+// (wayland-capture.ts), with the pointer kept out of the picture.
+let shareCaptureActive = false;
+let shareCapturePath: string | null = null;
 
 let toolbarWindowTitleForCapture: string | undefined;
 let activeWindowRecording = false;
@@ -287,7 +301,8 @@ export function isRecordingBusy(): boolean {
     captureProc !== null ||
     ffmpegProc !== null ||
     ffmpegCaptureSpawn !== null ||
-    rendererCaptureActive
+    rendererCaptureActive ||
+    shareCaptureActive
   );
 }
 
@@ -564,6 +579,28 @@ function recordCursorEvent(event: Omit<CursorEvent, 'timestamp'>): void {
   cursorEvents.push({ ...event, timestamp: Date.now() });
 }
 
+/** A pointer move, at most 120 a second and only once it has moved a pixel. */
+function recordPointerMove(x: number, y: number): void {
+  const now = Date.now();
+  const dx = x - lastMoveX;
+  const dy = y - lastMoveY;
+  if (now - lastMoveMs < MOVE_MIN_INTERVAL_MS || dx * dx + dy * dy < MOVE_MIN_DISTANCE_SQ) {
+    return;
+  }
+  lastMoveX = x;
+  lastMoveY = y;
+  lastMoveMs = now;
+  recordCursorEvent({ type: 'move', x, y });
+}
+
+// Wayland: the capture helper reports the pointer from the screen pick on;
+// only moves made while recording count.
+setWaylandShareMoveListener((x, y) => {
+  if (shareCaptureActive) {
+    recordPointerMove(x, y);
+  }
+});
+
 async function loadUiohook(): Promise<UiohookInstance> {
   if (loadedUiohook) {
     return loadedUiohook;
@@ -621,16 +658,7 @@ async function startCursorTracking(): Promise<void> {
   uIOhook.removeAllListeners();
 
   uIOhook.on('mousemove', (e) => {
-    const now = Date.now();
-    const dx = e.x - lastMoveX;
-    const dy = e.y - lastMoveY;
-    if (now - lastMoveMs < MOVE_MIN_INTERVAL_MS || dx * dx + dy * dy < MOVE_MIN_DISTANCE_SQ) {
-      return;
-    }
-    lastMoveX = e.x;
-    lastMoveY = e.y;
-    lastMoveMs = now;
-    recordCursorEvent({ type: 'move', x: e.x, y: e.y });
+    recordPointerMove(e.x, e.y);
   });
 
   uIOhook.on('mousedown', (e) => {
@@ -1593,11 +1621,26 @@ export async function startRecording(
     recordingArea = display.bounds;
   }
 
-  // Wayland: the renderer owns the capture (PipeWire portal stream recorded
-  // with MediaRecorder). The main process only anchors timing here; the webm
-  // arrives via stopRecording(). Global input hooks are blocked on Wayland,
-  // so cursor tracking is skipped and cursor effects degrade gracefully.
+  // Wayland: a screen picked through the capture helper is recorded by it,
+  // without the system pointer, which it reports apart for the drawn cursor.
+  // Otherwise (a window, or no helper) the renderer records Chromium's share
+  // with MediaRecorder and the webm arrives via stopRecording(); global input
+  // hooks are blocked on Wayland, so those recordings have no pointer moves.
   if (process.platform === 'linux' && isWaylandSession()) {
+    if (!options?.rendererCapture && hasWaylandShare()) {
+      const outPath = createTempPath('screenforge-wayland', 'mp4');
+      const { fps } = await startWaylandShareRecording(await getFFmpegPath(), outPath);
+      shareCapturePath = outPath;
+      shareCaptureActive = true;
+      emitRecordingActivityChanged();
+      recordingStartTime = Date.now();
+      log.info('[recording:wayland] share capture started', {
+        recordingStartTime,
+        fps,
+        startupLatencyMs: Date.now() - startedAt,
+      });
+      return;
+    }
     if (!options?.rendererCapture) {
       throw new Error(
         'Screen recording on Wayland uses the system screen-share dialog, which could not be started. Please try again.',
@@ -1702,9 +1745,25 @@ export async function stopRecording(rendererCapture?: {
   let filePath: string;
   // On Wayland the screen-share picker chose the monitor, so the video isn't
   // necessarily the display the area was drawn on.
-  const fromScreenSharePicker = rendererCaptureActive;
+  const fromScreenSharePicker = rendererCaptureActive || shareCaptureActive;
 
-  if (rendererCaptureActive) {
+  if (shareCaptureActive) {
+    shareCaptureActive = false;
+    emitRecordingActivityChanged();
+    const result = await finishWaylandShareRecording();
+    const picked = getWaylandShare();
+    endWaylandShare();
+    filePath = shareCapturePath ?? '';
+    shareCapturePath = null;
+    if (!result.ok || result.frames === 0 || !picked) {
+      throw new Error('The screen recording could not be saved.');
+    }
+    if (result.late > 0) {
+      log.warn('[recording:wayland] the encoder fell behind', result);
+    }
+    // The pointer moves are in desktop coordinates, the screen's own space.
+    recordingArea = { ...picked.screen };
+  } else if (rendererCaptureActive) {
     rendererCaptureActive = false;
     emitRecordingActivityChanged();
     if (!rendererCapture?.webmPath) {
@@ -1911,6 +1970,14 @@ export async function discardRecording(): Promise<void> {
       // Wayland: the renderer discards its own MediaRecorder chunks.
       rendererCaptureActive = false;
       emitRecordingActivityChanged();
+    } else if (shareCaptureActive) {
+      shareCaptureActive = false;
+      endWaylandShare();
+      emitRecordingActivityChanged();
+      if (shareCapturePath) {
+        filePaths = [shareCapturePath];
+      }
+      shareCapturePath = null;
     } else if (captureProc) {
       filePaths = [await stopNativeCapture()];
     } else {
@@ -1951,6 +2018,10 @@ export function pauseRecording(): void {
     // bookkeeping above is needed here.
     return;
   }
+  if (shareCaptureActive) {
+    pauseWaylandShareRecording();
+    return;
+  }
 
   if (captureProc) {
     // Use stdin message instead of SIGSTOP to avoid AVAssetWriter timestamp corruption
@@ -1981,6 +2052,11 @@ export function resumeRecording(): void {
   };
 
   if (rendererCaptureActive) {
+    endPauseSpan();
+    return;
+  }
+  if (shareCaptureActive) {
+    resumeWaylandShareRecording();
     endPauseSpan();
     return;
   }

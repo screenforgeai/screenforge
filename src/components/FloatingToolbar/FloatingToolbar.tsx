@@ -439,6 +439,9 @@ export const FloatingToolbar = () => {
   const screenRecorderRef = useRef<MediaRecorder | null>(null);
   const screenChunksRef = useRef<Blob[]>([]);
   const [screenTrack, setScreenTrack] = useState<MediaStreamTrack | null>(null);
+  // Wayland: the screen picked through the capture helper, which records it without the system
+  // pointer (the editor draws the cursor). Chromium's share is the fallback, and is used for windows.
+  const helperShareRef = useRef(false);
   const toolbarRootRef = useRef<HTMLDivElement | null>(null);
   const toolbarInteractiveRef = useRef<boolean | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -891,28 +894,41 @@ export const FloatingToolbar = () => {
 
   // Wayland: the user can end the capture from the OS screen-share indicator —
   // treat that like pressing stop.
+  const handlePickedShareEnded = useEffectEvent(() => {
+    if (recordStateRef.current === 'countdown' && !screenRecorderRef.current) {
+      // Ended before recording began: there is nothing to keep.
+      stopWaylandStream();
+      setRecordState('idle');
+      setCountdown(3);
+      return;
+    }
+    if (recordStateRef.current === 'recording' || recordStateRef.current === 'paused') {
+      handleStopEvent();
+    }
+  });
+
   useEffect(() => {
     if (!screenTrack) {
       return;
     }
-
-    const onEnded = () => {
-      if (recordStateRef.current === 'countdown' && !screenRecorderRef.current) {
-        // Ended before recording began: there is nothing to keep.
-        stopWaylandStream();
-        setRecordState('idle');
-        setCountdown(3);
-        return;
-      }
-      if (recordStateRef.current === 'recording' || recordStateRef.current === 'paused') {
-        handleStopEvent();
-      }
-    };
+    const onEnded = () => handlePickedShareEnded();
     screenTrack.addEventListener('ended', onEnded);
     return () => {
       screenTrack.removeEventListener('ended', onEnded);
     };
   }, [screenTrack]);
+
+  useEffect(
+    () =>
+      window.screenforge.onShareEnded?.(() => {
+        if (!helperShareRef.current) {
+          return;
+        }
+        helperShareRef.current = false;
+        handlePickedShareEnded();
+      }),
+    [],
+  );
 
   // Cleanup mic stream and audio context on unmount
   useEffect(() => {
@@ -950,6 +966,10 @@ export const FloatingToolbar = () => {
       screenRecorderRef.current = null;
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
+      if (helperShareRef.current) {
+        helperShareRef.current = false;
+        void window.screenforge.endShare().catch(() => undefined);
+      }
     };
   }, [stopCameraPreview, stopMicStream]);
 
@@ -989,12 +1009,18 @@ export const FloatingToolbar = () => {
       };
       if (captureBackendRef.current === 'wayland-portal') {
         // Picked in the share dialog before the countdown (pickWaylandShare).
-        if (!screenStreamRef.current) {
+        if (!screenStreamRef.current && !helperShareRef.current) {
           await openWaylandPortalStream(pickWindowInDialog ? 'window' : 'screen');
         }
         try {
-          startWaylandRecorder();
-          await window.screenforge.startRecording(sourceId, cropArea, { rendererCapture: true });
+          if (helperShareRef.current) {
+            // The main process records the picked screen through the capture helper.
+            captureSourceRef.current = { kind: tab, displaySurface: 'monitor' };
+            await window.screenforge.startRecording(sourceId, cropArea);
+          } else {
+            startWaylandRecorder();
+            await window.screenforge.startRecording(sourceId, cropArea, { rendererCapture: true });
+          }
         } catch (err) {
           discardWaylandPortalCapture();
           throw err;
@@ -1522,6 +1548,10 @@ export const FloatingToolbar = () => {
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     screenStreamRef.current = null;
     setScreenTrack(null);
+    if (helperShareRef.current) {
+      helperShareRef.current = false;
+      void window.screenforge.endShare().catch(() => undefined);
+    }
   }
 
   /**
@@ -1558,7 +1588,14 @@ export const FloatingToolbar = () => {
     }
     try {
       const stream = screenStreamRef.current;
-      if (stream) {
+      if (helperShareRef.current) {
+        const still = await window.screenforge.screenStill();
+        const area = await window.screenforge.selectAreaOnStill(still);
+        // The share may have been ended from the system indicator while the area was drawn.
+        if (area && helperShareRef.current) {
+          return area;
+        }
+      } else if (stream) {
         const area = await window.screenforge.selectAreaOnStill(await grabStreamStill(stream));
         // The share may have been ended from the system indicator while the area was drawn.
         const stillShared =
@@ -1571,9 +1608,9 @@ export const FloatingToolbar = () => {
     } catch (err) {
       console.error('[recording] drawing the area on the picked screen failed:', err);
       // Ended from the system indicator: the user stopped it, nothing to warn about.
-      const shared = screenStreamRef.current
-        ?.getVideoTracks()
-        .some((track) => track.readyState === 'live');
+      const shared =
+        helperShareRef.current ||
+        screenStreamRef.current?.getVideoTracks().some((track) => track.readyState === 'live');
       if (shared) {
         window.screenforge.systemWarning(getErrorMessage(err));
       }
@@ -1583,6 +1620,18 @@ export const FloatingToolbar = () => {
   }
 
   async function openWaylandPortalStream(kind: 'screen' | 'window'): Promise<void> {
+    if (kind === 'screen') {
+      // The capture helper shares the screen without the system pointer, so the editor's drawn
+      // cursor is the only one; Chromium's share below always paints the pointer in.
+      const pick = await window.screenforge.pickScreen();
+      if (pick === 'picked') {
+        helperShareRef.current = true;
+        return;
+      }
+      if (pick === 'cancelled') {
+        throw new DOMException('The share dialog was closed.', 'NotAllowedError');
+      }
+    }
     // Stored before the share request below reads it.
     await window.screenforge.setShareKind(kind);
     const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -1695,6 +1744,15 @@ export const FloatingToolbar = () => {
     Awaited<ReturnType<typeof window.screenforge.stopRecording>>
   > {
     if (captureBackendRef.current === 'wayland-portal') {
+      if (!screenRecorderRef.current) {
+        // Recorded through the capture helper: the share is let go only once the main process
+        // has finished the file.
+        try {
+          return await window.screenforge.stopRecording();
+        } finally {
+          stopWaylandStream();
+        }
+      }
       const rendererCapture = await stopWaylandPortalCapture();
       return window.screenforge.stopRecording(rendererCapture ?? undefined);
     }

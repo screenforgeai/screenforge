@@ -213,6 +213,10 @@ function createScreenforgeMock(backend: CaptureBackend) {
     setToolbarShape: vi.fn(),
     getToolbarLayout: vi.fn().mockResolvedValue('overlay'),
     setShareKind: vi.fn().mockResolvedValue(undefined),
+    pickScreen: vi.fn().mockResolvedValue('unavailable'),
+    screenStill: vi.fn(),
+    endShare: vi.fn().mockResolvedValue(undefined),
+    onShareEnded: vi.fn<[() => void], () => void>(() => () => undefined),
     takeScreenshot: vi.fn().mockResolvedValue(undefined),
     selectAreaOnStill: vi.fn().mockResolvedValue(null),
     setToolbarSize: vi.fn(),
@@ -495,6 +499,15 @@ describe('FloatingToolbar recording widget', () => {
   describe('Wayland portal backend (Linux)', () => {
     beforeEach(() => installMocks('wayland-portal'));
 
+    const clickAreaOnPortal = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+    };
+
     it('records the portal stream in the renderer and hands the webm to the main process', async () => {
       await clickRecordAndFinishCountdown();
       await waitForRecordingState();
@@ -537,6 +550,106 @@ describe('FloatingToolbar recording widget', () => {
       );
     });
 
+    describe('screen picked through the capture helper', () => {
+      beforeEach(() => {
+        screenforge.pickScreen.mockResolvedValue('picked');
+      });
+
+      it('lets the main process record it, without Chromium sharing the screen', async () => {
+        await clickRecordAndFinishCountdown();
+        await waitForRecordingState();
+
+        expect(getDisplayMedia).not.toHaveBeenCalled();
+        expect(FakeMediaRecorder.instances).toHaveLength(0);
+        expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0', null);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+        await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+        expect(screenforge.stopRecording).toHaveBeenCalledWith();
+        // The share is let go only once the recording is finished.
+        expect(screenforge.stopRecording.mock.invocationCallOrder[0]).toBeLessThan(
+          screenforge.endShare.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('goes back to idle, without a warning, when its share dialog is closed', async () => {
+        screenforge.pickScreen.mockResolvedValue('cancelled');
+
+        await clickRecord();
+        await waitFor(() => expect(screenforge.pickScreen).toHaveBeenCalled());
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(4400);
+        });
+
+        expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+        expect(getDisplayMedia).not.toHaveBeenCalled();
+        expect(screenforge.systemWarning).not.toHaveBeenCalled();
+        expect(await screen.findByRole('button', { name: 'Record' })).toBeEnabled();
+      });
+
+      it('stops the recording when the share is ended from the system', async () => {
+        await clickRecordAndFinishCountdown();
+        await waitForRecordingState();
+
+        const onShareEnded = screenforge.onShareEnded.mock.calls.at(-1)?.[0] as () => void;
+        act(() => onShareEnded());
+
+        await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+        expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+      });
+
+      it('cancels the countdown when the share is ended from the system', async () => {
+        await clickRecord();
+        await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+
+        const onShareEnded = screenforge.onShareEnded.mock.calls.at(-1)?.[0] as () => void;
+        act(() => onShareEnded());
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(4400);
+        });
+
+        expect(screenforge.startRecording).not.toHaveBeenCalled();
+        expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+      });
+
+      it('records an area drawn on a still of the picked screen', async () => {
+        const still = { png: new Uint8Array([1]), width: 2560, height: 1440 };
+        const area = { x: 1, y: 2, width: 300, height: 200, frame: { width: 2560, height: 1440 } };
+        screenforge.screenStill.mockResolvedValue(still);
+        screenforge.selectAreaOnStill.mockResolvedValue(area);
+        await clickAreaOnPortal();
+        await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+
+        expect(screenforge.selectAreaOnStill).toHaveBeenCalledWith(still);
+        expect(getDisplayMedia).not.toHaveBeenCalled();
+
+        await finishCountdown();
+        await waitForRecordingState();
+        expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0', area);
+      });
+
+      it('drops the area when the share ended while it was drawn', async () => {
+        screenforge.screenStill.mockResolvedValue({
+          png: new Uint8Array([1]),
+          width: 2,
+          height: 2,
+        });
+        screenforge.selectAreaOnStill.mockImplementation(async () => {
+          const onShareEnded = screenforge.onShareEnded.mock.calls.at(-1)?.[0] as () => void;
+          onShareEnded();
+          return { x: 0, y: 0, width: 1, height: 1, frame: { width: 2, height: 2 } };
+        });
+        await clickAreaOnPortal();
+        await waitFor(() => expect(screenforge.selectAreaOnStill).toHaveBeenCalled());
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(4400);
+        });
+
+        expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+        expect(screenforge.startRecording).not.toHaveBeenCalled();
+      });
+    });
+
     it('records a window picked in the share dialog: Wayland cannot list windows in-app', async () => {
       render(<FloatingToolbar />);
       await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
@@ -576,6 +689,8 @@ describe('FloatingToolbar recording widget', () => {
 
       expect(screenforge.setShareKind).toHaveBeenCalledWith('window');
       expect(getDisplayMedia).toHaveBeenCalled();
+      // Windows are shared through Chromium: the capture helper records screens only.
+      expect(screenforge.pickScreen).not.toHaveBeenCalled();
       // The portal stream is the capture; there is no window: source id to resolve.
       expect(screenforge.startRecording.mock.calls[0][0]).not.toMatch(/^window:/);
     });
@@ -690,15 +805,6 @@ describe('FloatingToolbar recording widget', () => {
       expect(screenforge.startRecording).not.toHaveBeenCalled();
       expect(FakeMediaRecorder.instances).toHaveLength(0);
     });
-
-    const clickAreaOnPortal = async () => {
-      render(<FloatingToolbar />);
-      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
-      await act(async () => {
-        await Promise.resolve();
-      });
-      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
-    };
 
     it('records an area by picking the screen first, then drawing on a still of it', async () => {
       const area = { x: 1, y: 2, width: 300, height: 200, frame: { width: 2560, height: 1440 } };

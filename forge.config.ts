@@ -82,9 +82,15 @@ if (process.platform === 'win32') {
   extraResources.unshift('./native/bin/win32-x64/ScreenforgeCapture.exe');
 } else if (process.platform === 'darwin') {
   extraResources.unshift('./native/bin/ScreenforgeCapture');
+} else if (process.platform === 'linux') {
+  // Linux records with bundled FFmpeg on X11. On Wayland its helper records a
+  // picked screen with the pointer kept apart, so the editor draws the only
+  // cursor; without it, screens are shared through Chromium (no drawn cursor).
+  const waylandCaptureHelper = `./native/bin/linux-${process.arch}/screenforge-wayland-capture`;
+  if (fs.existsSync(waylandCaptureHelper)) {
+    extraResources.unshift(waylandCaptureHelper);
+  }
 }
-// Linux has no native capture helper: X11 capture uses bundled FFmpeg,
-// Wayland capture happens in the renderer via the PipeWire portal.
 const macAppIconPath = path.resolve(__dirname, 'build', 'icons', 'screenforge.icns');
 const winAppIconPath = path.resolve(__dirname, 'build', 'icons', 'screenforge.ico');
 const linuxAppIconPath = path.resolve(__dirname, 'build', 'icons', 'screenforge.png');
