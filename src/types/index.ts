@@ -106,6 +106,11 @@ export interface SelectedArea {
   height: number;
   /** The display the selector covered, as it was then (DIP size). */
   display?: { id: number; width: number; height: number };
+  /**
+   * Wayland: the area was drawn on a still of the screen picked in the share dialog, in the
+   * still's own pixels; this is the still's size, so the area can be found in the recorded video.
+   */
+  frame?: { width: number; height: number };
 }
 
 export interface ScreenshotCaptureRequest {
@@ -630,7 +635,7 @@ export interface TextClip {
 }
 
 /** 'screenshot-still': Wayland, drawing on a still of the screen picked in the share dialog. */
-export type AreaSelectorPurpose = 'record' | 'screenshot' | 'screenshot-still';
+export type AreaSelectorPurpose = 'record' | 'screenshot' | 'screenshot-still' | 'record-still';
 
 /** Wayland: the still an area is drawn on, and its size in pixels. */
 export interface AreaSelectorStill {
@@ -863,6 +868,12 @@ export interface ScreenforgeAPI {
   getAreaSelectorStill: () => Promise<AreaSelectorStill | null>;
   /** `purpose` picks the confirm button: record (default) or take a screenshot. */
   openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
+  /** Wayland: draw a recording area on a still of the screen picked in the share dialog. */
+  selectAreaOnStill: (still: {
+    png: Uint8Array;
+    width: number;
+    height: number;
+  }) => Promise<SelectedArea | null>;
   getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;
   /** The record shortcut asks an open toolbar to switch back to Video. */
   onVideoModeRequested: (cb: () => void) => () => void;

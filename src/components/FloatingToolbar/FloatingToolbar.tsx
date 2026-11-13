@@ -25,6 +25,7 @@ import {
   WAYLAND_PICKED_SCREEN_ID,
   WAYLAND_PICKED_WINDOW_ID,
 } from 'src/lib/recording/waylandPicker';
+import { grabStreamStill } from 'src/lib/recording/streamStill';
 import { cn } from 'src/lib/utils';
 import { formatShortcut } from 'src/lib/captureShortcuts';
 import { readableErrorMessage } from 'src/lib/ipcError';
@@ -51,6 +52,7 @@ import type {
   ScreenshotCaptureRequest,
   RegisteredCaptureShortcuts,
   RecordingCaptureSource,
+  SelectedArea,
 } from '../../types/index';
 import { displaySurfaceOf } from '../../lib/recording/captureSource';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
@@ -354,12 +356,7 @@ export const FloatingToolbar = () => {
   const [isAppendMode, setIsAppendMode] = useState(false);
   const [sceneOverlayOpen, setSceneOverlayOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedArea, setSelectedArea] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
+  const [selectedArea, setSelectedArea] = useState<SelectedArea | null>(null);
 
   useEffect(() => {
     window.screenforge.getAppendMode().then(setIsAppendMode);
@@ -891,6 +888,13 @@ export const FloatingToolbar = () => {
     }
 
     const onEnded = () => {
+      if (recordStateRef.current === 'countdown' && !screenRecorderRef.current) {
+        // Ended before recording began: there is nothing to keep.
+        stopWaylandStream();
+        setRecordState('idle');
+        setCountdown(3);
+        return;
+      }
       if (recordStateRef.current === 'recording' || recordStateRef.current === 'paused') {
         handleStopEvent();
       }
@@ -948,6 +952,7 @@ export const FloatingToolbar = () => {
       ? resolveSourceIdForTab('display', null, sources)
       : resolveSourceIdForTab(tab, selectedSource, sources);
     if (!sourceId) {
+      discardWaylandPortalCapture();
       window.screenforge.systemWarning(tab === 'window' ? t('chooseWindow') : t('noDisplaySource'));
       return;
     }
@@ -974,8 +979,12 @@ export const FloatingToolbar = () => {
           selectedSource?.windowTitle && { windowTitle: selectedSource.windowTitle }),
       };
       if (captureBackendRef.current === 'wayland-portal') {
-        await startWaylandPortalCapture(pickWindowInDialog ? 'window' : 'screen');
+        // Picked in the share dialog before the countdown (pickWaylandShare).
+        if (!screenStreamRef.current) {
+          await openWaylandPortalStream(pickWindowInDialog ? 'window' : 'screen');
+        }
         try {
+          startWaylandRecorder();
           await window.screenforge.startRecording(sourceId, cropArea, { rendererCapture: true });
         } catch (err) {
           discardWaylandPortalCapture();
@@ -1135,7 +1144,10 @@ export const FloatingToolbar = () => {
         return;
       }
 
-      const area = await window.screenforge.openAreaSelector();
+      const area =
+        captureBackendRef.current === 'wayland-portal'
+          ? await pickWaylandArea()
+          : await window.screenforge.openAreaSelector();
       if (!area) {
         setTab('display');
         return;
@@ -1161,6 +1173,12 @@ export const FloatingToolbar = () => {
 
       const hasRecordingPermissions = await ensureRecordingStartPermissions();
       if (!hasRecordingPermissions) {
+        return;
+      }
+      if (
+        captureBackendRef.current === 'wayland-portal' &&
+        !(await pickWaylandShare(tab === 'window' ? 'window' : 'screen'))
+      ) {
         return;
       }
 
@@ -1484,8 +1502,55 @@ export const FloatingToolbar = () => {
     setScreenTrack(null);
   }
 
-  async function startWaylandPortalCapture(kind: 'screen' | 'window'): Promise<void> {
-    // Opens the OS screen-share picker, on its screens or (from the Window tab) its windows.
+  /**
+   * Wayland: opens the OS share dialog on its screens or (from the Window tab) its windows, so the
+   * user picks what to record before the countdown. Resolves false when nothing was picked.
+   */
+  async function pickWaylandShare(kind: 'screen' | 'window'): Promise<boolean> {
+    try {
+      await openWaylandPortalStream(kind);
+      return true;
+    } catch (err) {
+      stopWaylandStream();
+      // Closing the dialog without a pick is a choice, not an error.
+      if (!(err instanceof DOMException && err.name === 'NotAllowedError')) {
+        console.error('[recording] share dialog failed:', err);
+        window.screenforge.systemWarning(getErrorMessage(err));
+      }
+      logToolbarDiagnostic('toolbar.recording.share-not-picked', {
+        kind,
+        message: getErrorMessage(err),
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Wayland: the screen is picked in the share dialog first, then the area is drawn on a still
+   * of it (a selector over the live screen could land on any monitor). Null when either is
+   * cancelled; the picked screen is let go then.
+   */
+  async function pickWaylandArea(): Promise<SelectedArea | null> {
+    if (!(await pickWaylandShare('screen'))) {
+      return null;
+    }
+    try {
+      const stream = screenStreamRef.current;
+      if (stream) {
+        const area = await window.screenforge.selectAreaOnStill(await grabStreamStill(stream));
+        if (area) {
+          return area;
+        }
+      }
+    } catch (err) {
+      console.error('[recording] drawing the area on the picked screen failed:', err);
+      window.screenforge.systemWarning(getErrorMessage(err));
+    }
+    stopWaylandStream();
+    return null;
+  }
+
+  async function openWaylandPortalStream(kind: 'screen' | 'window'): Promise<void> {
     // Stored before the share request below reads it.
     await window.screenforge.setShareKind(kind);
     const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -1493,12 +1558,20 @@ export const FloatingToolbar = () => {
       video: { frameRate: { ideal: 60, max: 60 } },
     });
     screenStreamRef.current = stream;
-    screenChunksRef.current = [];
-
     // Tracked via state so the track-ended effect below can react when the
     // user ends the capture from the OS screen-share indicator.
     const [videoTrack] = stream.getVideoTracks();
     setScreenTrack(videoTrack ?? null);
+  }
+
+  /** Records the stream picked in the share dialog, once the countdown is over. */
+  function startWaylandRecorder(): void {
+    const stream = screenStreamRef.current;
+    if (!stream) {
+      throw new Error('Nothing was picked to record.');
+    }
+    screenChunksRef.current = [];
+    const [videoTrack] = stream.getVideoTracks();
     // The portal, not the toolbar, decides what's shared: a tab, a window or a screen.
     const displaySurface = displaySurfaceOf(videoTrack);
     if (displaySurface) {
@@ -1816,7 +1889,9 @@ export const FloatingToolbar = () => {
           (recordState === 'countdown' ||
             recordState === 'recording' ||
             recordState === 'paused') &&
-          selectedArea && (
+          selectedArea &&
+          // Drawn on a still (Wayland): in the still's pixels, not this window's.
+          !selectedArea.frame && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2038,109 +2113,128 @@ export const FloatingToolbar = () => {
                       </TooltipContent>
                     </Tooltip>
 
-                    <DropdownMenu
+                    {portalCapture ? (
                       // Wayland: no list to show (apps cannot see other apps' windows there);
                       // the window is picked in the share dialog when recording starts.
-                      open={portalCapture ? false : undefined}
-                      onOpenChange={(open) => {
-                        if (portalCapture) {
-                          return;
-                        }
-                        setWindowMenuOpen(open);
-                        if (open) {
-                          setSources([]);
-                          setSourcesLoading(true);
-                          window.screenforge.getSources().then((s) => {
-                            setSources(s);
-                            setSourcesLoading(false);
-                          });
-                        } else {
-                          setSourcesLoading(false);
-                        }
-                      }}
-                    >
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={t('window')}
-                              onClick={() => setTab('window')}
-                              className={`${toolbarButtonCls} ${tabCls(tab === 'window')}`}
-                            >
-                              <IconAppWindow size={16} />
-                            </Button>
-                          </DropdownMenuTrigger>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('window')}
+                            onClick={() => setTab('window')}
+                            className={`${toolbarButtonCls} ${tabCls(tab === 'window')}`}
+                          >
+                            <IconAppWindow size={16} />
+                          </Button>
                         </TooltipTrigger>
-                        <TooltipContent side={popSide} avoidCollisions={!asWindow}>
-                          {portalCapture
-                            ? t('windowPickOnRecord')
-                            : tab === 'window' && selectedSource
-                              ? getWindowSourcePrimaryLabel(selectedSource)
-                              : t('window')}
+                        <TooltipContent
+                          side={popSide}
+                          avoidCollisions={!asWindow}
+                          className="max-w-[180px] text-center"
+                        >
+                          {t('windowPickOnRecord')}
                         </TooltipContent>
                       </Tooltip>
-
-                      <DropdownMenuContent
-                        side={popSide}
-                        avoidCollisions={!asWindow}
-                        sideOffset={10}
-                        align="center"
-                        className="min-w-[240px] max-h-56"
+                    ) : (
+                      <DropdownMenu
+                        onOpenChange={(open) => {
+                          setWindowMenuOpen(open);
+                          if (open) {
+                            setSources([]);
+                            setSourcesLoading(true);
+                            window.screenforge.getSources().then((s) => {
+                              setSources(s);
+                              setSourcesLoading(false);
+                            });
+                          } else {
+                            setSourcesLoading(false);
+                          }
+                        }}
                       >
-                        {sourcesLoading ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Spinner className="size-4 text-sf-border fill-sf-primary" />
-                          </div>
-                        ) : windowSources.length === 0 ? (
-                          <FloatingToolbarMenuEmptyState
-                            icon={<IconAppWindow size={16} />}
-                            title={t('noWindows_title')}
-                            description={t('noWindows_desc')}
-                          />
-                        ) : (
-                          windowSources.map((src) => (
-                            <DropdownMenuItem
-                              key={src.id}
-                              textValue={[
-                                getWindowSourcePrimaryLabel(src),
-                                getWindowSourceSubtitle(src, duplicateWindowAppCounts),
-                              ]
-                                .filter(Boolean)
-                                .join(' ')}
-                              onSelect={() => {
-                                setSelectedSource(src);
-                                setTab('window');
-                                focusDesktopSourceWindow(src);
-                              }}
-                              className={
-                                selectedSource?.id === src.id ? 'bg-[#17171c] font-medium' : ''
-                              }
-                            >
-                              {src.appIcon && (
-                                <img
-                                  src={src.appIcon}
-                                  alt=""
-                                  className="h-4 w-4 shrink-0 rounded-sm"
-                                />
-                              )}
-                              <div className="flex min-w-0 flex-1 flex-col">
-                                <span className="truncate">{getWindowSourcePrimaryLabel(src)}</span>
-                                {getWindowSourceSubtitle(src, duplicateWindowAppCounts) && (
-                                  <span className="truncate text-xs text-sf-secondary">
-                                    {getWindowSourceSubtitle(src, duplicateWindowAppCounts)}
-                                  </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={t('window')}
+                                onClick={() => setTab('window')}
+                                className={`${toolbarButtonCls} ${tabCls(tab === 'window')}`}
+                              >
+                                <IconAppWindow size={16} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {tab === 'window' && selectedSource
+                              ? getWindowSourcePrimaryLabel(selectedSource)
+                              : t('window')}
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <DropdownMenuContent
+                          side={popSide}
+                          avoidCollisions={!asWindow}
+                          sideOffset={10}
+                          align="center"
+                          className="min-w-[240px] max-h-56"
+                        >
+                          {sourcesLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Spinner className="size-4 text-sf-border fill-sf-primary" />
+                            </div>
+                          ) : windowSources.length === 0 ? (
+                            <FloatingToolbarMenuEmptyState
+                              icon={<IconAppWindow size={16} />}
+                              title={t('noWindows_title')}
+                              description={t('noWindows_desc')}
+                            />
+                          ) : (
+                            windowSources.map((src) => (
+                              <DropdownMenuItem
+                                key={src.id}
+                                textValue={[
+                                  getWindowSourcePrimaryLabel(src),
+                                  getWindowSourceSubtitle(src, duplicateWindowAppCounts),
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                onSelect={() => {
+                                  setSelectedSource(src);
+                                  setTab('window');
+                                  focusDesktopSourceWindow(src);
+                                }}
+                                className={
+                                  selectedSource?.id === src.id ? 'bg-[#17171c] font-medium' : ''
+                                }
+                              >
+                                {src.appIcon && (
+                                  <img
+                                    src={src.appIcon}
+                                    alt=""
+                                    className="h-4 w-4 shrink-0 rounded-sm"
+                                  />
                                 )}
-                              </div>
-                              {selectedSource?.id === src.id && (
-                                <IconCheck size={12} className="shrink-0 text-primary" />
-                              )}
-                            </DropdownMenuItem>
-                          ))
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                                <div className="flex min-w-0 flex-1 flex-col">
+                                  <span className="truncate">
+                                    {getWindowSourcePrimaryLabel(src)}
+                                  </span>
+                                  {getWindowSourceSubtitle(src, duplicateWindowAppCounts) && (
+                                    <span className="truncate text-xs text-sf-secondary">
+                                      {getWindowSourceSubtitle(src, duplicateWindowAppCounts)}
+                                    </span>
+                                  )}
+                                </div>
+                                {selectedSource?.id === src.id && (
+                                  <IconCheck size={12} className="shrink-0 text-primary" />
+                                )}
+                              </DropdownMenuItem>
+                            ))
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
 
                     <Tooltip>
                       <TooltipTrigger asChild>

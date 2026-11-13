@@ -12,4 +12,8 @@ export const areaSelectorBridge = {
   openAreaSelector: createInvokeBridge<[purpose?: 'record' | 'screenshot'], SelectedArea | null>(
     CH.areaSelector.OPEN,
   ),
+  selectAreaOnStill: createInvokeBridge<
+    [still: { png: Uint8Array; width: number; height: number }],
+    SelectedArea | null
+  >(CH.areaSelector.OPEN_ON_STILL),
 };

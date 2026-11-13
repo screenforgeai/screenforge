@@ -265,6 +265,54 @@ describe('recording service on Linux', () => {
         expect(matching.areaCrop).toMatchObject({ sourceWidth: 1920, sourceHeight: 1080 });
       });
 
+      describe('drawn on a still of the picked screen', () => {
+        // The still is the stream's own picture, so any monitor can be picked.
+        const onStill = {
+          x: 100,
+          y: 50,
+          width: 400,
+          height: 300,
+          frame: { width: 2560, height: 1440 },
+        };
+
+        async function stopWithVideo(video: { width: number; height: number }) {
+          const { startRecording, stopRecording } = await loadService();
+          const { probeExportSource } = await import('../export/service');
+          vi.mocked(probeExportSource).mockResolvedValue({ fps: 30, duration: 3, ...video });
+          await startRecording('screen:wayland', onStill, { rendererCapture: true });
+          return stopRecording({ webmPath: '/tmp/portal-capture.webm', ...video });
+        }
+
+        it('crops it in the video, whatever monitor was picked', async () => {
+          const result = await stopWithVideo({ width: 2560, height: 1440 });
+          expect(result.areaCrop).toEqual({
+            x: 100,
+            y: 50,
+            width: 400,
+            height: 300,
+            sourceWidth: 2560,
+            sourceHeight: 1440,
+          });
+        });
+
+        it('scales it when the video came out smaller than the still', async () => {
+          const result = await stopWithVideo({ width: 1280, height: 720 });
+          expect(result.areaCrop).toEqual({
+            x: 50,
+            y: 25,
+            width: 200,
+            height: 150,
+            sourceWidth: 1280,
+            sourceHeight: 720,
+          });
+        });
+
+        it('opens uncropped when the video is not the picture it was drawn on', async () => {
+          const result = await stopWithVideo({ width: 1080, height: 1920 });
+          expect(result.areaCrop).toBeUndefined();
+        });
+      });
+
       it('opens uncropped when neither the video nor the stream has a size', async () => {
         const result = await stopWithStream({}, { width: null, height: null });
         expect(result.areaCrop).toBeUndefined();
