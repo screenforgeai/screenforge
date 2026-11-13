@@ -784,6 +784,31 @@ describe('FloatingToolbar recording widget', () => {
       await waitFor(() => expect(getDisplayMedia).toHaveBeenCalledTimes(2));
     });
 
+    it('opens one share dialog when Record is clicked twice before it appears', async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // Both clicks land while the first is still preparing; the second's checks finish only
+      // after the first has picked.
+      screenforge.prepareRecordingStartPermissions
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(() => new Promise((resolve) => setTimeout(resolve, 500)));
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      // Each click re-renders the button: find it again.
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+
+      // Both clicks were handled; only the first one asked.
+      expect(screenforge.prepareRecordingStartPermissions).toHaveBeenCalledTimes(1);
+      expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+      expect(portalTrack.stop).not.toHaveBeenCalled();
+    });
+
     it('opens no other share dialog while the area is being drawn', async () => {
       const area = { x: 1, y: 2, width: 300, height: 200, frame: { width: 2560, height: 1440 } };
       let draw: (value: typeof area) => void = () => undefined;

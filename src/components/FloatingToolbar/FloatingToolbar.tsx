@@ -328,8 +328,8 @@ export const FloatingToolbar = () => {
   // (saving, handing the recording to the editor) the toolbar is still busy.
   // A count, so a second Record click can't end the first one's preparation.
   const [preparingRecordings, setPreparingRecordings] = useState(0);
-  // Wayland: set while the share dialog is open (and, for Area, until the area is drawn), so a
-  // second click cannot open another one.
+  // Wayland: set from a Record or Area click until its countdown starts or it is cancelled
+  // (share dialog, area drawing included), so a second click cannot open another dialog.
   const pickingShareRef = useRef(false);
   const [isSavingRecording, setIsSavingRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -1133,6 +1133,8 @@ export const FloatingToolbar = () => {
       return;
     }
 
+    const onPortal = captureBackendRef.current === 'wayland-portal';
+    pickingShareRef.current = onPortal;
     setTab('area');
     setPreparingRecordings((n) => n + 1);
     try {
@@ -1162,6 +1164,9 @@ export const FloatingToolbar = () => {
     } finally {
       // Batched with the countdown above, so busy never dips in between.
       setPreparingRecordings((n) => n - 1);
+      if (onPortal) {
+        pickingShareRef.current = false;
+      }
     }
   }
 
@@ -1169,6 +1174,8 @@ export const FloatingToolbar = () => {
     if (pickingShareRef.current) {
       return;
     }
+    const onPortal = captureBackendRef.current === 'wayland-portal';
+    pickingShareRef.current = onPortal;
     setPreparingRecordings((n) => n + 1);
     try {
       try {
@@ -1192,6 +1199,9 @@ export const FloatingToolbar = () => {
       setRecordState('countdown');
     } finally {
       setPreparingRecordings((n) => n - 1);
+      if (onPortal) {
+        pickingShareRef.current = false;
+      }
     }
   }
 
@@ -1513,10 +1523,6 @@ export const FloatingToolbar = () => {
    * user picks what to record before the countdown. Resolves false when nothing was picked.
    */
   async function pickWaylandShare(kind: 'screen' | 'window'): Promise<boolean> {
-    if (pickingShareRef.current) {
-      return false;
-    }
-    pickingShareRef.current = true;
     try {
       await openWaylandPortalStream(kind);
       return true;
@@ -1532,8 +1538,6 @@ export const FloatingToolbar = () => {
         message: getErrorMessage(err),
       });
       return false;
-    } finally {
-      pickingShareRef.current = false;
     }
   }
 
@@ -1546,9 +1550,6 @@ export const FloatingToolbar = () => {
     if (!(await pickWaylandShare('screen'))) {
       return null;
     }
-    // Held until the area is drawn: the still may open on another monitor, leaving the toolbar
-    // clickable.
-    pickingShareRef.current = true;
     try {
       const stream = screenStreamRef.current;
       if (stream) {
@@ -1570,8 +1571,6 @@ export const FloatingToolbar = () => {
       if (shared) {
         window.screenforge.systemWarning(getErrorMessage(err));
       }
-    } finally {
-      pickingShareRef.current = false;
     }
     stopWaylandStream();
     return null;
