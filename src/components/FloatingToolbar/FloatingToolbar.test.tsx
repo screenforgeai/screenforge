@@ -202,6 +202,10 @@ function createScreenforgeMock(backend: CaptureBackend) {
     systemWarning: vi.fn(),
     setToolbarMouseInteractivity: vi.fn(),
     setToolbarShape: vi.fn(),
+    getToolbarLayout: vi.fn().mockResolvedValue('overlay'),
+    setShareKind: vi.fn().mockResolvedValue(undefined),
+    takeScreenshot: vi.fn().mockResolvedValue(undefined),
+    setToolbarSize: vi.fn(),
     minimizeToDock: vi.fn(),
     showMain: vi.fn(),
     writeDiagnosticLog: vi.fn(),
@@ -507,6 +511,90 @@ describe('FloatingToolbar recording widget', () => {
       expect(screenforge.recordingFailed).not.toHaveBeenCalled();
     });
 
+    it('asks the share dialog for a screen when recording the display', async () => {
+      await clickRecordAndFinishCountdown();
+      await waitForRecordingState();
+      expect(screenforge.setShareKind).toHaveBeenCalledWith('screen');
+      expect(screenforge.setShareKind.mock.invocationCallOrder[0]).toBeLessThan(
+        getDisplayMedia.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('records a window picked in the share dialog: Wayland cannot list windows in-app', async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      // Let the backend answer: the toolbar now knows windows are picked in the share dialog.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // The Window tab selects window capture without a list (it could only ever be empty).
+      const windowTab = screen.getByRole('button', { name: 'Window' });
+      fireEvent.pointerDown(windowTab, { button: 0, pointerType: 'mouse' });
+      fireEvent.click(windowTab);
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Record' })).toBeEnabled();
+
+      const appendModeCalls = screenforge.getAppendMode.mock.calls.length;
+      await waitFor(
+        () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+          expect(screenforge.getAppendMode.mock.calls.length).toBeGreaterThan(appendModeCalls);
+        },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+      for (let i = 0; i < 4; i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1100);
+        });
+      }
+      await waitForRecordingState();
+
+      expect(screenforge.setShareKind).toHaveBeenCalledWith('window');
+      expect(getDisplayMedia).toHaveBeenCalled();
+      // The portal stream is the capture; there is no window: source id to resolve.
+      expect(screenforge.startRecording.mock.calls[0][0]).not.toMatch(/^window:/);
+    });
+
+    const screenshotModeOnPortal = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+    };
+
+    it('takes a screenshot of a window picked in the share dialog', async () => {
+      await screenshotModeOnPortal();
+      fireEvent.click(screen.getByRole('button', { name: 'Window' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      await waitFor(() =>
+        expect(screenforge.captureScreenshot).toHaveBeenCalledWith({
+          kind: 'window',
+          sourceId: 'window:wayland',
+        }),
+      );
+    });
+
+    it('says nothing when the share dialog is closed without a pick', async () => {
+      screenforge.captureScreenshot.mockResolvedValue('cancelled');
+      await screenshotModeOnPortal();
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      await waitFor(() => expect(screenforge.captureScreenshot).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screenforge.systemWarning).not.toHaveBeenCalled();
+    });
+
+    it('starts an area screenshot by picking the screen first, not by drawing on the live one', async () => {
+      await screenshotModeOnPortal();
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+      await waitFor(() => expect(screenforge.takeScreenshot).toHaveBeenCalled());
+      expect(screenforge.openAreaSelector).not.toHaveBeenCalled();
+    });
+
     it('returns to idle with a warning when the user cancels the portal dialog', async () => {
       getDisplayMedia.mockRejectedValue(new Error('Permission denied by the screen-share dialog'));
 
@@ -663,5 +751,60 @@ describe('FloatingToolbar recording widget', () => {
         expect.objectContaining({ kind: 'display', message: 'boom' }),
       );
     });
+  });
+
+  describe('Linux on native Wayland: a window that is just the toolbar', () => {
+    const platform = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform');
+    beforeEach(() => {
+      installMocks('wayland-portal');
+      screenforge.getToolbarLayout.mockResolvedValue('window');
+      Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true });
+    });
+    afterEach(() => {
+      delete (navigator as unknown as Record<string, unknown>).platform;
+      if (platform) {
+        Object.defineProperty(Navigator.prototype, 'platform', platform);
+      }
+    });
+
+    it('sizes its window to the pill, never shapes click-through, and moves by its handle', async () => {
+      // The pill (with its handle above it) is 600×84 at the window's top-left padding.
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        left: 24,
+        top: 0,
+        right: 624,
+        bottom: 84,
+        width: 600,
+        height: 84,
+        x: 24,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      const { container } = render(<FloatingToolbar />);
+      await waitFor(() =>
+        expect(screenforge.setToolbarSize).toHaveBeenCalledWith({ width: 648, height: 108 }),
+      );
+      expect(screenforge.setToolbarShape).not.toHaveBeenCalled();
+      const handle = container.querySelector('[data-toolbar-drag-handle]') as HTMLElement;
+      // The handle is a window drag region (index.css: -webkit-app-region: drag).
+      expect(handle).toHaveClass('app-drag');
+    });
+
+    it('opens its menus below the pill, where the window can grow', async () => {
+      render(<FloatingToolbar />);
+      const more = await screen.findByRole('button', { name: 'More options' });
+      fireEvent.pointerDown(more, { button: 0, pointerType: 'mouse' });
+      await waitFor(() =>
+        expect(document.querySelector('[role="menu"]')).toHaveAttribute('data-side', 'bottom'),
+      );
+    });
+  });
+
+  it('keeps the full-screen overlay on macOS and Windows: never asks for a layout', async () => {
+    installMocks('native');
+    render(<FloatingToolbar />);
+    await waitFor(() => expect(screenforge.getCaptureBackend).toHaveBeenCalled());
+    expect(screenforge.getToolbarLayout).not.toHaveBeenCalled();
+    expect(screenforge.setToolbarSize).not.toHaveBeenCalled();
   });
 });

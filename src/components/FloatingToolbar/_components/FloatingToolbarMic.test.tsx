@@ -4,7 +4,7 @@ import { FloatingToolbarMic } from './FloatingToolbarMic';
 
 const NOTICE = "System audio isn't recorded on Linux yet. Only your microphone is recorded.";
 
-function renderMic(systemAudioNotice: string | null) {
+function renderMic(systemAudioNotice: string | null, popSide?: 'top' | 'bottom') {
   const micDevices = [
     { deviceId: 'mic-1', label: 'Desk mic', kind: 'audioinput', groupId: 'g' } as MediaDeviceInfo,
   ];
@@ -21,6 +21,8 @@ function renderMic(systemAudioNotice: string | null) {
       onToggle={vi.fn()}
       onSelectMicDevice={vi.fn()}
       onOpenMicMenu={vi.fn()}
+      popSide={popSide}
+      avoidCollisions={popSide !== 'bottom'}
     />,
   );
 }
@@ -50,5 +52,17 @@ describe('FloatingToolbarMic', () => {
 
     await screen.findByText('Desk mic');
     expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+
+  it('opens its menu above the pill by default, below it when told to', async () => {
+    renderMic(null);
+    openMicMenu();
+    expect(await screen.findByRole('menu')).toHaveAttribute('data-side', 'top');
+    cleanup();
+
+    // The Wayland toolbar window only grows downward.
+    renderMic(null, 'bottom');
+    openMicMenu();
+    expect(await screen.findByRole('menu')).toHaveAttribute('data-side', 'bottom');
   });
 });

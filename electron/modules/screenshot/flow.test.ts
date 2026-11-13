@@ -3,7 +3,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CH } from '../../channels';
 
-const serviceMock = vi.hoisted(() => ({ captureStill: vi.fn() }));
+const serviceMock = vi.hoisted(() => ({
+  captureStill: vi.fn(),
+  cropPng: vi.fn(),
+  ShareDialogClosedError: class ShareDialogClosedError extends Error {},
+}));
 
 vi.mock('../../lib/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -16,8 +20,11 @@ import {
   captureAndOpenEditor,
   isAreaScreenshotInFlight,
   takeAreaScreenshot,
+  takePickedAreaScreenshot,
   type AreaScreenshotDeps,
+  type PickedAreaScreenshotDeps,
 } from './flow';
+import { WAYLAND_PICKED_SCREEN_ID } from '../../../src/lib/recording/waylandPicker';
 
 const area = {
   x: 10,
@@ -226,5 +233,126 @@ describe('captureAndOpenEditor', () => {
     expect(setToolbarWindow).not.toHaveBeenCalled();
     expect(newToolbar.close).not.toHaveBeenCalled();
     expect(mainWindow.webContents.send).toHaveBeenCalledWith(CH.screenshot.CAPTURED, capture);
+  });
+});
+
+describe('takePickedAreaScreenshot (Wayland)', () => {
+  const still = {
+    kind: 'display',
+    png: new Uint8Array([9, 9]),
+    width: 2560,
+    height: 1440,
+    scaleFactor: 1,
+  };
+  const picked = { x: 640, y: 0, width: 1280, height: 720 };
+  const cropped = { png: new Uint8Array([7]), width: 1280, height: 720 };
+
+  function makePickedDeps(overrides: Partial<PickedAreaScreenshotDeps> = {}) {
+    const mainWindow = makeWindow(true);
+    const toolbar = makeWindow(true);
+    const deps = {
+      getMainWindow: () => mainWindow as never,
+      getToolbarWindow: () => toolbar as never,
+      setToolbarWindow: vi.fn(),
+      isBusy: () => false,
+      preparePermissions: vi.fn(async () => undefined),
+      selectAreaOnStill: vi.fn(async () => picked),
+      warn: vi.fn(),
+      ...overrides,
+    };
+    return { deps, mainWindow, toolbar };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    serviceMock.captureStill.mockResolvedValue(still);
+    serviceMock.cropPng.mockReturnValue(cropped);
+  });
+
+  it('picks the screen in the share dialog first, then the area on that still', async () => {
+    const { deps, mainWindow, toolbar } = makePickedDeps();
+
+    await expect(takePickedAreaScreenshot(deps)).resolves.toBe('taken');
+
+    expect(toolbar.hide).toHaveBeenCalled();
+    expect(serviceMock.captureStill).toHaveBeenCalledWith({
+      kind: 'display',
+      sourceId: WAYLAND_PICKED_SCREEN_ID,
+    });
+    expect(deps.selectAreaOnStill).toHaveBeenCalledWith(still);
+    expect(serviceMock.cropPng).toHaveBeenCalledWith(still.png, picked);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(CH.screenshot.CAPTURED, {
+      kind: 'area',
+      png: cropped.png,
+      width: 1280,
+      height: 720,
+      scaleFactor: 1,
+    });
+    expect(toolbar.close).toHaveBeenCalled();
+  });
+
+  it('brings the toolbar back when the area is cancelled', async () => {
+    const { deps, toolbar, mainWindow } = makePickedDeps({
+      selectAreaOnStill: vi.fn(async () => null),
+    });
+
+    await expect(takePickedAreaScreenshot(deps)).resolves.toBe('cancelled');
+
+    expect(toolbar.show).toHaveBeenCalled();
+    expect(mainWindow.show).toHaveBeenCalled();
+    expect(mainWindow.webContents.send).not.toHaveBeenCalled();
+  });
+
+  it('treats a closed share dialog as a cancel, without a warning', async () => {
+    serviceMock.captureStill.mockRejectedValue(new serviceMock.ShareDialogClosedError());
+    const { deps, toolbar } = makePickedDeps();
+
+    await expect(takePickedAreaScreenshot(deps)).resolves.toBe('cancelled');
+
+    expect(deps.warn).not.toHaveBeenCalled();
+    expect(deps.selectAreaOnStill).not.toHaveBeenCalled();
+    expect(toolbar.show).toHaveBeenCalled();
+  });
+
+  it('warns when the picked screen comes back empty: that is a failure, not a cancel', async () => {
+    serviceMock.captureStill.mockRejectedValue(
+      new Error('No image available for display capture (screen:wayland)'),
+    );
+    const { deps } = makePickedDeps();
+
+    await expect(takePickedAreaScreenshot(deps)).resolves.toBe('failed');
+
+    expect(deps.warn).toHaveBeenCalledWith(SCREENSHOT_FAILED_MESSAGE);
+  });
+
+  it('warns when the capture itself fails', async () => {
+    serviceMock.captureStill.mockRejectedValue(new Error('portal crashed'));
+    const { deps } = makePickedDeps();
+
+    await expect(takePickedAreaScreenshot(deps)).resolves.toBe('failed');
+
+    expect(deps.warn).toHaveBeenCalledWith(SCREENSHOT_FAILED_MESSAGE);
+  });
+});
+
+describe('captureAndOpenEditor on Wayland', () => {
+  it('brings the toolbar back, as a cancel, when the share dialog is closed', async () => {
+    serviceMock.captureStill.mockRejectedValue(new serviceMock.ShareDialogClosedError());
+    const mainWindow = makeWindow(false);
+    const toolbar = makeWindow(true);
+
+    await expect(
+      captureAndOpenEditor(
+        { kind: 'window', sourceId: 'window:wayland' },
+        {
+          getMainWindow: () => mainWindow as never,
+          getToolbarWindow: () => toolbar as never,
+          setToolbarWindow: vi.fn(),
+        },
+      ),
+    ).resolves.toBe('cancelled');
+
+    expect(toolbar.show).toHaveBeenCalled();
+    expect(mainWindow.webContents.send).not.toHaveBeenCalled();
   });
 });

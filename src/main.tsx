@@ -80,6 +80,9 @@ switch (hash) {
   case 'area-selector-screenshot':
     rootNode = <AreaSelector purpose="screenshot" />;
     break;
+  case 'area-selector-still':
+    rootNode = <AreaSelector purpose="screenshot-still" />;
+    break;
   default:
     rootNode = <App />;
 }

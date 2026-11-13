@@ -6,6 +6,7 @@
 export const CH = {
   sources: {
     GET: 'sources:get',
+    SET_SHARE_KIND: 'sources:set-share-kind',
   },
   recording: {
     START: 'recording:start',
@@ -138,6 +139,8 @@ export const CH = {
     OPEN: 'area-selector:open',
     CONFIRM: 'area-selector:confirm',
     CANCEL: 'area-selector:cancel',
+    // Wayland: the still the area is drawn on (picked in the share dialog first)
+    GET_STILL: 'area-selector:get-still',
   },
   captureShortcuts: {
     // Renderer → main: which global capture shortcuts are live
@@ -166,6 +169,8 @@ export const CH = {
     SET_TOOLBAR_MOUSE_INTERACTIVITY: 'app:set-toolbar-mouse-interactivity',
     SET_TOOLBAR_SHAPE: 'app:set-toolbar-shape',
     SET_TOOLBAR_VIEWPORT: 'app:set-toolbar-viewport',
+    GET_TOOLBAR_LAYOUT: 'app:get-toolbar-layout',
+    SET_TOOLBAR_SIZE: 'app:set-toolbar-size',
     FOCUS_WINDOW: 'app:focus-window',
     SYSTEM_WARNING: 'app:system-warning',
     GET_APP_VERSION: 'app:get-app-version',

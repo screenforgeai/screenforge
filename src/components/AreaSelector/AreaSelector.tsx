@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
 import { IconCamera, IconPlayerRecordFilled, IconRestart } from 'src/lib/icons';
 import { nudgeForKey } from 'src/lib/areaNudge';
-import type { AreaSelectorPurpose } from 'src/types';
+import { selectionToImageRect } from 'src/lib/recording/waylandPicker';
+import type { AreaSelectorPurpose, AreaSelectorStill } from 'src/types';
 
 type SelectionRect = {
   x: number;
@@ -81,7 +82,47 @@ type Props = {
 };
 
 export const AreaSelector = ({ purpose = 'record' }: Props) => {
-  const isScreenshot = purpose === 'screenshot';
+  const isScreenshot = purpose !== 'record';
+  // Wayland: the area is drawn on a still of the screen picked in the share dialog, shown fitted
+  // here, and sent back in the still's own pixels.
+  const onStill = purpose === 'screenshot-still';
+  const [still, setStill] = useState<AreaSelectorStill | null>(null);
+  useEffect(() => {
+    if (!onStill) {
+      return;
+    }
+    let live = true;
+    void window.screenforge.getAreaSelectorStill().then((next) => {
+      if (live) {
+        setStill(next);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [onStill]);
+
+  /** Sends a selection in this window's pixels, or in the still's when drawing on one. */
+  const confirm = useCallback(
+    (rect: SelectionRect) => {
+      if (!onStill) {
+        void window.screenforge.confirmAreaSelection(rect);
+        return;
+      }
+      if (!still) {
+        return;
+      }
+      const onImage = selectionToImageRect(
+        rect,
+        { width: window.innerWidth, height: window.innerHeight },
+        still,
+      );
+      if (onImage) {
+        void window.screenforge.confirmAreaSelection(onImage);
+      }
+    },
+    [onStill, still],
+  );
   const [confirmedRect, setConfirmedRect] = useState<SelectionRect | null>(null);
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
@@ -111,13 +152,13 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
     ) {
       return;
     }
-    window.screenforge.confirmAreaSelection({
+    confirm({
       x: confirmedRect.x,
       y: confirmedRect.y,
       width: confirmedRect.width,
       height: confirmedRect.height,
     });
-  }, [confirmedRect]);
+  }, [confirm, confirmedRect]);
 
   const handleCancel = useCallback(() => {
     window.screenforge.cancelAreaSelection();
@@ -134,7 +175,7 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
           handleConfirm();
         } else if (isScreenshot && !dragState) {
           // Nothing drawn yet: Enter takes the whole screen.
-          void window.screenforge.confirmAreaSelection({
+          confirm({
             x: 0,
             y: 0,
             width: window.innerWidth,
@@ -156,7 +197,15 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [confirmedRect, dragState, handleCancel, handleConfirm, isScreenshot, showConfirmButtons]);
+  }, [
+    confirm,
+    confirmedRect,
+    dragState,
+    handleCancel,
+    handleConfirm,
+    isScreenshot,
+    showConfirmButtons,
+  ]);
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) {
@@ -278,6 +327,14 @@ export const AreaSelector = ({ purpose = 'record' }: Props) => {
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
     >
+      {onStill && still && (
+        <img
+          src={still.dataUrl}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+        />
+      )}
       {/* Four-panel overlay — avoids SVG mask rendering issues in transparent Electron windows */}
       {(!selection || !isValidSelection) && (
         <div

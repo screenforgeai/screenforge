@@ -21,6 +21,11 @@ import {
   IconCamera,
 } from 'src/lib/icons';
 import { trackEvent } from 'src/lib/analytics';
+import {
+  WAYLAND_PICKED_SCREEN_ID,
+  WAYLAND_PICKED_WINDOW_ID,
+} from 'src/lib/recording/waylandPicker';
+import { cn } from 'src/lib/utils';
 import { formatShortcut } from 'src/lib/captureShortcuts';
 import { readableErrorMessage } from 'src/lib/ipcError';
 import {
@@ -41,6 +46,7 @@ import type {
   CursorEvent,
   CaptureBackend,
   SystemAudioSupport,
+  ToolbarLayout,
   ToolbarShapeRect,
   ScreenshotCaptureRequest,
   RegisteredCaptureShortcuts,
@@ -76,6 +82,8 @@ const SHAPE_MEASURE_INTERVAL_MS = 200;
 // the shape is shrunken. Tooltips and menus only appear in the hovered
 // full-window state, so they need no extra padding.
 const SHAPE_PAD = 24;
+// 'window' layout (native Wayland): room around the pill for its shadow and the drag handle.
+const WINDOW_PAD = 24;
 
 // Prefer hardware-accelerated H.264 over software VP8/VP9 for camera recording.
 // On Apple Silicon, H.264 is encoded by VideoToolbox; VP8 is pure CPU (libvpx).
@@ -422,6 +430,8 @@ export const FloatingToolbar = () => {
   // Wayland (Linux): the toolbar records the screen itself from the PipeWire
   // portal stream — the main process can't grab the screen on Wayland.
   const captureBackendRef = useRef<CaptureBackend>('native');
+  // Wayland's portal backend: windows are picked in the system share dialog, not listed here.
+  const [portalCapture, setPortalCapture] = useState(false);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenRecorderRef = useRef<MediaRecorder | null>(null);
   const screenChunksRef = useRef<Blob[]>([]);
@@ -430,6 +440,30 @@ export const FloatingToolbar = () => {
   const toolbarInteractiveRef = useRef<boolean | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragControls = useDragControls();
+  // How this window is laid out (electron/modules/app/toolbar-layout.ts). macOS and Windows are
+  // always the full-screen overlay; on Linux, native Wayland gets a window that is just the
+  // toolbar, so ask the main process before drawing.
+  const [layout, setLayout] = useState<ToolbarLayout | null>(() =>
+    navigator.platform.startsWith('Linux') ? null : 'overlay',
+  );
+  useEffect(() => {
+    if (layout !== null) {
+      return;
+    }
+    let live = true;
+    window.screenforge
+      .getToolbarLayout()
+      .then((next) => live && setLayout(next))
+      .catch(() => live && setLayout('overlay'));
+    return () => {
+      live = false;
+    };
+  }, [layout]);
+  const asWindow = layout === 'window';
+  // As a window it only grows downward (Wayland keeps its top-left where the user put it), so its
+  // menus and tooltips open below the pill and never flip up out of the window.
+  const popSide = asWindow ? 'bottom' : 'top';
+  const toolbarWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const windowSources = useMemo(
     () =>
@@ -497,6 +531,7 @@ export const FloatingToolbar = () => {
       .getCaptureBackend()
       .then((backend) => {
         captureBackendRef.current = backend;
+        setPortalCapture(backend === 'wayland-portal');
       })
       .catch((err) => {
         console.error('[recording] could not resolve capture backend:', err);
@@ -906,7 +941,12 @@ export const FloatingToolbar = () => {
   }, [stopCameraPreview, stopMicStream]);
 
   async function handleStart() {
-    const sourceId = resolveSourceIdForTab(tab, selectedSource, sources);
+    // Wayland: a window is picked in the share dialog, so there is no window: source id; the
+    // portal stream itself is the capture.
+    const pickWindowInDialog = captureBackendRef.current === 'wayland-portal' && tab === 'window';
+    const sourceId = pickWindowInDialog
+      ? resolveSourceIdForTab('display', null, sources)
+      : resolveSourceIdForTab(tab, selectedSource, sources);
     if (!sourceId) {
       window.screenforge.systemWarning(tab === 'window' ? t('chooseWindow') : t('noDisplaySource'));
       return;
@@ -934,7 +974,7 @@ export const FloatingToolbar = () => {
           selectedSource?.windowTitle && { windowTitle: selectedSource.windowTitle }),
       };
       if (captureBackendRef.current === 'wayland-portal') {
-        await startWaylandPortalCapture();
+        await startWaylandPortalCapture(pickWindowInDialog ? 'window' : 'screen');
         try {
           await window.screenforge.startRecording(sourceId, cropArea, { rendererCapture: true });
         } catch (err) {
@@ -1014,7 +1054,11 @@ export const FloatingToolbar = () => {
 
   async function takePhoto(request: ScreenshotCaptureRequest) {
     try {
-      await window.screenforge.captureScreenshot(request);
+      const outcome = await window.screenforge.captureScreenshot(request);
+      // Wayland: the share dialog was closed without a pick. Nothing to warn about.
+      if (outcome === 'cancelled') {
+        return;
+      }
       trackEvent('screenshot_taken', { kind: request.kind });
     } catch (err) {
       window.screenforge.writeDiagnosticLog('toolbar.screenshot.failed', {
@@ -1030,6 +1074,15 @@ export const FloatingToolbar = () => {
     if (!(await ensureScreenshotPermissions())) {
       return;
     }
+    // Wayland: the screen or window is picked in the system share dialog.
+    if (captureBackendRef.current === 'wayland-portal') {
+      await takePhoto(
+        tab === 'window'
+          ? { kind: 'window', sourceId: WAYLAND_PICKED_WINDOW_ID }
+          : { kind: 'display', sourceId: WAYLAND_PICKED_SCREEN_ID },
+      );
+      return;
+    }
     if (tab === 'window' && selectedSource) {
       await takePhoto({ kind: 'window', sourceId: selectedSource.id });
       return;
@@ -1041,6 +1094,12 @@ export const FloatingToolbar = () => {
   }
 
   async function handleAreaPhotoClick() {
+    // Wayland: the main process asks for the screen in the share dialog first, then the area is
+    // drawn on a still of it (as the screenshot shortcut does there).
+    if (captureBackendRef.current === 'wayland-portal') {
+      void window.screenforge.takeScreenshot();
+      return;
+    }
     setTab('area');
     if (!(await ensureScreenshotPermissions())) {
       return;
@@ -1425,8 +1484,10 @@ export const FloatingToolbar = () => {
     setScreenTrack(null);
   }
 
-  async function startWaylandPortalCapture(): Promise<void> {
-    // Opens the OS screen-share picker (user chooses a screen or window).
+  async function startWaylandPortalCapture(kind: 'screen' | 'window'): Promise<void> {
+    // Opens the OS screen-share picker, on its screens or (from the Window tab) its windows.
+    // Stored before the share request below reads it.
+    await window.screenforge.setShareKind(kind);
     const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: false,
       video: { frameRate: { ideal: 60, max: 60 } },
@@ -1646,7 +1707,7 @@ export const FloatingToolbar = () => {
   }, [windowMenuOpen, micMenuOpen, cameraMenuOpen, overlayActive, setToolbarMouseInteractivity]);
 
   useEffect(() => {
-    if (!IS_LINUX) {
+    if (!IS_LINUX || layout !== 'overlay') {
       return;
     }
 
@@ -1693,16 +1754,68 @@ export const FloatingToolbar = () => {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [recordState]);
+  }, [layout, recordState]);
+
+  // 'window' layout: keep the window just big enough for the pill and whatever menu or tooltip
+  // is open below it. Measured every frame (cheap: a few rects) so a menu never shows clipped.
+  useEffect(() => {
+    if (!asWindow) {
+      return;
+    }
+    let frame = 0;
+    let lastSent = '';
+    const measure = () => {
+      let right = 0;
+      let bottom = 0;
+      const parts = [
+        toolbarWrapperRef.current,
+        ...document.querySelectorAll('[data-radix-popper-content-wrapper]'),
+      ];
+      for (const part of parts) {
+        const rect = part?.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          continue;
+        }
+        right = Math.max(right, rect.right);
+        bottom = Math.max(bottom, rect.bottom);
+      }
+      if (right > 0 && bottom > 0) {
+        const size = {
+          width: Math.ceil(right + WINDOW_PAD),
+          height: Math.ceil(bottom + WINDOW_PAD),
+        };
+        const key = `${size.width}x${size.height}`;
+        if (key !== lastSent) {
+          lastSent = key;
+          window.screenforge.setToolbarSize(size);
+        }
+      }
+      frame = requestAnimationFrame(measure);
+    };
+    frame = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(frame);
+  }, [asWindow]);
+
+  if (layout === null) {
+    return null;
+  }
 
   return (
     <div
       ref={containerRef}
-      className="relative flex h-full w-full items-end justify-center pb-10 bg-transparent"
+      className={
+        asWindow
+          ? 'relative flex h-full w-full items-start justify-start bg-transparent'
+          : 'relative flex h-full w-full items-end justify-center pb-10 bg-transparent'
+      }
+      style={asWindow ? { padding: WINDOW_PAD, paddingTop: 0 } : undefined}
     >
       {/* Area recording indicator — dims outside the selected region during countdown/recording/paused */}
       <AnimatePresence>
-        {(recordState === 'countdown' || recordState === 'recording' || recordState === 'paused') &&
+        {!asWindow &&
+          (recordState === 'countdown' ||
+            recordState === 'recording' ||
+            recordState === 'paused') &&
           selectedArea && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -1724,7 +1837,9 @@ export const FloatingToolbar = () => {
       </AnimatePresence>
 
       <motion.div
-        drag
+        ref={toolbarWrapperRef}
+        // As a window, the drag handle moves the window itself (below), not the pill inside it.
+        drag={!asWindow}
         dragControls={dragControls}
         dragListener={false}
         dragMomentum={false}
@@ -1739,11 +1854,20 @@ export const FloatingToolbar = () => {
       >
         <div
           onPointerDown={(e) => {
+            if (asWindow) {
+              return;
+            }
             e.preventDefault();
             dragControls.start(e);
           }}
           data-toolbar-interactive="true"
-          className="absolute top-0 left-1/2 -translate-x-1/2 flex cursor-grab flex-col items-center gap-1 px-4 py-1 opacity-0 transition-opacity group-hover:opacity-100"
+          data-toolbar-drag-handle=""
+          className={cn(
+            'absolute top-0 left-1/2 -translate-x-1/2 flex cursor-grab flex-col items-center gap-1 px-4 py-1 transition-opacity group-hover:opacity-100',
+            // As a window the handle is a drag region, moving the window itself; it gets no
+            // hover events, so it stays faintly visible.
+            asWindow ? 'app-drag opacity-60' : 'opacity-0',
+          )}
         >
           <div className="flex gap-1">
             <div className="h-1 w-1 rounded-full bg-[#6b6b6b]" />
@@ -1807,7 +1931,9 @@ export const FloatingToolbar = () => {
                         <IconX size={15} />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('minimizeToDock')}</TooltipContent>
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                      {t('minimizeToDock')}
+                    </TooltipContent>
                   </Tooltip>
 
                   {/* Home */}
@@ -1827,7 +1953,9 @@ export const FloatingToolbar = () => {
                         <IconHome size={15} />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('home')}</TooltipContent>
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                      {t('home')}
+                    </TooltipContent>
                   </Tooltip>
 
                   <div className="mx-3">
@@ -1874,7 +2002,7 @@ export const FloatingToolbar = () => {
                             </span>
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="top">
+                        <TooltipContent side={popSide} avoidCollisions={!asWindow}>
                           {mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')}
                           <ShortcutHint
                             accelerator={
@@ -1905,11 +2033,19 @@ export const FloatingToolbar = () => {
                           <IconDeviceDesktop size={16} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">{t('display')}</TooltipContent>
+                      <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                        {t('display')}
+                      </TooltipContent>
                     </Tooltip>
 
                     <DropdownMenu
+                      // Wayland: no list to show (apps cannot see other apps' windows there);
+                      // the window is picked in the share dialog when recording starts.
+                      open={portalCapture ? false : undefined}
                       onOpenChange={(open) => {
+                        if (portalCapture) {
+                          return;
+                        }
                         setWindowMenuOpen(open);
                         if (open) {
                           setSources([]);
@@ -1929,6 +2065,7 @@ export const FloatingToolbar = () => {
                             <Button
                               variant="ghost"
                               size="icon-sm"
+                              aria-label={t('window')}
                               onClick={() => setTab('window')}
                               className={`${toolbarButtonCls} ${tabCls(tab === 'window')}`}
                             >
@@ -1936,15 +2073,18 @@ export const FloatingToolbar = () => {
                             </Button>
                           </DropdownMenuTrigger>
                         </TooltipTrigger>
-                        <TooltipContent side="top">
-                          {tab === 'window' && selectedSource
-                            ? getWindowSourcePrimaryLabel(selectedSource)
-                            : t('window')}
+                        <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                          {portalCapture
+                            ? t('windowPickOnRecord')
+                            : tab === 'window' && selectedSource
+                              ? getWindowSourcePrimaryLabel(selectedSource)
+                              : t('window')}
                         </TooltipContent>
                       </Tooltip>
 
                       <DropdownMenuContent
-                        side="top"
+                        side={popSide}
+                        avoidCollisions={!asWindow}
                         sideOffset={10}
                         align="center"
                         className="min-w-[240px] max-h-56"
@@ -2018,7 +2158,7 @@ export const FloatingToolbar = () => {
                           <IconCrop size={16} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">
+                      <TooltipContent side={popSide} avoidCollisions={!asWindow}>
                         {t('area')}
                         {captureMode === 'photo' && (
                           <ShortcutHint accelerator={captureShortcuts.screenshot} />
@@ -2112,6 +2252,8 @@ export const FloatingToolbar = () => {
                               systemAudioNoticeKey ? t(systemAudioNoticeKey) : null
                             }
                             onMenuOpenChange={setMicMenuOpen}
+                            popSide={popSide}
+                            avoidCollisions={!asWindow}
                             onToggle={handleMicToggle}
                             onSelectMicDevice={(deviceId) => {
                               void handleMicDeviceSelect(deviceId);
@@ -2151,7 +2293,7 @@ export const FloatingToolbar = () => {
                                   )}
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent side="top">
+                              <TooltipContent side={popSide} avoidCollisions={!asWindow}>
                                 {cameraLocked
                                   ? t('cameraLocked')
                                   : cameraLoading
@@ -2185,7 +2327,7 @@ export const FloatingToolbar = () => {
                                     </Button>
                                   </DropdownMenuTrigger>
                                 </TooltipTrigger>
-                                <TooltipContent side="top">
+                                <TooltipContent side={popSide} avoidCollisions={!asWindow}>
                                   {selectedCamera?.label
                                     ? t('cameraSourceLabel', { label: selectedCamera.label })
                                     : t('cameraSource')}
@@ -2193,7 +2335,8 @@ export const FloatingToolbar = () => {
                               </Tooltip>
 
                               <DropdownMenuContent
-                                side="top"
+                                side={popSide}
+                                avoidCollisions={!asWindow}
                                 sideOffset={10}
                                 align="center"
                                 className="min-w-[220px] max-h-56"
@@ -2250,10 +2393,13 @@ export const FloatingToolbar = () => {
                                   </Button>
                                 </DropdownMenuTrigger>
                               </TooltipTrigger>
-                              <TooltipContent side="top">{t('moreOptions')}</TooltipContent>
+                              <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                                {t('moreOptions')}
+                              </TooltipContent>
                             </Tooltip>
                             <DropdownMenuContent
-                              side="top"
+                              side={popSide}
+                              avoidCollisions={!asWindow}
                               sideOffset={10}
                               align="center"
                               className="min-w-[180px]"
@@ -2300,7 +2446,9 @@ export const FloatingToolbar = () => {
                             : handleRecordClick());
                         }}
                         aria-label={captureMode === 'photo' ? t('takeScreenshot') : t('record')}
-                        disabled={(tab === 'window' && !selectedSource) || tab === 'area'}
+                        disabled={
+                          (tab === 'window' && !selectedSource && !portalCapture) || tab === 'area'
+                        }
                         className={`${toolbarButtonCls} relative flex h-9 w-9 cursor-pointer items-center justify-center overflow-visible rounded-full bg-transparent p-0 transition-transform hover:bg-transparent active:scale-95 disabled:opacity-40`}
                       >
                         {/* The button's fill morphs red ↔ white on the same
@@ -2353,7 +2501,7 @@ export const FloatingToolbar = () => {
                         </AnimatePresence>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
                       {captureMode === 'photo' ? t('takeScreenshot') : t('record')}
                     </TooltipContent>
                   </Tooltip>
@@ -2430,7 +2578,9 @@ export const FloatingToolbar = () => {
                               <IconCheck size={13} />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">{t('ariaConfirmDiscard')}</TooltipContent>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {t('ariaConfirmDiscard')}
+                          </TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -2443,7 +2593,9 @@ export const FloatingToolbar = () => {
                               <IconX size={13} />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">{t('ariaCancelDiscard')}</TooltipContent>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {t('ariaCancelDiscard')}
+                          </TooltipContent>
                         </Tooltip>
                       </motion.div>
                     ) : (
@@ -2467,7 +2619,9 @@ export const FloatingToolbar = () => {
                               <IconTrash size={14} />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">{t('discardRecording')}</TooltipContent>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {t('discardRecording')}
+                          </TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -2485,7 +2639,7 @@ export const FloatingToolbar = () => {
                               )}
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
                             {isPaused ? t('resumeRecording') : t('pauseRecording')}
                           </TooltipContent>
                         </Tooltip>
@@ -2505,7 +2659,9 @@ export const FloatingToolbar = () => {
                         <IconPlayerStopFilled size={14} />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('stopRecording')}</TooltipContent>
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                      {t('stopRecording')}
+                    </TooltipContent>
                   </Tooltip>
                 </motion.div>
               )}
