@@ -598,6 +598,78 @@ describe('FloatingToolbar recording widget', () => {
         expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
       });
 
+      it('keeps what started when the share ends while the recording is starting', async () => {
+        let finishStart: () => void = () => undefined;
+        screenforge.startRecording.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              finishStart = resolve;
+            }),
+        );
+        await clickRecordAndFinishCountdown();
+        await waitFor(() => expect(screenforge.startRecording).toHaveBeenCalled());
+
+        const onShareEnded = screenforge.onShareEnded.mock.calls.at(-1)?.[0] as () => void;
+        act(() => onShareEnded());
+        await act(async () => finishStart());
+
+        await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+        expect(screenforge.stopRecording).toHaveBeenCalledTimes(1);
+        expect(screenforge.systemWarning).not.toHaveBeenCalled();
+      });
+
+      it('fails quietly when the share ended while the recording was starting', async () => {
+        let failStart: (error: Error) => void = () => undefined;
+        screenforge.startRecording.mockImplementationOnce(
+          () =>
+            new Promise<void>((_resolve, reject) => {
+              failStart = reject;
+            }),
+        );
+        await clickRecordAndFinishCountdown();
+        await waitFor(() => expect(screenforge.startRecording).toHaveBeenCalled());
+
+        const onShareEnded = screenforge.onShareEnded.mock.calls.at(-1)?.[0] as () => void;
+        act(() => onShareEnded());
+        await act(async () => failStart(new Error('The screen share has ended.')));
+
+        expect(await screen.findByRole('button', { name: 'Record' })).toBeEnabled();
+        expect(screenforge.systemWarning).not.toHaveBeenCalled();
+      });
+
+      it('ignores Record while the last recording is still being saved', async () => {
+        let finishStop: () => void = () => undefined;
+        screenforge.stopRecording.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishStop = () =>
+                resolve({
+                  events: [],
+                  startTime: 0,
+                  stopTime: 3000,
+                  durationMs: 3000,
+                  recordingArea: { x: 0, y: 0, width: 2560, height: 1440 },
+                  hasEmbeddedAudio: false,
+                  filePath: '/tmp/final.mp4',
+                });
+            }),
+        );
+        await clickRecordAndFinishCountdown();
+        await waitForRecordingState();
+        fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+        await waitFor(() => expect(screenforge.stopRecording).toHaveBeenCalled());
+
+        const picks = screenforge.pickScreen.mock.calls.length;
+        fireEvent.click(await screen.findByRole('button', { name: 'Record' }));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+        expect(screenforge.pickScreen.mock.calls.length).toBe(picks);
+
+        await act(async () => finishStop());
+        await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
+      });
+
       it('cancels the countdown when the share is ended from the system', async () => {
         await clickRecord();
         await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });

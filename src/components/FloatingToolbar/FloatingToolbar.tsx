@@ -425,6 +425,10 @@ export const FloatingToolbar = () => {
   const recordStateRef = useRef<RecordState>('idle');
   // The recorded display went away while startRecording was still in flight.
   const sourceLostDuringStartRef = useRef(false);
+  // Wayland: from the countdown's end until startRecording() settles, and whether the picked
+  // share was ended from the system meanwhile (the start then stops right after, or fails quietly).
+  const startingRecordingRef = useRef(false);
+  const shareEndedDuringStartRef = useRef(false);
   const micLevelRef = useRef(0);
   const micUiUpdateTsRef = useRef(0);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -895,6 +899,11 @@ export const FloatingToolbar = () => {
   // Wayland: the user can end the capture from the OS screen-share indicator —
   // treat that like pressing stop.
   const handlePickedShareEnded = useEffectEvent(() => {
+    if (startingRecordingRef.current) {
+      // The capture is starting: stop once it has (see handleStart).
+      shareEndedDuringStartRef.current = true;
+      return;
+    }
     if (recordStateRef.current === 'countdown' && !screenRecorderRef.current) {
       // Ended before recording began: there is nothing to keep.
       stopWaylandStream();
@@ -995,6 +1004,8 @@ export const FloatingToolbar = () => {
     });
 
     sourceLostDuringStartRef.current = false;
+    shareEndedDuringStartRef.current = false;
+    startingRecordingRef.current = true;
     try {
       if (tab === 'window') {
         focusDesktopSourceWindow(selectedSource);
@@ -1029,6 +1040,7 @@ export const FloatingToolbar = () => {
         await window.screenforge.startRecording(sourceId, cropArea);
       }
     } catch (err) {
+      startingRecordingRef.current = false;
       console.error('[recording] start failed:', err);
       logToolbarDiagnostic('toolbar.recording.start-failed', {
         sourceId,
@@ -1036,9 +1048,14 @@ export const FloatingToolbar = () => {
       });
       setRecordState('idle');
       setCountdown(3);
-      window.screenforge.systemWarning(getErrorMessage(err));
+      // Ending the share while it started is the user's choice, not an error.
+      if (!shareEndedDuringStartRef.current) {
+        window.screenforge.systemWarning(getErrorMessage(err));
+      }
+      shareEndedDuringStartRef.current = false;
       return;
     }
+    startingRecordingRef.current = false;
 
     const startupLatencyMs = Date.now() - startedAt;
     logToolbarDiagnostic('toolbar.recording.start-resolved', {
@@ -1090,8 +1107,14 @@ export const FloatingToolbar = () => {
 
     if (sourceLostDuringStartRef.current) {
       sourceLostDuringStartRef.current = false;
+      shareEndedDuringStartRef.current = false;
       recordStateRef.current = 'idle';
       window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      void handleStop();
+    } else if (shareEndedDuringStartRef.current) {
+      // The share was ended from the system while the capture started: keep what was captured.
+      shareEndedDuringStartRef.current = false;
+      recordStateRef.current = 'idle';
       void handleStop();
     }
   }
@@ -1161,7 +1184,12 @@ export const FloatingToolbar = () => {
   }
 
   async function handleAreaRecordClick() {
-    if (recordState !== 'idle' || pickingShareRef.current || !captureBackendKnownRef.current) {
+    if (
+      recordState !== 'idle' ||
+      pickingShareRef.current ||
+      !captureBackendKnownRef.current ||
+      waylandStopPending()
+    ) {
       return;
     }
 
@@ -1202,8 +1230,16 @@ export const FloatingToolbar = () => {
     }
   }
 
+  /**
+   * Wayland: the last recording is still being saved. Its stop lets the picked share go when it
+   * finishes, which must not be a share picked for the next recording meanwhile.
+   */
+  function waylandStopPending(): boolean {
+    return captureBackendRef.current === 'wayland-portal' && isSavingRecording;
+  }
+
   async function handleRecordClick() {
-    if (pickingShareRef.current || !captureBackendKnownRef.current) {
+    if (pickingShareRef.current || !captureBackendKnownRef.current || waylandStopPending()) {
       return;
     }
     const onPortal = captureBackendRef.current === 'wayland-portal';

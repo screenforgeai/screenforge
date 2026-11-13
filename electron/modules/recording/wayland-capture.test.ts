@@ -317,15 +317,23 @@ describe('recording a picked screen', () => {
     );
   });
 
-  it('reports pointer moves while the share is open', async () => {
-    const { helper, setWaylandShareMoveListener } = await picked();
+  it('reports pointer moves while the share is open, and keeps the last one', async () => {
+    const { helper, setWaylandShareMoveListener, getWaylandSharePointer, pickWaylandScreen } =
+      await picked();
     const moves: [number, number][] = [];
     setWaylandShareMoveListener((x, y) => moves.push([x, y]));
+    expect(getWaylandSharePointer()).toBeNull();
 
     helper.say({ type: 'move', x: 1500, y: 600 });
     await tick();
 
     expect(moves).toEqual([[1500, 600]]);
+    expect(getWaylandSharePointer()).toEqual({ x: 1500, y: 600 });
+
+    // A new pick forgets the old screen's pointer.
+    spawnMock.mockReturnValue(fakeHelper());
+    void pickWaylandScreen();
+    expect(getWaylandSharePointer()).toBeNull();
   });
 });
 

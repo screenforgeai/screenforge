@@ -71,6 +71,7 @@ const shareMock = vi.hoisted(() => ({
     screen: { x: number; y: number; width: number; height: number };
     video: { width: number; height: number; format: string };
   },
+  pointer: null as { x: number; y: number } | null,
   start: vi.fn(),
   finish: vi.fn(),
   pause: vi.fn(),
@@ -84,6 +85,7 @@ vi.mock('./wayland-capture', () => ({
   },
   hasWaylandShare: () => shareMock.live,
   getWaylandShare: () => shareMock.share,
+  getWaylandSharePointer: () => shareMock.pointer,
   startWaylandShareRecording: shareMock.start,
   finishWaylandShareRecording: shareMock.finish,
   pauseWaylandShareRecording: shareMock.pause,
@@ -260,6 +262,17 @@ describe('recording service on Linux', () => {
       afterEach(() => {
         shareMock.live = false;
         shareMock.share = null;
+        shareMock.pointer = null;
+      });
+
+      it('starts from where the pointer was, even if it never moves', async () => {
+        shareMock.pointer = { x: 2000, y: 500 };
+        const { startRecording, stopRecording } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        const result = await stopRecording();
+
+        expect(result.events).toEqual([expect.objectContaining({ type: 'move', x: 2000, y: 500 })]);
       });
 
       it('records it through the helper, with the pointer moves made while recording', async () => {
