@@ -331,6 +331,9 @@ export const FloatingToolbar = () => {
   // Wayland: set from a Record or Area click until its countdown starts or it is cancelled
   // (share dialog, area drawing included), so a second click cannot open another dialog.
   const pickingShareRef = useRef(false);
+  // Linux: whether recording uses the share dialog is asked on mount; until it answers, Record
+  // and Area wait, or a click could skip the guard above. macOS and Windows never wait.
+  const captureBackendKnownRef = useRef(!navigator.platform.startsWith('Linux'));
   const [isSavingRecording, setIsSavingRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [countdown, setCountdown] = useState(3);
@@ -535,6 +538,9 @@ export const FloatingToolbar = () => {
       })
       .catch((err) => {
         console.error('[recording] could not resolve capture backend:', err);
+      })
+      .finally(() => {
+        captureBackendKnownRef.current = true;
       });
     window.screenforge
       .getSystemAudioSupport()
@@ -1129,7 +1135,7 @@ export const FloatingToolbar = () => {
   }
 
   async function handleAreaRecordClick() {
-    if (recordState !== 'idle' || pickingShareRef.current) {
+    if (recordState !== 'idle' || pickingShareRef.current || !captureBackendKnownRef.current) {
       return;
     }
 
@@ -1171,7 +1177,7 @@ export const FloatingToolbar = () => {
   }
 
   async function handleRecordClick() {
-    if (pickingShareRef.current) {
+    if (pickingShareRef.current || !captureBackendKnownRef.current) {
       return;
     }
     const onPortal = captureBackendRef.current === 'wayland-portal';
