@@ -349,6 +349,9 @@ static pid_t ffmpeg_pid = -1;
 static double frames_per_second;
 static uint64_t frames_written, late_frames;
 static struct timespec time_base, pause_started;
+/* Signalled by the writer when FFmpeg stops taking frames; handled on the main loop. */
+static struct pw_loop *loop_for_events;
+static struct spa_source *writer_failed_event;
 
 static double seconds_between(const struct timespec *from, const struct timespec *to) {
   return (double)(to->tv_sec - from->tv_sec) + (double)(to->tv_nsec - from->tv_nsec) / 1e9;
@@ -423,6 +426,7 @@ static void *writer_main(void *unused) {
     pthread_mutex_lock(&record_lock);
     if (!ok) {
       write_failed = true;
+      if (writer_failed_event) pw_loop_signal_event(loop_for_events, writer_failed_event);
       break;
     }
     frames_written++;
@@ -560,7 +564,10 @@ static void write_still(const char *path) {
     }
     pixels[i + 3] = 0xff;
   }
-  FILE *file = fopen(path, "wb");
+  /* Owner-only and never an existing file: it holds the whole screen. */
+  int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+  FILE *file = fd < 0 ? NULL : fdopen(fd, "wb");
+  if (fd >= 0 && !file) close(fd);
   bool ok = file && fwrite(pixels, 1, bytes, file) == bytes;
   if (file && fclose(file) != 0) ok = false;
   free(pixels);
@@ -694,6 +701,15 @@ static void on_param_changed(void *data, uint32_t id, const struct spa_pod *para
   pw_stream_update_params(stream, params, 2);
 }
 
+/* FFmpeg stopped taking frames: finish (reported as not ok) and end, so the app stops too. */
+static void on_writer_failed(void *data, uint64_t count) {
+  (void)data; (void)count;
+  if (quitting || !recording) return;
+  fprintf(stderr, "screenforge-wayland-capture: the encoder stopped taking frames\n");
+  quit();
+  emit_simple("ended");
+}
+
 static void on_state_changed(void *data, enum pw_stream_state old, enum pw_stream_state state,
                              const char *error) {
   (void)data; (void)old;
@@ -793,6 +809,8 @@ int main(int argc, char **argv) {
   pw_loop_add_signal(loop, SIGINT, on_quit_signal, NULL);
   pw_loop_add_signal(loop, SIGTERM, on_quit_signal, NULL);
   pw_loop_add_io(loop, STDIN_FILENO, SPA_IO_IN | SPA_IO_HUP | SPA_IO_ERR, false, on_stdin, NULL);
+  loop_for_events = loop;
+  writer_failed_event = pw_loop_add_event(loop, on_writer_failed, NULL);
 
   struct pw_context *context = pw_context_new(loop, NULL, 0);
   struct pw_core *core = context ? pw_context_connect_fd(context, pipewire_fd, NULL, 0) : NULL;

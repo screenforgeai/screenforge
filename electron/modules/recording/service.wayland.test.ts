@@ -307,6 +307,24 @@ describe('recording service on Linux', () => {
         expect(isRecordingBusy()).toBe(false);
       });
 
+      it('carries on from where the pointer moved while paused', async () => {
+        shareMock.pointer = { x: 1200, y: 400 };
+        const { startRecording, stopRecording, pauseRecording, resumeRecording } =
+          await loadService();
+
+        await startRecording('screen:wayland', null);
+        pauseRecording();
+        shareMock.pointer = { x: 3000, y: 900 };
+        shareMock.moveListener?.(3000, 900); // dropped: paused
+        resumeRecording();
+        const result = await stopRecording();
+
+        expect(result.events.map(({ x, y }) => [x, y])).toEqual([
+          [1200, 400],
+          [3000, 900],
+        ]);
+      });
+
       it('passes pause and resume on to the helper', async () => {
         const { startRecording, pauseRecording, resumeRecording } = await loadService();
 

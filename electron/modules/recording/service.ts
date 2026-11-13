@@ -2064,6 +2064,15 @@ export function resumeRecording(): void {
   if (shareCaptureActive) {
     resumeWaylandShareRecording();
     endPauseSpan();
+    // Moves made while paused were dropped: carry on from where the pointer is now.
+    const pointer = getWaylandSharePointer();
+    if (pointer) {
+      // The paused moves still moved the throttle along: start it afresh.
+      lastMoveX = -1;
+      lastMoveY = -1;
+      lastMoveMs = 0;
+      recordPointerMove(pointer.x, pointer.y);
+    }
     return;
   }
 
