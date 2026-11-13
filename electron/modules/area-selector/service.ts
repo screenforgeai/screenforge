@@ -1,7 +1,11 @@
 import { BrowserWindow, screen } from 'electron';
 import log from '../../lib/logger';
 import { pinWindowToAllWorkspaces } from '../../lib/workspace-pin';
-import type { AreaSelectorStill, SelectedArea } from '../../../src/types/index';
+import type {
+  AreaSelectorStill,
+  AreaSelectorStillRequest,
+  SelectedArea,
+} from '../../../src/types/index';
 
 let selectorWindow: BrowserWindow | null = null;
 let pendingResolve: ((area: SelectedArea | null) => void) | null = null;
@@ -109,7 +113,7 @@ export function openAreaSelector(
 export function openAreaSelectorOnStill(
   preloadPath: string,
   loadURL: (win: BrowserWindow, hash: string) => void,
-  still: { png: Uint8Array; width: number; height: number },
+  still: AreaSelectorStillRequest,
   purpose: 'record' | 'screenshot' = 'screenshot',
 ): Promise<SelectedArea | null> {
   if (isAlive()) {

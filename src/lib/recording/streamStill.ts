@@ -1,11 +1,11 @@
+import type { AreaSelectorStillRequest } from '../../types/index';
+
 /**
  * The frame a live screen stream is showing now, as PNG bytes in the stream's own pixels.
  * Wayland: the area to record is drawn on it, since a selector over the live screen may land
  * on any monitor.
  */
-export async function grabStreamStill(
-  stream: MediaStream,
-): Promise<{ png: Uint8Array; width: number; height: number }> {
+export async function grabStreamStill(stream: MediaStream): Promise<AreaSelectorStillRequest> {
   const video = document.createElement('video');
   video.muted = true;
   video.srcObject = stream;

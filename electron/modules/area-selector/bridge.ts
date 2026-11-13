@@ -1,6 +1,10 @@
 import { CH } from '../../channels';
 import { createInvokeBridge, createSendBridge } from '../../lib/ipc-renderer';
-import type { AreaSelectorStill, SelectedArea } from '../../../src/types/index';
+import type {
+  AreaSelectorStill,
+  AreaSelectorStillRequest,
+  SelectedArea,
+} from '../../../src/types/index';
 
 export const areaSelectorBridge = {
   confirmAreaSelection: createInvokeBridge<
@@ -12,8 +16,7 @@ export const areaSelectorBridge = {
   openAreaSelector: createInvokeBridge<[purpose?: 'record' | 'screenshot'], SelectedArea | null>(
     CH.areaSelector.OPEN,
   ),
-  selectAreaOnStill: createInvokeBridge<
-    [still: { png: Uint8Array; width: number; height: number }],
-    SelectedArea | null
-  >(CH.areaSelector.OPEN_ON_STILL),
+  selectAreaOnStill: createInvokeBridge<[still: AreaSelectorStillRequest], SelectedArea | null>(
+    CH.areaSelector.OPEN_ON_STILL,
+  ),
 };
