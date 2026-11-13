@@ -361,12 +361,28 @@ export function pickWaylandScreen(): Promise<ScreenPick> {
     });
     child.on('error', (error) => {
       log.warn('[recording:wayland-share] helper could not run', error);
-    });
-    child.on('exit', (code, signal) => {
+      // A helper that never started may send no 'close'.
       if (helper === child) {
         helper = null;
+        rejectWaiters(new Error('The screen share has ended.'));
       }
-      rejectWaiters(new Error('The screen share has ended.'));
+      settle('unavailable');
+    });
+    // 'close', not 'exit': its last messages (the finished recording) are read by then.
+    child.on('close', (code, signal) => {
+      // Only this helper's own state: a newer pick may already have replaced it.
+      if (helper === child) {
+        helper = null;
+        rejectWaiters(new Error('The screen share has ended.'));
+        // Picked, then gone without saying the share ended: tell the app, so a recording stops.
+        if (settled && share && !shareEnded) {
+          shareEnded = true;
+          log.warn('[recording:wayland-share] helper exited unexpectedly', { code, signal });
+          for (const listener of endedListeners) {
+            listener();
+          }
+        }
+      }
       if (!settled) {
         log.warn('[recording:wayland-share] helper exited before a screen was picked', {
           code,

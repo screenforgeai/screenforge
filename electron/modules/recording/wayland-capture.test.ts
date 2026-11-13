@@ -72,7 +72,10 @@ function fakeHelper(): FakeHelper {
       .filter(Boolean)
       .map((line) => line.split('\t'));
   helper.kill = vi.fn(() => {
-    process.nextTick(() => helper.emit('exit', null, 'SIGTERM'));
+    process.nextTick(() => {
+      helper.emit('exit', null, 'SIGTERM');
+      helper.emit('close', null, 'SIGTERM');
+    });
     return true;
   });
   helper.say = (message) => helper.stdout.write(`${JSON.stringify(message)}\n`);
@@ -224,8 +227,20 @@ describe('pickWaylandScreen', () => {
     const broken = fakeHelper();
     spawnMock.mockReturnValue(broken);
     const second = pickWaylandScreen();
-    broken.emit('exit', 127, null);
+    broken.emit('close', 127, null);
     await expect(second).resolves.toBe('unavailable');
+  });
+
+  it('is unavailable at once when the helper cannot be started', async () => {
+    const helper = fakeHelper();
+    spawnMock.mockReturnValue(helper);
+    const { pickWaylandScreen, hasWaylandShare } = await load();
+
+    const pick = pickWaylandScreen();
+    helper.emit('error', new Error('spawn EACCES'));
+
+    await expect(pick).resolves.toBe('unavailable');
+    expect(hasWaylandShare()).toBe(false);
   });
 
   it('fails with the reason when the share could not start', async () => {
@@ -294,7 +309,7 @@ describe('recording a picked screen', () => {
 
     helper.say({ type: 'recorded', ok: true, frames: 30, late: 0 });
     helper.say({ type: 'ended' });
-    helper.emit('exit', 0, null);
+    helper.emit('close', 0, null);
     await tick();
 
     expect(ended).toHaveBeenCalled();
@@ -305,6 +320,51 @@ describe('recording a picked screen', () => {
       late: 0,
     });
     expect(share.getWaylandShare()).toEqual({ screen, video });
+  });
+
+  it('tells the app when the helper dies without ending the share', async () => {
+    const { helper, ...share } = await picked();
+    const ended = vi.fn();
+    share.onWaylandShareEnded(ended);
+
+    helper.emit('close', null, 'SIGKILL');
+    await tick();
+
+    expect(ended).toHaveBeenCalledTimes(1);
+    expect(share.hasWaylandShare()).toBe(false);
+  });
+
+  it('does not tell the app when the share is let go on purpose', async () => {
+    const { endWaylandShare, onWaylandShareEnded } = await picked();
+    const ended = vi.fn();
+    onWaylandShareEnded(ended);
+
+    endWaylandShare();
+    await tick();
+
+    expect(ended).not.toHaveBeenCalled();
+  });
+
+  it('keeps a new share working while the old helper is still closing', async () => {
+    const { helper: old, pickWaylandScreen, getWaylandShareStill } = await picked();
+    old.kill.mockImplementation(() => true); // closes later
+    const next = fakeHelper();
+    spawnMock.mockReturnValue(next);
+    const pick = pickWaylandScreen();
+    next.say({ type: 'ready', screen });
+    next.say({ type: 'video', ...video });
+    await pick;
+
+    const still = getWaylandShareStill();
+    await tick();
+    old.emit('exit', null, 'SIGTERM');
+    old.emit('close', null, 'SIGTERM');
+    await tick();
+    const [[, stillPath]] = next.commands().filter(([name]) => name === 'still');
+    fsMock.files.set(stillPath, Buffer.alloc(4));
+    next.say({ type: 'still', path: stillPath, width: 1, height: 1 });
+
+    await expect(still).resolves.toMatchObject({ width: 1, height: 1 });
   });
 
   it('refuses to record once the share has ended', async () => {
