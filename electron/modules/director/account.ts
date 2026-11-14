@@ -72,7 +72,9 @@ export function createDirectorAccount(deps: DirectorAccountDeps) {
     async init(): Promise<void> {
       const startedAt = generation;
       const stored = await deps.store.load();
-      if (stored && startedAt === generation && !account) {
+      // Not under a sign-in started while loading: if it then failed, the
+      // restored account would stay set and block every later sign-in.
+      if (stored && startedAt === generation && !account && !pending) {
         account = stored;
         setState({
           status: 'signed-in',
