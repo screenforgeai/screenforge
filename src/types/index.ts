@@ -641,6 +641,18 @@ export interface TextClip {
   animationOutDuration: number;
 }
 
+/** The optional Director sign-in, as the app shows it. Never carries the token. */
+export type DirectorAccountState =
+  | { status: 'signed-out'; error?: 'expired' | 'failed' | 'disconnected' }
+  | { status: 'signing-in'; approveUrl: string }
+  | {
+      status: 'signed-in';
+      user: { id: string; email: string };
+      workspace: { id: string; name: string | null };
+      /** False where there's no OS keychain: signed in until Screenforge quits. */
+      remembered: boolean;
+    };
+
 /** 'screenshot-still': Wayland, drawing on a still of the screen picked in the share dialog. */
 export type AreaSelectorPurpose = 'record' | 'screenshot' | 'screenshot-still' | 'record-still';
 
@@ -731,6 +743,12 @@ export interface ScreenforgeAPI {
   importVideoForInsert: () => Promise<RecordingResult | null>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
+  getDirectorAccount: () => Promise<DirectorAccountState>;
+  /** Opens Director's approval page; resolves once signed in, cancelled or expired. */
+  signInToDirector: () => Promise<void>;
+  cancelDirectorSignIn: () => Promise<void>;
+  signOutOfDirector: () => Promise<void>;
+  onDirectorAccountChanged: (cb: (state: DirectorAccountState) => void) => () => void;
   /** Main window startup only: whether to open "What's new". Marks the running version as seen. */
   consumeWhatsNewOnLaunch: () => Promise<{
     show: boolean;

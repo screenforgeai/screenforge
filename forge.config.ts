@@ -13,6 +13,7 @@ import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-nati
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { APP_LINK_SCHEME } from './electron/modules/director/app-link';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpegPaths = require('./shared/ffmpeg-paths.js');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -192,6 +193,10 @@ const packagerConfig: ForgeConfig['packagerConfig'] = {
     unpack: '**/node_modules/onnxruntime-node/bin/**',
   },
   appBundleId: APP_BUNDLE_ID,
+  // screenforge-app:// links (Director sign-in, "Open in Screenforge"): becomes
+  // CFBundleURLTypes on macOS. Windows registers it at runtime
+  // (app.setAsDefaultProtocolClient); Linux through the makers' mimeType.
+  protocols: [{ name: 'Screenforge link', schemes: [APP_LINK_SCHEME] }],
   icon: fs.existsSync(appIconPath) ? appIconPath : undefined,
   extraResource: extraResources,
   afterCopyExtraResources: [pruneForeignFFmpegBuilds],
@@ -486,6 +491,7 @@ const config: ForgeConfig = {
         productName: APP_DISPLAY_NAME,
         genericName: 'Screen Recorder',
         categories: ['AudioVideo', 'Video'],
+        mimeType: [`x-scheme-handler/${APP_LINK_SCHEME}`],
         icon: fs.existsSync(linuxAppIconPath) ? linuxAppIconPath : undefined,
         homepage: 'https://github.com/screenforgeai/screenforge',
       },
@@ -499,6 +505,7 @@ const config: ForgeConfig = {
         genericName: 'Screen Recorder',
         section: 'video',
         categories: ['AudioVideo', 'Video'],
+        mimeType: [`x-scheme-handler/${APP_LINK_SCHEME}`],
         icon: fs.existsSync(linuxAppIconPath) ? linuxAppIconPath : undefined,
         homepage: 'https://github.com/screenforgeai/screenforge',
         // Wayland capture requires the PipeWire portal stack at runtime;
@@ -515,6 +522,7 @@ const config: ForgeConfig = {
         productName: APP_DISPLAY_NAME,
         genericName: 'Screen Recorder',
         categories: ['AudioVideo', 'Video'],
+        mimeType: [`x-scheme-handler/${APP_LINK_SCHEME}`],
         icon: fs.existsSync(linuxAppIconPath) ? linuxAppIconPath : undefined,
       },
     }),

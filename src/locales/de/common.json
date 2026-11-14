@@ -30,5 +30,7 @@
   "captureFrame": "Frame aufnehmen",
   "screenshotSaved": "Screenshot in Bilder gespeichert",
   "showInFinder": "Im Finder anzeigen",
-  "screenshotFailed": "Screenshot konnte nicht gespeichert werden"
+  "screenshotFailed": "Screenshot konnte nicht gespeichert werden",
+  "directorInfo": "Screenforge Director ist unsere Cloud-App. Sie hostet deine Freigabelinks und das Brand-Kit deines Workspace und kann Produktdemos für dich aufnehmen. Deine Projekte bleiben auf diesem Computer.",
+  "directorInfoLabel": "Was ist Screenforge Director?"
 }

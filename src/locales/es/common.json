@@ -30,5 +30,7 @@
   "captureFrame": "Capturar fotograma",
   "screenshotSaved": "Captura guardada en Imágenes",
   "showInFinder": "Mostrar en Finder",
-  "screenshotFailed": "No se pudo guardar la captura"
+  "screenshotFailed": "No se pudo guardar la captura",
+  "directorInfo": "Screenforge Director es nuestra app en la nube. Aloja tus enlaces para compartir y el kit de marca de tu espacio de trabajo, y puede grabar demos de producto por ti. Tus proyectos se quedan en este ordenador.",
+  "directorInfoLabel": "¿Qué es Screenforge Director?"
 }

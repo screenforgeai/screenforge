@@ -82,6 +82,9 @@ import {
   unregisterCaptureShortcuts,
 } from './modules/capture-shortcuts/service';
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
+import { registerDirectorChannels } from './modules/director/channel';
+import { initDirectorAccount } from './modules/director/service';
+import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
 
 // Before telemetry or anything else writes to userData: tells a fresh
 // install apart from an update for the What's new dialog.
@@ -244,6 +247,63 @@ if (IS_EXPORT_HARNESS_MODE && EXPORT_HARNESS_RESULT) {
     // Best-effort harness breadcrumb only.
   }
 }
+
+// ── App links (screenforge-app://) ─────────────────────────────────────────────
+// One Screenforge handles links: a second launch (how Windows and Linux
+// deliver a clicked link) hands its link to the first and quits. The export
+// harness runs headless next to a normal instance, so it never takes the lock.
+const HAS_SINGLE_INSTANCE_LOCK = IS_EXPORT_HARNESS_MODE || app.requestSingleInstanceLock();
+if (!HAS_SINGLE_INSTANCE_LOCK) {
+  app.quit();
+}
+
+if (!IS_EXPORT_HARNESS_MODE) {
+  if (process.defaultApp && process.argv.length >= 2) {
+    // `electron .` in development: register the dev binary with its entry script.
+    app.setAsDefaultProtocolClient(APP_LINK_SCHEME, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  } else {
+    app.setAsDefaultProtocolClient(APP_LINK_SCHEME);
+  }
+}
+
+// A link that arrives before the main window is up waits for it.
+let pendingAppLink: string | null = findAppLinkInArgv(process.argv);
+
+function handleAppLink(url: string): void {
+  if (!startupCompleted || !mainWindow || mainWindow.isDestroyed()) {
+    pendingAppLink = url;
+    return;
+  }
+  const link = parseAppLink(url);
+  log.info('[app-link] received', { type: link?.type ?? 'unknown' });
+  // Any page can open a screenforge-app:// URL: only links we know bring the app forward.
+  if (!link) {
+    return;
+  }
+  // Every link we handle today brings Screenforge forward: after a Director
+  // sign-in the app finishes it on its own, by polling.
+  mainWindow.show();
+  mainWindow.focus();
+  app.dock?.show();
+}
+
+// macOS delivers links as open-url, possibly before 'ready'.
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleAppLink(url);
+});
+
+app.on('second-instance', (_event, argv) => {
+  const url = findAppLinkInArgv(argv);
+  if (url) {
+    handleAppLink(url);
+  } else if (startupCompleted && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
 
 let splashWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -408,6 +468,11 @@ function createToolbarWindow(): BrowserWindow {
 }
 
 app.on('ready', async () => {
+  // app.quit() above does not stop 'ready' on Windows and Linux: the losing
+  // instance must not create windows or read the Director account.
+  if (!HAS_SINGLE_INSTANCE_LOCK) {
+    return;
+  }
   registerProtocols([APP_ORIGIN]);
 
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
@@ -509,6 +574,8 @@ app.on('ready', async () => {
   });
   registerAreaSelectorChannels(PRELOAD_PATH, loadURL);
   registerImportChannels();
+  registerDirectorChannels();
+  void initDirectorAccount();
   registerSceneOverlayChannels({
     preloadPath: PRELOAD_PATH,
     loadURL,
@@ -693,6 +760,12 @@ app.on('ready', async () => {
   startUpdater({
     isAppBusy: () => isRecordingBusy() || isExportBusy(),
   });
+
+  if (pendingAppLink) {
+    const url = pendingAppLink;
+    pendingAppLink = null;
+    handleAppLink(url);
+  }
 });
 
 // ── App lifecycle ──────────────────────────────────────────────────────────────
