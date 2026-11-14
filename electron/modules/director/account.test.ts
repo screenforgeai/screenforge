@@ -183,6 +183,41 @@ describe('Director account', () => {
     expect(account.getState()).toEqual({ status: 'signed-out' });
   });
 
+  it('does not restore a saved sign-in under a sign-in started during launch', async () => {
+    const { account, store, client } = setup();
+    let finishLoad: (value: SignedInAccount | null) => void = () => undefined;
+    store.load.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishLoad = resolve;
+        }),
+    );
+    let failPoll: () => void = () => undefined;
+    client.pollLoginCode.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          failPoll = () => reject(new DirectorApiError(400, 'LOGIN_CODE_INVALID', 'x'));
+        }),
+    );
+
+    const starting = account.init();
+    const signingIn = account.signIn();
+    await vi.waitFor(() => expect(client.pollLoginCode).toHaveBeenCalled());
+    finishLoad(ACCOUNT);
+    await starting;
+    expect(account.getState()).toMatchObject({ status: 'signing-in' });
+
+    failPoll();
+    await signingIn;
+    expect(account.getState()).toEqual({ status: 'signed-out', error: 'expired' });
+    expect(account.getToken()).toBeNull();
+
+    // The Sign in button still works.
+    await account.signIn();
+    expect(client.createLoginCode).toHaveBeenCalledTimes(2);
+    expect(account.getState()).toMatchObject({ status: 'signed-in' });
+  });
+
   it('forgets a token Director no longer accepts (disconnected in Director)', async () => {
     const { account, store } = setup({ stored: ACCOUNT });
     await account.init();
