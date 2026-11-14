@@ -87,7 +87,7 @@
   "link_removeDesc": "\"{{name}}\" 링크를 가진 사람은 더 이상 볼 수 없게 됩니다.",
   "link_removeConfirm": "링크 삭제",
   "link_removeFailed": "링크를 삭제하지 못했습니다. 다시 시도하세요.",
-  "link_removeFailed_signedOut": "이 링크를 삭제하려면 Director에 다시 로그인하세요.",
+  "link_removeFailed_signedOut": "이 링크를 삭제하려면 Screenforge Director에 다시 로그인하세요.",
   "link_uploading": "업로드 중 {{percent}}%",
   "link_paused": "업로드 일시 중지됨",
   "link_resume": "재개",

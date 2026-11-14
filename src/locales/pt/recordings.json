@@ -87,7 +87,7 @@
   "link_removeDesc": "Quem tiver o link de \"{{name}}\" não poderá mais assisti-lo.",
   "link_removeConfirm": "Remover link",
   "link_removeFailed": "Não foi possível remover o link. Tente novamente.",
-  "link_removeFailed_signedOut": "Entre novamente no Director para remover este link.",
+  "link_removeFailed_signedOut": "Entre novamente no Screenforge Director para remover este link.",
   "link_uploading": "Enviando {{percent}}%",
   "link_paused": "Envio pausado",
   "link_resume": "Retomar",

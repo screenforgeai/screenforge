@@ -87,7 +87,7 @@
   "link_removeDesc": "Wer den Link zu \"{{name}}\" hat, kann das Video danach nicht mehr ansehen.",
   "link_removeConfirm": "Link entfernen",
   "link_removeFailed": "Der Link konnte nicht entfernt werden. Versuche es erneut.",
-  "link_removeFailed_signedOut": "Melde dich erneut bei Director an, um diesen Link zu entfernen.",
+  "link_removeFailed_signedOut": "Melde dich erneut bei Screenforge Director an, um diesen Link zu entfernen.",
   "link_uploading": "Wird hochgeladen: {{percent}} %",
   "link_paused": "Upload pausiert",
   "link_resume": "Fortsetzen",

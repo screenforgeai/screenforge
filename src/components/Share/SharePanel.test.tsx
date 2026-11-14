@@ -54,11 +54,16 @@ afterEach(() => {
 });
 
 describe('SharePanel', () => {
-  it('shares the exported file in one click, and explains the free plan', async () => {
+  it('shares the exported file in one click, with one short line about free links', async () => {
     renderPanel();
-    expect(await screen.findByText(/links last 30 days/i)).toBeInTheDocument();
-    expect(screen.getByText(/25 active links/i)).toBeInTheDocument();
-    expect(screen.getByText(/paid plans keep links forever/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText('Anyone with the link can watch. Free links last 30 days.'),
+    ).toBeInTheDocument();
+    // The other free-plan limits only show up as errors, when they're hit.
+    expect(screen.queryByText(/25 active links/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'What is Screenforge Director?' }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /share link/i }));
     expect(api.shareVideo).toHaveBeenCalledWith({
       filePath: FILE,
@@ -201,10 +206,14 @@ describe('SharePanel', () => {
     expect(openSettings).toHaveBeenCalledWith('director');
   });
 
-  it('when signed out, explains the optional sign-in and opens Settings › Director', async () => {
+  it('when signed out, says sharing needs a free account and opens Settings › Director', async () => {
     renderPanel({ account: { status: 'signed-out' } });
-    expect(await screen.findByText(/optional director sign-in/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /sign in to director/i }));
+    expect(
+      await screen.findByText('Needs a free Screenforge Director account.'),
+    ).toBeInTheDocument();
+    const signIn = screen.getByRole('button', { name: 'Sign in' });
+    expect(signIn.querySelector('svg[data-director-mark][aria-hidden="true"]')).not.toBeNull();
+    fireEvent.click(signIn);
     expect(openSettings).toHaveBeenCalledWith('director');
     expect(api.shareVideo).not.toHaveBeenCalled();
   });

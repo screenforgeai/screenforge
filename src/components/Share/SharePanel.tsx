@@ -8,6 +8,8 @@ import { formatShareDate, isShareableFormat, shareExpiry } from 'src/lib/share';
 import { openSettings } from 'src/lib/settingsNavigation';
 import { trackEvent } from 'src/lib/analytics';
 import { useStore } from 'src/store';
+import { DirectorInfoTip } from '../Director/DirectorInfoTip';
+import { DirectorMark } from '../Director/DirectorMark';
 import { Button, Progress, Spinner } from 'src/lib/ui';
 import type { ExportFormat, ProjectShareLink, ShareErrorCode, ShareJobState } from 'src/types';
 
@@ -113,59 +115,55 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
     }
   };
 
-  const shell = (children: React.ReactNode) => (
+  // One row: what it is on the left, the one action on the right; one quiet line below.
+  const shell = (body: React.ReactNode, action?: React.ReactNode) => (
     <section
       aria-label={t('share_title')}
-      className="grid gap-3 rounded-lg border border-sf-border bg-sf-panel px-3 py-3"
+      className="grid gap-2 rounded-lg border border-sf-border bg-sf-panel px-3 py-3"
     >
-      <div className="flex items-center gap-2 text-md font-medium text-sf-primary">
-        <IconLink size={14} />
-        {t('share_title')}
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-md font-medium text-sf-primary">
+          <IconLink size={14} />
+          {t('share_title')}
+          <DirectorInfoTip />
+        </div>
+        {action}
       </div>
-      {children}
+      {body}
     </section>
+  );
+  const note = (text: string) => <p className="text-sm text-sf-muted">{text}</p>;
+  const cancelButton = (
+    <Button size="sm" variant="ghost" onClick={() => void window.screenforge.cancelShare()}>
+      {t('share_cancel')}
+    </Button>
   );
 
   if (!shareable) {
-    return shell(
-      <p className="text-md text-sf-secondary">{t('share_error_unsupported-format')}</p>,
-    );
+    return shell(note(t('share_error_unsupported-format')));
   }
 
   if (!account) {
-    return shell(
-      <div className="flex justify-center py-2">
-        <Spinner className="size-3.5" />
-      </div>,
-    );
+    return shell(null, <Spinner className="size-3.5" />);
   }
 
   if (account.status !== 'signed-in') {
     return shell(
-      <>
-        <p className="text-md text-sf-secondary">{t('share_signInBody')}</p>
-        <div>
-          <Button size="sm" variant="secondary" onClick={openDirectorSettings}>
-            {t('share_signIn')}
-          </Button>
-        </div>
-      </>,
+      note(t('share_signInBody')),
+      <Button size="sm" variant="secondary" className="gap-1.5" onClick={openDirectorSettings}>
+        <DirectorMark size={13} />
+        {t('share_signIn')}
+      </Button>,
     );
   }
 
   if (state.status === 'preparing' || state.status === 'finishing') {
     return shell(
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-md text-sf-secondary">
-          <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
-          {t(state.status === 'preparing' ? 'share_preparing' : 'share_finishing')}
-        </span>
-        {state.status === 'preparing' && (
-          <Button size="sm" variant="ghost" onClick={() => void window.screenforge.cancelShare()}>
-            {t('share_cancel')}
-          </Button>
-        )}
-      </div>,
+      <span className="flex items-center gap-2 text-sm text-sf-muted">
+        <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
+        {t(state.status === 'preparing' ? 'share_preparing' : 'share_finishing')}
+      </span>,
+      state.status === 'preparing' ? cancelButton : undefined,
     );
   }
 
@@ -174,25 +172,19 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
       state.totalBytes > 0 ? Math.round((state.uploadedBytes / state.totalBytes) * 100) : 0;
     return shell(
       <>
-        <div className="flex items-center justify-between text-md">
-          <span className="text-sf-secondary">{t('share_uploading')}</span>
-          <span className="flex items-center gap-2">
-            <span className="tabular-nums text-sf-muted">
-              {t('share_uploadedOf', {
-                done: formatBytes(state.uploadedBytes),
-                total: formatBytes(state.totalBytes),
-              })}
-            </span>
-            <span className="tabular-nums font-medium text-sf-primary">{`${pct}%`}</span>
+        <Progress value={pct} />
+        <div className="flex items-center justify-between text-sm text-sf-muted">
+          <span>{t('share_uploading')}</span>
+          <span className="flex items-center gap-2 tabular-nums">
+            {t('share_uploadedOf', {
+              done: formatBytes(state.uploadedBytes),
+              total: formatBytes(state.totalBytes),
+            })}
+            <span className="font-medium text-sf-primary">{`${pct}%`}</span>
           </span>
         </div>
-        <Progress value={pct} />
-        <div className="flex justify-end">
-          <Button size="sm" variant="ghost" onClick={() => void window.screenforge.cancelShare()}>
-            {t('share_cancel')}
-          </Button>
-        </div>
       </>,
+      cancelButton,
     );
   }
 
@@ -200,9 +192,6 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
     const { link } = state;
     return shell(
       <>
-        <p className="text-md font-medium text-sf-green">
-          {t(state.copied ? 'share_copied' : 'share_ready')}
-        </p>
         {link.watchUrl && (
           <div className="flex items-center gap-2">
             <button
@@ -223,33 +212,33 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
           <ExpiryText link={link} />
         </p>
       </>,
+      <span className="text-sm font-medium text-sf-green">
+        {t(state.copied ? 'share_copied' : 'share_ready')}
+      </span>,
     );
   }
 
   const failed = state.status === 'failed' ? state : null;
   const resume = canResume || (failed?.resumable ?? false);
+  const action =
+    failed?.error === 'signed-out' ? (
+      <Button size="sm" variant="secondary" onClick={openDirectorSettings}>
+        {t('share_signInAgain')}
+      </Button>
+    ) : failed && FINAL_ERRORS.has(failed.error) ? undefined : (
+      <Button size="sm" variant="secondary" className="gap-1.5" onClick={startShare}>
+        <IconLink size={13} />
+        {resume ? t('share_resume') : failed ? t('share_tryAgain') : t('share_button')}
+      </Button>
+    );
   return shell(
-    <>
-      {failed ? (
-        <p role="alert" className="text-md text-sf-red">
-          {t(`share_error_${failed.error}`)}
-        </p>
-      ) : (
-        <p className="text-md text-sf-secondary">{t('share_body')}</p>
-      )}
-      <p className="text-sm text-sf-muted">{t('share_plan')}</p>
-      <div className="flex gap-2">
-        {failed?.error === 'signed-out' ? (
-          <Button size="sm" onClick={openDirectorSettings}>
-            {t('share_signInAgain')}
-          </Button>
-        ) : failed && FINAL_ERRORS.has(failed.error) ? null : (
-          <Button size="sm" className="gap-1.5" onClick={startShare}>
-            <IconLink size={13} />
-            {resume ? t('share_resume') : failed ? t('share_tryAgain') : t('share_button')}
-          </Button>
-        )}
-      </div>
-    </>,
+    failed ? (
+      <p role="alert" className="text-sm text-sf-red">
+        {t(`share_error_${failed.error}`)}
+      </p>
+    ) : (
+      note(t('share_body'))
+    ),
+    action,
   );
 };

@@ -87,7 +87,7 @@
   "link_removeDesc": "「{{name}}」のリンクを知っている人は、視聴できなくなります。",
   "link_removeConfirm": "リンクを削除",
   "link_removeFailed": "リンクを削除できませんでした。もう一度お試しください。",
-  "link_removeFailed_signedOut": "このリンクを削除するには、Director にもう一度サインインしてください。",
+  "link_removeFailed_signedOut": "このリンクを削除するには、Screenforge Director にもう一度サインインしてください。",
   "link_uploading": "アップロード中 {{percent}}%",
   "link_paused": "アップロード一時停止",
   "link_resume": "再開",
