@@ -31,7 +31,13 @@ export interface ShareManagerDeps {
   store: ShareStore;
   fetch: typeof globalThis.fetch;
   stat: (filePath: string) => Promise<{ size: number; mtimeMs: number } | null>;
-  openSource: (filePath: string) => Promise<{ source: ByteSource; close: () => Promise<void> }>;
+  /** True for a file this app exported (sharing is limited to those). */
+  isExported: (filePath: string) => Promise<boolean>;
+  /** Opens the file, refusing one that is no longer the size and time checked. */
+  openSource: (
+    filePath: string,
+    expected: { size: number; mtimeMs: number },
+  ) => Promise<{ source: ByteSource; close: () => Promise<void> }>;
   writeClipboard: (text: string) => void;
   onState: (state: ShareJobState) => void;
   onLibrary: (library: ShareLibrary) => void;
@@ -220,7 +226,13 @@ export function createShareManager(deps: ShareManagerDeps) {
       let alreadyUploaded: UploadedPart[] = [];
 
       const pending = await deps.store.findUpload({ filePath });
-      if (pending && pending.sizeBytes === file.size && pending.mtimeMs === file.mtimeMs) {
+      const resumable =
+        !!pending && pending.sizeBytes === file.size && pending.mtimeMs === file.mtimeMs;
+      // Only a file this app exported, or one it was already uploading.
+      if (!resumable && !(await deps.isExported(filePath))) {
+        return fail('failed');
+      }
+      if (pending && resumable) {
         try {
           const plan = await deps.api.resume(pending.shareId);
           shareId = pending.shareId;
@@ -230,10 +242,15 @@ export function createShareManager(deps: ShareManagerDeps) {
           alreadyUploaded = plan.uploadedParts;
         } catch (err) {
           const code = shareErrorCode(err);
-          if (code === 'interrupted' || code === 'signed-out') {
-            return fail(code, true);
+          const gone =
+            code === 'not-found' ||
+            (err instanceof DirectorApiError && err.code === 'SHARE_NOT_UPLOADING');
+          if (!gone) {
+            // A moment's failure (network, sign-in, a 5xx): keep the parts
+            // already in Director and resume later.
+            return fail(code === 'failed' ? 'interrupted' : code, true);
           }
-          // Director no longer has it (or can't resume it): start over.
+          // Director no longer has it, or can't resume it: start over.
           await forgetUpload(pending.shareId);
         }
       } else if (pending) {
@@ -286,7 +303,10 @@ export function createShareManager(deps: ShareManagerDeps) {
       };
       emitProgress(baseBytes, true);
 
-      const { source, close } = await deps.openSource(filePath);
+      const { source, close } = await deps.openSource(filePath, {
+        size: file.size,
+        mtimeMs: file.mtimeMs,
+      });
       let sent: UploadedPart[];
       try {
         sent = await uploadParts({

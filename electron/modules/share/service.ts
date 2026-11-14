@@ -6,6 +6,7 @@ import { CH } from '../../channels';
 import { directorApiBase, isLoopbackUrl } from '../director/client';
 import { getDirectorAccount, getDirectorClient } from '../director/service';
 import { createShareApi } from './api';
+import { exportedFiles, sameFile } from './exports';
 import { createShareManager, type ShareManager } from './shares';
 import { createShareStore } from './store';
 
@@ -36,8 +37,37 @@ export function getShareManager(): ShareManager {
         return null;
       }
     },
-    async openSource(filePath) {
+    async isExported(filePath) {
+      try {
+        const stats = await fs.stat(filePath);
+        return (
+          stats.isFile() &&
+          exportedFiles.matches(filePath, {
+            size: stats.size,
+            mtimeMs: stats.mtimeMs,
+            dev: stats.dev,
+            ino: stats.ino,
+          })
+        );
+      } catch {
+        return false;
+      }
+    },
+    async openSource(filePath, expected) {
       const handle = await fs.open(filePath, 'r');
+      // Checked on the open handle, so the path can't be swapped for another
+      // file between the checks and the read.
+      const stats = await handle.stat();
+      const opened = { size: stats.size, mtimeMs: stats.mtimeMs, dev: stats.dev, ino: stats.ino };
+      const known = exportedFiles.known(filePath);
+      if (
+        !stats.isFile() ||
+        !sameFile(expected, opened) ||
+        (known !== null && !sameFile(known, opened))
+      ) {
+        await handle.close();
+        throw new Error('The file changed before it could be shared.');
+      }
       return {
         source: {
           async read(position, length) {

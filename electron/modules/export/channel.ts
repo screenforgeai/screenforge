@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import { CH } from '../../channels';
 import { handleChannel, handleChannelWithSender } from '../../lib/ipc-main';
 import type {
@@ -24,6 +25,22 @@ import {
   initMuxer,
   writeEncodedChunks,
 } from './service';
+import { exportedFiles } from '../share/exports';
+
+/** Notes the file an export wrote, so it (and only such files) can be shared. */
+async function rememberExport(outputPath: string): Promise<void> {
+  try {
+    const stats = await fs.stat(outputPath);
+    exportedFiles.remember(outputPath, {
+      size: stats.size,
+      mtimeMs: stats.mtimeMs,
+      dev: stats.dev,
+      ino: stats.ino,
+    });
+  } catch {
+    // Gone already: there's nothing to share.
+  }
+}
 
 export function registerExportChannels(preloadPath: string): void {
   handleChannel<[string, ExportFormat, string?], string | null>(
@@ -40,10 +57,13 @@ export function registerExportChannels(preloadPath: string): void {
 
   handleChannelWithSender<[ExportRequest], Awaited<ReturnType<typeof startExport>>>(
     CH.export.START,
-    (sender, request) =>
-      startExport(request, (progress) => {
+    async (sender, request) => {
+      const result = await startExport(request, (progress) => {
         sender.send(CH.export.PROGRESS, progress);
-      }),
+      });
+      await rememberExport(result.outputPath);
+      return result;
+    },
   );
 
   handleChannel<[string], void>(CH.export.CANCEL, (jobId) => cancelExport(jobId));

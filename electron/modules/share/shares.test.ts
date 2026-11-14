@@ -51,9 +51,17 @@ interface SetupOptions {
   mtimeMs?: number;
   fetch?: typeof globalThis.fetch;
   allowLoopbackUploads?: boolean;
+  /** Whether this app exported the file (in this run). */
+  exported?: boolean;
 }
 
-const setup = ({ size = 25, mtimeMs = 1000, fetch, allowLoopbackUploads }: SetupOptions = {}) => {
+const setup = ({
+  size = 25,
+  mtimeMs = 1000,
+  fetch,
+  allowLoopbackUploads,
+  exported = true,
+}: SetupOptions = {}) => {
   let file: { size: number; mtimeMs: number } | null = { size, mtimeMs };
   const bytes = new Uint8Array(size);
   const api = {
@@ -81,16 +89,27 @@ const setup = ({ size = 25, mtimeMs = 1000, fetch, allowLoopbackUploads }: Setup
   const libraries: ShareLibrary[] = [];
   const clipboard = vi.fn();
   const closeSource = vi.fn(async () => undefined);
+  const isExported = vi.fn(async () => exported);
+  const openSource = vi.fn<
+    (
+      filePath: string,
+      expected: { size: number; mtimeMs: number },
+    ) => Promise<{
+      source: { read: (pos: number, len: number) => Promise<Uint8Array> };
+      close: () => Promise<undefined>;
+    }>
+  >(async () => ({
+    source: { read: async (pos, len) => bytes.subarray(pos, pos + len) },
+    close: closeSource,
+  }));
   const store = createShareStore({ filePath: '/userData/share-links.json', fs: memoryFs() });
   const manager = createShareManager({
     api,
     store,
     fetch: fetch ?? defaultFetch,
     stat: async () => file,
-    openSource: async () => ({
-      source: { read: async (pos, len) => bytes.subarray(pos, pos + len) },
-      close: closeSource,
-    }),
+    isExported,
+    openSource,
     writeClipboard: clipboard,
     onState: (s) => states.push(s),
     onLibrary: (l) => libraries.push(l),
@@ -109,6 +128,8 @@ const setup = ({ size = 25, mtimeMs = 1000, fetch, allowLoopbackUploads }: Setup
     libraries,
     clipboard,
     closeSource,
+    openSource,
+    isExported,
     changeFile,
     fetch: defaultFetch,
   };
@@ -253,6 +274,85 @@ describe('share manager', () => {
     expect(api.resume).not.toHaveBeenCalled();
     expect(api.remove).toHaveBeenCalledWith('old');
     expect(api.create).toHaveBeenCalled();
+  });
+
+  it('keeps an unfinished upload when Director fails for a moment, to resume later', async () => {
+    const { manager, api, store } = setup();
+    await store.putUpload({
+      shareId: 'sh1',
+      filePath: '/exports/demo.mp4',
+      sizeBytes: 25,
+      mtimeMs: 1000,
+      projectId: 'p1',
+      title: 'Demo',
+      durationS: 30,
+      contentType: 'video/mp4',
+    });
+    api.resume.mockRejectedValueOnce(new DirectorApiError(503, 'HTTP_503', 'Unavailable'));
+
+    const result = await manager.share(REQUEST);
+
+    expect(result).toMatchObject({ status: 'failed', resumable: true });
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(api.create).not.toHaveBeenCalled();
+    expect(await store.getUploads()).toEqual([expect.objectContaining({ shareId: 'sh1' })]);
+  });
+
+  it('starts over when Director says the upload can no longer be resumed', async () => {
+    const { manager, api, store } = setup();
+    await store.putUpload({
+      shareId: 'done-elsewhere',
+      filePath: '/exports/demo.mp4',
+      sizeBytes: 25,
+      mtimeMs: 1000,
+      projectId: 'p1',
+      title: 'Demo',
+      durationS: 30,
+      contentType: 'video/mp4',
+    });
+    api.resume.mockRejectedValueOnce(
+      new DirectorApiError(409, 'SHARE_NOT_UPLOADING', 'Not uploading'),
+    );
+
+    expect((await manager.share(REQUEST)).status).toBe('done');
+    expect(api.remove).toHaveBeenCalledWith('done-elsewhere');
+    expect(api.create).toHaveBeenCalled();
+  });
+
+  it('shares only a file this app exported, reading nothing otherwise', async () => {
+    const { manager, api, openSource, isExported } = setup({ exported: false });
+
+    const result = await manager.share({ ...REQUEST, filePath: '/home/me/secret.mp4' });
+
+    expect(isExported).toHaveBeenCalledWith('/home/me/secret.mp4');
+    expect(result).toMatchObject({ status: 'failed', error: 'failed', resumable: false });
+    expect(api.create).not.toHaveBeenCalled();
+    expect(openSource).not.toHaveBeenCalled();
+  });
+
+  it('still resumes an upload it started before a restart, without a fresh export', async () => {
+    const { manager, api, store } = setup({ exported: false });
+    await store.putUpload({
+      shareId: 'sh1',
+      filePath: '/exports/demo.mp4',
+      sizeBytes: 25,
+      mtimeMs: 1000,
+      projectId: 'p1',
+      title: 'Demo',
+      durationS: 30,
+      contentType: 'video/mp4',
+    });
+
+    expect((await manager.share(REQUEST)).status).toBe('done');
+    expect(api.resume).toHaveBeenCalledWith('sh1');
+  });
+
+  it('opens the file expecting the exact size and time it checked', async () => {
+    const { manager, openSource } = setup({ size: 25, mtimeMs: 1000 });
+
+    await manager.share(REQUEST);
+
+    expect(openSource).toHaveBeenCalledWith('/exports/demo.mp4', { size: 25, mtimeMs: 1000 });
   });
 
   it('starts over when Director no longer has the unfinished share', async () => {
