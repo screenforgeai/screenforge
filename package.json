@@ -1,7 +1,7 @@
 {
   "name": "screenforge",
   "productName": "Screenforge",
-  "version": "0.7.0",
+  "version": "0.9.1",
   "description": "A free, open-source screen recording tool that automatically zooms and tracks your cursor to create polished screen recordings. No watermark, no subscriptions.",
   "main": ".vite/build/main.js",
   "private": true,
@@ -83,6 +83,7 @@
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "0.170.0",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^5.1.4",
@@ -106,7 +107,10 @@
       "electron",
       "fs-xattr",
       "macos-alias"
-    ]
+    ],
+    "patchedDependencies": {
+      "@xzdarcy/react-timeline-editor@1.0.0": "patches/@xzdarcy__react-timeline-editor@1.0.0.patch"
+    }
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -141,6 +145,7 @@
     "react-i18next": "^17.0.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
+    "three": "0.170.0",
     "uiohook-napi": "^1.5.4",
     "wavefile": "^11.0.0",
     "zustand": "^5.0.11"

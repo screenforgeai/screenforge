@@ -35,6 +35,7 @@ import type {
   CursorStyle,
   CursorClickEffect,
 } from '../../types/index';
+import type { CursorEffect } from '../effects/cursor/effects';
 import type { ZoomClip } from '../../types/timeline';
 import type { FrameSettings } from '../effects/frame';
 
@@ -54,6 +55,10 @@ export interface WorkerStoreSnapshot {
   cursorMaxTilt: number;
   cursorHideWhenIdle: boolean;
   cursorIdleHideSeconds: number;
+  cursorEffect: CursorEffect;
+  cursorClickShrink: boolean;
+  cursorColor: string;
+  cursorLabel: string;
   cursor: ProjectCursorSettings;
 }
 
@@ -171,6 +176,10 @@ function handleInit(msg: WorkerInitMessage): void {
     cursorMaxTilt: msg.storeSnapshot.cursorMaxTilt,
     cursorHideWhenIdle: msg.storeSnapshot.cursorHideWhenIdle,
     cursorIdleHideSeconds: msg.storeSnapshot.cursorIdleHideSeconds,
+    cursorEffect: msg.storeSnapshot.cursorEffect,
+    cursorClickShrink: msg.storeSnapshot.cursorClickShrink,
+    cursorColor: msg.storeSnapshot.cursorColor,
+    cursorLabel: msg.storeSnapshot.cursorLabel,
     cursor: msg.storeSnapshot.cursor,
     isCropEditing: false,
   });

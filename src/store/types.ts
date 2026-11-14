@@ -3,6 +3,7 @@ import type {
   ProjectKeyboardSettings,
   RecordingResult,
   SavedProject,
+  ScreenshotCapture,
   CaptionSettings,
   TextClip,
 } from '../types/index';
@@ -21,8 +22,9 @@ import type { MotionClip } from '../lib/animation/motionClips';
 export type { MusicClip };
 
 export type CursorStyle = BaseCursorStyle;
-export type CursorClickEffect = 'ripple' | 'none';
-export type CursorClickSound = 'none' | 'soft' | 'mouse' | 'trackpad' | 'pop' | 'tick';
+export type { CursorClickEffect, CursorEffect } from '../lib/effects/cursor/effects';
+import type { CursorClickEffect, CursorEffect } from '../lib/effects/cursor/effects';
+export type CursorClickSound = 'none' | 'mouse' | 'mouse-2' | 'trackpad' | 'soft';
 export type WidgetTab =
   | 'recordings'
   | 'video'
@@ -73,6 +75,10 @@ export interface EditorSessionState {
   cursorMaxTilt: number;
   cursorHideWhenIdle: boolean;
   cursorIdleHideSeconds: number;
+  cursorEffect: CursorEffect;
+  cursorClickShrink: boolean;
+  cursorColor: string;
+  cursorLabel: string;
   cursorClickSound: CursorClickSound;
   cursorClickSoundVolume: number;
   cursorContinuousTracking: boolean;
@@ -86,6 +92,8 @@ export interface EditorSessionState {
   maskClips: MaskClip[];
   motionClips: MotionClip[];
   isCropEditing: boolean;
+  /** What the crop editor is editing: the frame's crop box, or the line under a recorded toolbar. */
+  cropEditTarget: 'frame' | 'recordedBar';
 }
 
 export interface HistorySnapshot {
@@ -102,6 +110,10 @@ export interface HistorySnapshot {
   cursorMaxTilt: number;
   cursorHideWhenIdle: boolean;
   cursorIdleHideSeconds: number;
+  cursorEffect: CursorEffect;
+  cursorClickShrink: boolean;
+  cursorColor: string;
+  cursorLabel: string;
   cursorClickSound: CursorClickSound;
   cursorClickSoundVolume: number;
   cursorContinuousTracking: boolean;
@@ -141,6 +153,10 @@ export interface EditableStorePatch {
   cursorMaxTilt?: number;
   cursorHideWhenIdle?: boolean;
   cursorIdleHideSeconds?: number;
+  cursorEffect?: CursorEffect;
+  cursorClickShrink?: boolean;
+  cursorColor?: string;
+  cursorLabel?: string;
   cursorClickSound?: CursorClickSound;
   cursorClickSoundVolume?: number;
   cursorContinuousTracking?: boolean;
@@ -181,6 +197,8 @@ export interface AppStore extends EditorSessionState {
   hiddenLayers: Record<TimelineLayerId, boolean>;
   focusMode: boolean;
   isExporting: boolean;
+  /** Still being edited in the Screenshot editor (UI state, never persisted). */
+  screenshotCapture: ScreenshotCapture | null;
   past: HistoryEntry[];
   future: HistoryEntry[];
   activeGroup: HistoryGroup | null;
@@ -235,7 +253,9 @@ export interface AppStore extends EditorSessionState {
   setActiveWidget: (tab: WidgetTab) => void;
   setFocusMode: (v: boolean) => void;
   setIsExporting: (v: boolean) => void;
-  setIsCropEditing: (v: boolean) => void;
+  openScreenshotEditor: (capture: ScreenshotCapture) => void;
+  closeScreenshotEditor: () => void;
+  setIsCropEditing: (v: boolean, target?: 'frame' | 'recordedBar') => void;
   setLayerHidden: (layer: TimelineLayerId, hidden: boolean) => void;
   setIsAppendMode: (v: boolean) => void;
   setAppendStartTime: (t: number | null) => void;

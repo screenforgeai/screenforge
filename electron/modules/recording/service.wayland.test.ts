@@ -19,6 +19,9 @@ const electronMock = vi.hoisted(() => {
     screen: {
       getAllDisplays: () => [primaryDisplay],
       getPrimaryDisplay: () => primaryDisplay,
+      // Display-change listeners the recording registers while it runs.
+      on: () => undefined,
+      removeListener: () => undefined,
     },
   };
 });
@@ -58,6 +61,36 @@ vi.mock('../ffmpeg/runner', () => ({
 
 vi.mock('../../lib/logger', () => ({
   default: loggerMock,
+}));
+
+// The capture helper's share: its pointer moves are fed in by hand.
+const shareMock = vi.hoisted(() => ({
+  moveListener: null as ((x: number, y: number) => void) | null,
+  live: false,
+  share: null as null | {
+    screen: { x: number; y: number; width: number; height: number };
+    video: { width: number; height: number; format: string };
+  },
+  pointer: null as { x: number; y: number } | null,
+  start: vi.fn(),
+  finish: vi.fn(),
+  pause: vi.fn(),
+  resume: vi.fn(),
+  end: vi.fn(),
+}));
+
+vi.mock('./wayland-capture', () => ({
+  setWaylandShareMoveListener: (listener: ((x: number, y: number) => void) | null) => {
+    shareMock.moveListener = listener;
+  },
+  hasWaylandShare: () => shareMock.live,
+  getWaylandShare: () => shareMock.share,
+  getWaylandSharePointer: () => shareMock.pointer,
+  startWaylandShareRecording: shareMock.start,
+  finishWaylandShareRecording: shareMock.finish,
+  pauseWaylandShareRecording: shareMock.pause,
+  resumeWaylandShareRecording: shareMock.resume,
+  endWaylandShare: shareMock.end,
 }));
 
 vi.mock('../../lib/telemetry', () => ({
@@ -214,6 +247,227 @@ describe('recording service on Linux', () => {
       expect(result.durationMs).toBe(3000);
       expect(result.hasEmbeddedAudio).toBe(false);
       expect(result.events).toEqual([]);
+    });
+
+    describe('screen picked through the capture helper', () => {
+      const wide = { x: 1080, y: 272, width: 2560, height: 1440 };
+
+      beforeEach(() => {
+        shareMock.live = true;
+        shareMock.share = { screen: wide, video: { width: 2560, height: 1440, format: 'bgr0' } };
+        shareMock.start.mockResolvedValue({ fps: 60 });
+        shareMock.finish.mockResolvedValue({ ok: true, frames: 180, late: 0 });
+      });
+
+      afterEach(() => {
+        shareMock.live = false;
+        shareMock.share = null;
+        shareMock.pointer = null;
+      });
+
+      it('starts from where the pointer was, even if it never moves', async () => {
+        shareMock.pointer = { x: 2000, y: 500 };
+        const { startRecording, stopRecording } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        const result = await stopRecording();
+
+        expect(result.events).toEqual([expect.objectContaining({ type: 'move', x: 2000, y: 500 })]);
+      });
+
+      it('records it through the helper, with the pointer moves made while recording', async () => {
+        const { startRecording, stopRecording, isRecordingBusy } = await loadService();
+
+        shareMock.moveListener?.(50, 50); // before recording: not kept
+        await startRecording('screen:wayland', null);
+        expect(isRecordingBusy()).toBe(true);
+        const outPath = shareMock.start.mock.calls[0][1] as string;
+        expect(shareMock.start).toHaveBeenCalledWith('/usr/bin/ffmpeg', outPath);
+        expect(outPath).toMatch(/screenforge-wayland-.*\.mp4$/);
+        shareMock.moveListener?.(1500, 600);
+
+        const result = await stopRecording();
+
+        expect(isRecordingBusy()).toBe(false);
+        expect(result.filePath).toBe(outPath);
+        // Already H.264: no transcode.
+        expect(ffmpegRunnerMock.runFFmpeg).not.toHaveBeenCalled();
+        // The moves are in desktop coordinates, the picked screen's own space.
+        expect(result.recordingArea).toEqual(wide);
+        expect(result.events).toEqual([expect.objectContaining({ type: 'move', x: 1500, y: 600 })]);
+        expect(shareMock.end).toHaveBeenCalled();
+      });
+
+      it('fails the stop when the helper could not save the recording', async () => {
+        shareMock.finish.mockResolvedValue({ ok: false, frames: 0, late: 0 });
+        const { startRecording, stopRecording, isRecordingBusy } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        await expect(stopRecording()).rejects.toThrow(/could not be saved/);
+        expect(isRecordingBusy()).toBe(false);
+      });
+
+      it('carries on from where the pointer moved while paused', async () => {
+        shareMock.pointer = { x: 1200, y: 400 };
+        const { startRecording, stopRecording, pauseRecording, resumeRecording } =
+          await loadService();
+
+        await startRecording('screen:wayland', null);
+        pauseRecording();
+        shareMock.pointer = { x: 3000, y: 900 };
+        shareMock.moveListener?.(3000, 900); // dropped: paused
+        resumeRecording();
+        const result = await stopRecording();
+
+        expect(result.events.map(({ x, y }) => [x, y])).toEqual([
+          [1200, 400],
+          [3000, 900],
+        ]);
+      });
+
+      it('passes pause and resume on to the helper', async () => {
+        const { startRecording, pauseRecording, resumeRecording } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        pauseRecording();
+        resumeRecording();
+
+        expect(shareMock.pause).toHaveBeenCalledTimes(1);
+        expect(shareMock.resume).toHaveBeenCalledTimes(1);
+      });
+
+      it('lets the share go when the recording is discarded', async () => {
+        const { startRecording, discardRecording, isRecordingBusy } = await loadService();
+
+        await startRecording('screen:wayland', null);
+        await discardRecording();
+
+        expect(shareMock.end).toHaveBeenCalled();
+        expect(isRecordingBusy()).toBe(false);
+      });
+
+      it('crops an area drawn on a still of the picked screen', async () => {
+        const { startRecording, stopRecording } = await loadService();
+        const { probeExportSource } = await import('../export/service');
+        vi.mocked(probeExportSource).mockResolvedValue({
+          fps: 60,
+          duration: 3,
+          width: 2560,
+          height: 1440,
+        });
+        const area = {
+          x: 100,
+          y: 50,
+          width: 800,
+          height: 600,
+          frame: { width: 2560, height: 1440 },
+        };
+
+        await startRecording('screen:wayland', area);
+        const result = await stopRecording();
+
+        expect(result.areaCrop).toMatchObject({ sourceWidth: 2560, sourceHeight: 1440 });
+      });
+    });
+
+    describe('area recording', () => {
+      const area = { x: 100, y: 50, width: 801, height: 601 };
+
+      async function stopWithStream(
+        stream: { width?: number; height?: number },
+        probed: { width: number | null; height: number | null },
+      ) {
+        const { startRecording, stopRecording } = await loadService();
+        const { probeExportSource } = await import('../export/service');
+        vi.mocked(probeExportSource).mockResolvedValue({ fps: 30, duration: 3, ...probed });
+        await startRecording('screen:wayland', area, { rendererCapture: true });
+        return stopRecording({ webmPath: '/tmp/portal-capture.webm', ...stream });
+      }
+
+      it('crops when the streamed monitor is the one the area was drawn on', async () => {
+        const result = await stopWithStream(
+          { width: 1920, height: 1080 },
+          { width: 1920, height: 1080 },
+        );
+        expect(result.areaCrop).toEqual({
+          x: 100,
+          y: 50,
+          width: 801,
+          height: 601,
+          sourceWidth: 1920,
+          sourceHeight: 1080,
+        });
+      });
+
+      it('opens uncropped when the picker streamed a same-shaped monitor of another size', async () => {
+        // A 1280x720 monitor is 16:9 too: its shape alone can't tell them apart.
+        const result = await stopWithStream(
+          { width: 1280, height: 720 },
+          { width: 1280, height: 720 },
+        );
+        expect(result.areaCrop).toBeUndefined();
+      });
+
+      it("uses the stream's size when the video can't be measured", async () => {
+        const matching = await stopWithStream(
+          { width: 1920, height: 1080 },
+          { width: null, height: null },
+        );
+        expect(matching.areaCrop).toMatchObject({ sourceWidth: 1920, sourceHeight: 1080 });
+      });
+
+      describe('drawn on a still of the picked screen', () => {
+        // The still is the stream's own picture, so any monitor can be picked.
+        const onStill = {
+          x: 100,
+          y: 50,
+          width: 400,
+          height: 300,
+          frame: { width: 2560, height: 1440 },
+        };
+
+        async function stopWithVideo(video: { width: number; height: number }) {
+          const { startRecording, stopRecording } = await loadService();
+          const { probeExportSource } = await import('../export/service');
+          vi.mocked(probeExportSource).mockResolvedValue({ fps: 30, duration: 3, ...video });
+          await startRecording('screen:wayland', onStill, { rendererCapture: true });
+          return stopRecording({ webmPath: '/tmp/portal-capture.webm', ...video });
+        }
+
+        it('crops it in the video, whatever monitor was picked', async () => {
+          const result = await stopWithVideo({ width: 2560, height: 1440 });
+          expect(result.areaCrop).toEqual({
+            x: 100,
+            y: 50,
+            width: 400,
+            height: 300,
+            sourceWidth: 2560,
+            sourceHeight: 1440,
+          });
+        });
+
+        it('scales it when the video came out smaller than the still', async () => {
+          const result = await stopWithVideo({ width: 1280, height: 720 });
+          expect(result.areaCrop).toEqual({
+            x: 50,
+            y: 25,
+            width: 200,
+            height: 150,
+            sourceWidth: 1280,
+            sourceHeight: 720,
+          });
+        });
+
+        it('opens uncropped when the video is not the picture it was drawn on', async () => {
+          const result = await stopWithVideo({ width: 1080, height: 1920 });
+          expect(result.areaCrop).toBeUndefined();
+        });
+      });
+
+      it('opens uncropped when neither the video nor the stream has a size', async () => {
+        const result = await stopWithStream({}, { width: null, height: null });
+        expect(result.areaCrop).toBeUndefined();
+      });
     });
 
     it('rejects stop when the renderer produced no video data', async () => {

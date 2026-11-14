@@ -17,5 +17,8 @@
   "addZoom": "Add Zoom",
   "addCinematicZoom": "Add Cinematic Zoom",
   "addText": "Add Text",
-  "addMask": "Add Mask"
+  "addMask": "Add Mask",
+  "captureAnywhere": "캡처 (어느 앱에서나)",
+  "takeScreenshot": "스크린샷 찍기",
+  "openRecordingToolbar": "녹화 도구 모음 열기"
 }

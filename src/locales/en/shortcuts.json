@@ -17,5 +17,8 @@
   "recording": "While Recording",
   "nextScene": "Next scene",
   "prevScene": "Previous scene",
-  "captureFrame": "Capture Frame"
+  "captureFrame": "Capture Frame",
+  "captureAnywhere": "Capture (from any app)",
+  "takeScreenshot": "Take Screenshot",
+  "openRecordingToolbar": "Open Recording Toolbar"
 }

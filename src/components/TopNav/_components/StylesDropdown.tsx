@@ -17,6 +17,16 @@ import {
 import { useStore } from '../../../store';
 import type { CaptionAppearance, StylePreset } from '../../../types';
 import { normalizeCursorClickSound } from '../../../lib/effects/cursor/audio';
+import { DEFAULT_WINDOW_BAR } from '../../../lib/window-bar';
+import {
+  normalizeCursorClickEffect,
+  normalizeCursorEffect,
+} from '../../../lib/effects/cursor/effects';
+import {
+  normalizeCursorColor,
+  normalizeCursorLabel,
+  normalizeCursorStyle,
+} from '../../../lib/effects/cursor/styles';
 
 export const StylesDropdown = () => {
   const [open, setOpen] = useState(false);
@@ -38,6 +48,10 @@ export const StylesDropdown = () => {
     cursorMaxTilt,
     cursorHideWhenIdle,
     cursorIdleHideSeconds,
+    cursorEffect,
+    cursorClickShrink,
+    cursorColor,
+    cursorLabel,
     cursorClickSound,
     cursorClickSoundVolume,
     cursorContinuousTracking,
@@ -58,6 +72,10 @@ export const StylesDropdown = () => {
       cursorMaxTilt: state.cursorMaxTilt,
       cursorHideWhenIdle: state.cursorHideWhenIdle,
       cursorIdleHideSeconds: state.cursorIdleHideSeconds,
+      cursorEffect: state.cursorEffect,
+      cursorClickShrink: state.cursorClickShrink,
+      cursorColor: state.cursorColor,
+      cursorLabel: state.cursorLabel,
       cursorClickSound: state.cursorClickSound,
       cursorClickSoundVolume: state.cursorClickSoundVolume,
       cursorContinuousTracking: state.cursorContinuousTracking,
@@ -82,16 +100,35 @@ export const StylesDropdown = () => {
     setOpen(false);
     toast.success(`"${preset.name}" applied`);
     commitEdit('Apply style preset', (state) => ({
-      frame: { ...state.frame, background: preset.background },
+      frame: {
+        ...state.frame,
+        background: preset.background,
+        // Presets saved before the window bar existed leave the current one alone.
+        ...(preset.windowBar && { windowBar: { ...preset.windowBar } }),
+      },
       cursorEnabled: preset.cursor.enabled,
-      cursorStyle: preset.cursor.style,
-      cursorClickEffect: preset.cursor.clickEffect,
+      cursorStyle: normalizeCursorStyle(preset.cursor.style),
+      cursorClickEffect: normalizeCursorClickEffect(preset.cursor.clickEffect),
       cursorSize: preset.cursor.size,
       cursorHalflife: preset.cursor.halflife,
       cursorMotionBlur: preset.cursor.motionBlur,
       cursorMaxTilt: preset.cursor.maxTilt,
       cursorHideWhenIdle: preset.cursor.hideWhenIdle,
       cursorIdleHideSeconds: preset.cursor.idleHideSeconds,
+      // Presets saved before cursor effects existed keep the current ones.
+      cursorEffect:
+        preset.cursor.effect === undefined
+          ? state.cursorEffect
+          : normalizeCursorEffect(preset.cursor.effect),
+      cursorClickShrink: preset.cursor.clickShrink ?? state.cursorClickShrink,
+      cursorColor:
+        preset.cursor.color === undefined
+          ? state.cursorColor
+          : normalizeCursorColor(preset.cursor.color),
+      cursorLabel:
+        preset.cursor.label === undefined
+          ? state.cursorLabel
+          : normalizeCursorLabel(preset.cursor.label),
       cursorClickSound: normalizeCursorClickSound(preset.cursor.clickSound),
       cursorClickSoundVolume: preset.cursor.clickSoundVolume,
       cursorContinuousTracking: preset.cursor.continuousTracking,
@@ -151,6 +188,7 @@ export const StylesDropdown = () => {
         name,
         savedAt: new Date().toISOString(),
         background: frame.background,
+        windowBar: { ...DEFAULT_WINDOW_BAR, ...frame.windowBar },
         cursor: {
           enabled: cursorEnabled,
           style: cursorStyle,
@@ -164,6 +202,10 @@ export const StylesDropdown = () => {
           clickSound: cursorClickSound,
           clickSoundVolume: cursorClickSoundVolume,
           continuousTracking: cursorContinuousTracking,
+          effect: cursorEffect,
+          clickShrink: cursorClickShrink,
+          color: cursorColor,
+          label: cursorLabel,
         },
         camera,
         keyboard,

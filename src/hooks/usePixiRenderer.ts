@@ -335,6 +335,12 @@ export const usePixiRenderer = (
       if (!scene || video.videoWidth === 0) {
         return;
       }
+      // The screenshot editor covers the whole window: drawing the hidden preview would only
+      // take GPU time from the editor's own 3D view. It picks up again once the editor closes.
+      if (useStore.getState().screenshotCapture !== null) {
+        lastFrameTime = performance.now();
+        return;
+      }
 
       const now = performance.now();
       const dt = Math.min((now - lastFrameTime) / 1000, 0.05);

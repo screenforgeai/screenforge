@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { CaptureWindowParams, ProjectCursorSettings, TextClip } from '../types';
 import type { CursorClickEffect, CursorClickSound, CursorStyle, FrameSettings } from '../store';
+import { normalizeCursorEffect } from '../lib/effects/cursor/effects';
 import type { MusicClip } from '../lib/timeline';
 import type { ZoomClip, MediaSegment, CameraClip, MaskClip } from '../types/timeline';
 import { captureTimeline } from '../lib/export/captureTimeline';
@@ -38,10 +39,16 @@ const ExportWorker = () => {
         cursorMaxTilt: snap.cursorMaxTilt,
         cursorHideWhenIdle: snap.cursorHideWhenIdle,
         cursorIdleHideSeconds: snap.cursorIdleHideSeconds,
+        cursorEffect: normalizeCursorEffect(snap.cursorEffect),
+        cursorClickShrink: snap.cursorClickShrink,
+        cursorColor: snap.cursorColor,
+        cursorLabel: snap.cursorLabel,
         cameraClips: snap.cameraClips as CameraClip[],
         maskClips: snap.maskClips as MaskClip[],
         motionClips: normalizeMotionClips(snap.motionClips),
         isCropEditing: false,
+        // The window bar reads the recorded window's title from it.
+        recordingResult: params.recording,
       });
 
       // Register custom wallpaper data URL so the export window can render it.

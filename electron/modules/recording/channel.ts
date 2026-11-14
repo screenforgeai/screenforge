@@ -1,5 +1,6 @@
 import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
+import type { ConcatRecordingsOptions, SelectedArea } from '../../../src/types/index';
 import {
   saveRecording,
   saveAudioCapture,
@@ -16,15 +17,12 @@ import {
   concatRecordings,
   reencodeRecording,
   getCaptureBackend,
+  getSystemAudioSupportForCapture,
 } from './service';
 
 export function registerRecordingChannels(): void {
   handleChannel<
-    [
-      string,
-      { x: number; y: number; width: number; height: number } | null | undefined,
-      { rendererCapture?: boolean } | undefined,
-    ],
+    [string, SelectedArea | null | undefined, { rendererCapture?: boolean } | undefined],
     void
   >(CH.recording.START, (sourceId, cropArea, options) =>
     startRecording(sourceId, cropArea ?? null, options),
@@ -42,6 +40,7 @@ export function registerRecordingChannels(): void {
         captureBoundsTimeline,
         hasEmbeddedAudio,
         filePath,
+        areaCrop,
       } = await stopRecording(rendererCapture);
       return {
         mouseData: events,
@@ -52,6 +51,7 @@ export function registerRecordingChannels(): void {
         captureBoundsTimeline,
         hasEmbeddedAudio,
         filePath,
+        areaCrop,
       };
     },
   );
@@ -80,10 +80,12 @@ export function registerRecordingChannels(): void {
   listenChannel(CH.recording.ACTIVATE_APPEND_MODE, () => activateAppendMode());
   handleChannel(CH.recording.GET_APPEND_MODE, () => getAppendMode());
   handleChannel(CH.recording.CLEAR_APPEND_MODE, () => clearAppendMode());
-  handleChannel<[string, string], string>(CH.recording.CONCAT, (firstPath, secondPath) =>
-    concatRecordings(firstPath, secondPath),
+  handleChannel<[string, string, ConcatRecordingsOptions | undefined], string>(
+    CH.recording.CONCAT,
+    (firstPath, secondPath, options) => concatRecordings(firstPath, secondPath, options),
   );
   handleChannel<[string], string>(CH.recording.REENCODE, (filePath) => reencodeRecording(filePath));
 
   handleChannel(CH.recording.GET_BACKEND, () => getCaptureBackend());
+  handleChannel(CH.recording.GET_SYSTEM_AUDIO_SUPPORT, () => getSystemAudioSupportForCapture());
 }

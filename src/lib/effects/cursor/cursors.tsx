@@ -1,5 +1,15 @@
+import { useEffect, useRef } from 'react';
 import type { ComponentType } from 'react';
 import type { CursorType } from '../../../types';
+import {
+  CURSOR_STYLE_IDS,
+  drawCursorStyle,
+  getCursorStyleExtent,
+  isNameTagCursorStyle,
+  type CursorDrawOptions,
+  type CursorStyleId,
+  type VectorCursorStyleId,
+} from './styles';
 import cursorDefault01Url from '../../../assets/cursors/cursor-default-01.svg';
 import cursorPointer01Url from '../../../assets/cursors/cursor-pointer-01.svg';
 import cursorText01Url from '../../../assets/cursors/cursor-text-01.svg';
@@ -9,11 +19,17 @@ export type CursorStyleState = (typeof CURSOR_PREVIEW_STATES)[number];
 
 type PreviewProps = {
   className?: string;
+  /** Colour for the name-tag styles, so their tile matches the chosen colour. */
+  color?: string;
 };
 
 type CursorStateDefinition = {
   Preview: ComponentType<PreviewProps>;
-  draw: (ctx: CanvasRenderingContext2D, pressed: boolean) => void;
+  draw: (
+    ctx: CanvasRenderingContext2D,
+    pressed: boolean,
+    options?: Partial<CursorDrawOptions>,
+  ) => void;
 };
 
 export type CursorStyleDefinition = {
@@ -114,30 +130,89 @@ const PreviewCursorText01 = ({ className }: PreviewProps) => (
   <img src={cursorText01Url} alt="" aria-hidden className={className} draggable={false} />
 );
 
+/**
+ * A vector style's preview: the cursor drawn into a small canvas, fitted to its
+ * box. Static (no twinkle) — it only has to be recognisable in a list.
+ */
+const VectorCursorPreview = ({
+  style,
+  state,
+  className,
+  color,
+}: PreviewProps & { style: VectorCursorStyleId; state: CursorStyleState }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) {
+      return;
+    }
+    const box = canvas.getBoundingClientRect();
+    const size = Math.max(box.width, box.height, 16);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    // Fit the cursor itself (not its name tag) so every style reads at the same size.
+    const extent = getCursorStyleExtent(style, state, isNameTagCursorStyle(style) ? '' : undefined);
+    const w = extent.right - extent.left;
+    const h = extent.bottom - extent.top;
+    const scale = (size * dpr) / Math.max(w, h);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(
+      scale,
+      0,
+      0,
+      scale,
+      (size * dpr - w * scale) / 2 - extent.left * scale,
+      (size * dpr - h * scale) / 2 - extent.top * scale,
+    );
+    drawCursorStyle(ctx, style, state, { label: '', ...(color ? { color } : {}) });
+  }, [style, state, color]);
+  return <canvas ref={ref} aria-hidden className={className} />;
+};
+
+const vectorStyle = (style: VectorCursorStyleId): CursorStyleDefinition => {
+  const state = (s: CursorStyleState): CursorStateDefinition => ({
+    Preview: (props: PreviewProps) => (
+      <VectorCursorPreview
+        style={style}
+        state={s}
+        className={props.className}
+        color={props.color}
+      />
+    ),
+    draw: (ctx, pressed, options) => drawCursorStyle(ctx, style, s, { ...options, pressed }),
+  });
+  return { states: { default: state('default'), pointer: state('pointer'), text: state('text') } };
+};
+
 /* registry */
 
-export const CURSOR_REGISTRY = {
-  cursor01: {
-    states: {
-      default: {
-        Preview: PreviewCursorDefault01,
-        draw: (ctx, pressed) => drawCursorAsset(ctx, DEFAULT_CURSOR_ASSET, pressed),
-      },
-      pointer: {
-        Preview: PreviewCursorPointer01,
-        draw: (ctx, pressed) => drawCursorAsset(ctx, POINTER_CURSOR_ASSET, pressed),
-      },
-      text: {
-        Preview: PreviewCursorText01,
-        draw: (ctx, pressed) => drawCursorAsset(ctx, TEXT_CURSOR_ASSET, pressed),
-      },
+const CURSOR01: CursorStyleDefinition = {
+  states: {
+    default: {
+      Preview: PreviewCursorDefault01,
+      draw: (ctx, pressed) => drawCursorAsset(ctx, DEFAULT_CURSOR_ASSET, pressed),
+    },
+    pointer: {
+      Preview: PreviewCursorPointer01,
+      draw: (ctx, pressed) => drawCursorAsset(ctx, POINTER_CURSOR_ASSET, pressed),
+    },
+    text: {
+      Preview: PreviewCursorText01,
+      draw: (ctx, pressed) => drawCursorAsset(ctx, TEXT_CURSOR_ASSET, pressed),
     },
   },
-} as const;
+};
 
-export type CursorStyle = keyof typeof CURSOR_REGISTRY;
+export const CURSOR_REGISTRY: Record<CursorStyleId, CursorStyleDefinition> = Object.fromEntries(
+  CURSOR_STYLE_IDS.map((id) => [id, id === 'cursor01' ? CURSOR01 : vectorStyle(id)]),
+) as Record<CursorStyleId, CursorStyleDefinition>;
 
-const CURSOR_REGISTRY_LOOKUP = CURSOR_REGISTRY as unknown as Record<string, CursorStyleDefinition>;
+export type CursorStyle = CursorStyleId;
+
+const CURSOR_REGISTRY_LOOKUP = CURSOR_REGISTRY as Record<string, CursorStyleDefinition>;
 
 export function resolveCursorStyle(style: string): CursorStyleDefinition {
   return CURSOR_REGISTRY_LOOKUP[style] ?? CURSOR_REGISTRY.cursor01;

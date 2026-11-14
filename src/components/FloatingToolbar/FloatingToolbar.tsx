@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useEffectEvent, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls, useReducedMotion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import {
   IconX,
@@ -18,8 +18,17 @@ import {
   IconMoreVertical,
   IconScript,
   IconCrop,
+  IconCamera,
 } from 'src/lib/icons';
 import { trackEvent } from 'src/lib/analytics';
+import {
+  WAYLAND_PICKED_SCREEN_ID,
+  WAYLAND_PICKED_WINDOW_ID,
+} from 'src/lib/recording/waylandPicker';
+import { grabStreamStill } from 'src/lib/recording/streamStill';
+import { cn } from 'src/lib/utils';
+import { formatShortcut } from 'src/lib/captureShortcuts';
+import { readableErrorMessage } from 'src/lib/ipcError';
 import {
   Button,
   DropdownMenu,
@@ -37,9 +46,17 @@ import type {
   DesktopSource,
   CursorEvent,
   CaptureBackend,
+  SystemAudioSupport,
+  ToolbarLayout,
   ToolbarShapeRect,
+  ScreenshotCaptureRequest,
+  RegisteredCaptureShortcuts,
+  RecordingCaptureSource,
+  SelectedArea,
 } from '../../types/index';
+import { displaySurfaceOf } from '../../lib/recording/captureSource';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
+import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
 
 type SourceTab = 'display' | 'window' | 'area';
@@ -61,11 +78,14 @@ const CAMERA_CAPTURE_BITRATE = 4_000_000;
 // hovering the toolbar expands the shape to the full window (the same
 // "interactive" state macOS/Windows use) and leaving shrinks it back.
 const IS_LINUX = navigator.platform.startsWith('Linux');
+const IS_MAC = navigator.platform.startsWith('Mac');
 const SHAPE_MEASURE_INTERVAL_MS = 200;
 // Keeps drop shadows and hover affordances inside the drawable region while
 // the shape is shrunken. Tooltips and menus only appear in the hovered
 // full-window state, so they need no extra padding.
 const SHAPE_PAD = 24;
+// 'window' layout (native Wayland): room around the pill for its shadow and the drag handle.
+const WINDOW_PAD = 24;
 
 // Prefer hardware-accelerated H.264 over software VP8/VP9 for camera recording.
 // On Apple Silicon, H.264 is encoded by VideoToolbox; VP8 is pure CPU (libvpx).
@@ -86,6 +106,17 @@ function chooseCameraRecorderOptions(): MediaRecorderOptions {
 const Divider = () => {
   return <div className="h-6 w-px bg-sf-border-lt" />;
 };
+
+/**
+ * One spring drives every part of the Video ↔ Screenshot switch, so the pill,
+ * the collapsing controls and the shutter move as one gesture. A spring rather
+ * than a fixed curve keeps it smooth when the switch is flicked mid-animation;
+ * a small bounce gives it life without a wobble.
+ */
+const MODE_SPRING = { type: 'spring', visualDuration: 0.42, bounce: 0.14 } as const;
+/** Content fades lead the spring so nothing is seen squeezing. */
+const MODE_FADE = { duration: 0.18, ease: [0.32, 0.72, 0, 1] } as const;
+const INSTANT = { duration: 0 } as const;
 
 function formatTime(secs: number): string {
   const m = String(Math.floor(secs / 60)).padStart(2, '0');
@@ -123,11 +154,7 @@ function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): 
 }
 
 function getErrorMessage(err: unknown): string {
-  if (err instanceof Error && err.message) {
-    return err.message;
-  }
-
-  return 'Could not finish the recording. Please try again.';
+  return readableErrorMessage(err, 'Could not finish the recording. Please try again.');
 }
 
 function logToolbarDiagnostic(scope: string, payload?: unknown): void {
@@ -280,10 +307,34 @@ function getWindowSourceRelevance(source: DesktopSource): number {
   return score;
 }
 
+/** A global shortcut beside a tooltip label, styled like the editor's hotkey hints. */
+const ShortcutHint = ({ accelerator }: { accelerator?: string }) =>
+  accelerator ? (
+    <span className="ml-1 text-sf-muted">{formatShortcut(accelerator, IS_MAC)}</span>
+  ) : null;
+
 export const FloatingToolbar = () => {
   const { t } = useTranslation('toolbar');
   const [tab, setTab] = useState<SourceTab>('display');
+  // One source picker serves both: Video records it, Screenshot grabs a still.
+  const [captureMode, setCaptureMode] = useState<'video' | 'photo'>('video');
+  // Global shortcuts that registered, named in the tooltips so people find them.
+  const [captureShortcuts, setCaptureShortcuts] = useState<RegisteredCaptureShortcuts>({});
+  const reduceMotion = useReducedMotion();
+  const modeSpring = reduceMotion ? INSTANT : MODE_SPRING;
+  const modeFade = reduceMotion ? INSTANT : MODE_FADE;
   const [recordState, setRecordState] = useState<RecordState>('idle');
+  // Before the countdown (append mode, permissions, area) and after Stop
+  // (saving, handing the recording to the editor) the toolbar is still busy.
+  // A count, so a second Record click can't end the first one's preparation.
+  const [preparingRecordings, setPreparingRecordings] = useState(0);
+  // Wayland: set from a Record or Area click until its countdown starts or it is cancelled
+  // (share dialog, area drawing included), so a second click cannot open another dialog.
+  const pickingShareRef = useRef(false);
+  // Linux: whether recording uses the share dialog is asked on mount; until it answers, Record
+  // and Area wait, or a click could skip the guard above. macOS and Windows never wait.
+  const captureBackendKnownRef = useRef(!navigator.platform.startsWith('Linux'));
+  const [isSavingRecording, setIsSavingRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [countdown, setCountdown] = useState(3);
   const [sources, setSources] = useState<DesktopSource[]>([]);
@@ -294,6 +345,8 @@ export const FloatingToolbar = () => {
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [micLoading, setMicLoading] = useState(false);
+  const [systemAudioSupport, setSystemAudioSupport] = useState<SystemAudioSupport | null>(null);
+  const systemAudioNoticeKey = getSystemAudioNoticeKey(systemAudioSupport);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
@@ -309,16 +362,29 @@ export const FloatingToolbar = () => {
   const [isAppendMode, setIsAppendMode] = useState(false);
   const [sceneOverlayOpen, setSceneOverlayOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedArea, setSelectedArea] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
+  const [selectedArea, setSelectedArea] = useState<SelectedArea | null>(null);
 
   useEffect(() => {
     window.screenforge.getAppendMode().then(setIsAppendMode);
   }, []);
+
+  useEffect(() => {
+    window.screenforge
+      .getCaptureShortcuts()
+      .then(setCaptureShortcuts)
+      .catch(() => undefined);
+    // The record shortcut reopens the toolbar ready for video.
+    return window.screenforge.onVideoModeRequested(() => setCaptureMode('video'));
+  }, []);
+
+  // From the Record click until the recording reaches the editor, a shortcut
+  // screenshot would close this toolbar mid-flow, so it waits.
+  useEffect(() => {
+    window.screenforge.setToolbarRecording(
+      recordState !== 'idle' || preparingRecordings > 0 || isSavingRecording,
+    );
+  }, [recordState, preparingRecordings, isSavingRecording]);
+  useEffect(() => () => window.screenforge.setToolbarRecording(false), []);
 
   useEffect(() => {
     const unsubReady = window.screenforge.onTeleprompterReady(() => {
@@ -348,6 +414,8 @@ export const FloatingToolbar = () => {
   }, []);
 
   const startTimeRef = useRef(0);
+  // What this recording captures, kept for its window bar (RecordingResult.captureSource).
+  const captureSourceRef = useRef<RecordingCaptureSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -355,6 +423,12 @@ export const FloatingToolbar = () => {
   const analyserRafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const recordStateRef = useRef<RecordState>('idle');
+  // The recorded display went away while startRecording was still in flight.
+  const sourceLostDuringStartRef = useRef(false);
+  // Wayland: from the countdown's end until startRecording() settles, and whether the picked
+  // share was ended from the system meanwhile (the start then stops right after, or fails quietly).
+  const startingRecordingRef = useRef(false);
+  const shareEndedDuringStartRef = useRef(false);
   const micLevelRef = useRef(0);
   const micUiUpdateTsRef = useRef(0);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -363,14 +437,43 @@ export const FloatingToolbar = () => {
   // Wayland (Linux): the toolbar records the screen itself from the PipeWire
   // portal stream — the main process can't grab the screen on Wayland.
   const captureBackendRef = useRef<CaptureBackend>('native');
+  // Wayland's portal backend: windows are picked in the system share dialog, not listed here.
+  const [portalCapture, setPortalCapture] = useState(false);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenRecorderRef = useRef<MediaRecorder | null>(null);
   const screenChunksRef = useRef<Blob[]>([]);
   const [screenTrack, setScreenTrack] = useState<MediaStreamTrack | null>(null);
+  // Wayland: the screen picked through the capture helper, which records it without the system
+  // pointer (the editor draws the cursor). Chromium's share is the fallback, and is used for windows.
+  const helperShareRef = useRef(false);
   const toolbarRootRef = useRef<HTMLDivElement | null>(null);
   const toolbarInteractiveRef = useRef<boolean | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragControls = useDragControls();
+  // How this window is laid out (electron/modules/app/toolbar-layout.ts). macOS and Windows are
+  // always the full-screen overlay; on Linux, native Wayland gets a window that is just the
+  // toolbar, so ask the main process before drawing.
+  const [layout, setLayout] = useState<ToolbarLayout | null>(() =>
+    navigator.platform.startsWith('Linux') ? null : 'overlay',
+  );
+  useEffect(() => {
+    if (layout !== null) {
+      return;
+    }
+    let live = true;
+    window.screenforge
+      .getToolbarLayout()
+      .then((next) => live && setLayout(next))
+      .catch(() => live && setLayout('overlay'));
+    return () => {
+      live = false;
+    };
+  }, [layout]);
+  const asWindow = layout === 'window';
+  // As a window it only grows downward (Wayland keeps its top-left where the user put it), so its
+  // menus and tooltips open below the pill and never flip up out of the window.
+  const popSide = asWindow ? 'bottom' : 'top';
+  const toolbarWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const windowSources = useMemo(
     () =>
@@ -438,9 +541,19 @@ export const FloatingToolbar = () => {
       .getCaptureBackend()
       .then((backend) => {
         captureBackendRef.current = backend;
+        setPortalCapture(backend === 'wayland-portal');
       })
       .catch((err) => {
         console.error('[recording] could not resolve capture backend:', err);
+      })
+      .finally(() => {
+        captureBackendKnownRef.current = true;
+      });
+    window.screenforge
+      .getSystemAudioSupport()
+      .then(setSystemAudioSupport)
+      .catch((err) => {
+        console.error('[recording] could not resolve system audio support:', err);
       });
   }, []);
 
@@ -565,6 +678,20 @@ export const FloatingToolbar = () => {
       return true;
     } catch (err) {
       logToolbarDiagnostic('toolbar.recording.permissions-failed', {
+        message: getErrorMessage(err),
+      });
+      window.screenforge.systemWarning(getErrorMessage(err));
+      return false;
+    }
+  }, []);
+
+  // Screenshots need screen access only: no cursor tracking, so no Accessibility.
+  const ensureScreenshotPermissions = useCallback(async (): Promise<boolean> => {
+    try {
+      await window.screenforge.prepareScreenshotPermissions();
+      return true;
+    } catch (err) {
+      logToolbarDiagnostic('toolbar.screenshot.permissions-failed', {
         message: getErrorMessage(err),
       });
       window.screenforge.systemWarning(getErrorMessage(err));
@@ -750,23 +877,67 @@ export const FloatingToolbar = () => {
     });
   }, []);
 
+  // The recorded display was unplugged (or switched off) mid-recording: stop
+  // and keep what was captured, and say why instead of failing silently.
+  useEffect(() => {
+    return window.screenforge.onRecordingSourceLost(() => {
+      if (recordStateRef.current === 'countdown') {
+        // The capture is still starting: stop once it has (see handleStart).
+        sourceLostDuringStartRef.current = true;
+        return;
+      }
+      if (recordStateRef.current !== 'recording' && recordStateRef.current !== 'paused') {
+        return;
+      }
+      // Several displays can go at once: stop only for the first event.
+      recordStateRef.current = 'idle';
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      handleStopEvent();
+    });
+  }, [t]);
+
   // Wayland: the user can end the capture from the OS screen-share indicator —
   // treat that like pressing stop.
+  const handlePickedShareEnded = useEffectEvent(() => {
+    if (startingRecordingRef.current) {
+      // The capture is starting: stop once it has (see handleStart).
+      shareEndedDuringStartRef.current = true;
+      return;
+    }
+    if (recordStateRef.current === 'countdown' && !screenRecorderRef.current) {
+      // Ended before recording began: there is nothing to keep.
+      stopWaylandStream();
+      setRecordState('idle');
+      setCountdown(3);
+      return;
+    }
+    if (recordStateRef.current === 'recording' || recordStateRef.current === 'paused') {
+      handleStopEvent();
+    }
+  });
+
   useEffect(() => {
     if (!screenTrack) {
       return;
     }
-
-    const onEnded = () => {
-      if (recordStateRef.current === 'recording' || recordStateRef.current === 'paused') {
-        handleStopEvent();
-      }
-    };
+    const onEnded = () => handlePickedShareEnded();
     screenTrack.addEventListener('ended', onEnded);
     return () => {
       screenTrack.removeEventListener('ended', onEnded);
     };
   }, [screenTrack]);
+
+  useEffect(
+    () =>
+      window.screenforge.onShareEnded?.(() => {
+        if (!helperShareRef.current) {
+          return;
+        }
+        helperShareRef.current = false;
+        handlePickedShareEnded();
+      }),
+    [],
+  );
 
   // Cleanup mic stream and audio context on unmount
   useEffect(() => {
@@ -804,12 +975,22 @@ export const FloatingToolbar = () => {
       screenRecorderRef.current = null;
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
+      if (helperShareRef.current) {
+        helperShareRef.current = false;
+        void window.screenforge.endShare().catch(() => undefined);
+      }
     };
   }, [stopCameraPreview, stopMicStream]);
 
   async function handleStart() {
-    const sourceId = resolveSourceIdForTab(tab, selectedSource, sources);
+    // Wayland: a window is picked in the share dialog, so there is no window: source id; the
+    // portal stream itself is the capture.
+    const pickWindowInDialog = captureBackendRef.current === 'wayland-portal' && tab === 'window';
+    const sourceId = pickWindowInDialog
+      ? resolveSourceIdForTab('display', null, sources)
+      : resolveSourceIdForTab(tab, selectedSource, sources);
     if (!sourceId) {
+      discardWaylandPortalCapture();
       window.screenforge.systemWarning(tab === 'window' ? t('chooseWindow') : t('noDisplaySource'));
       return;
     }
@@ -822,16 +1003,35 @@ export const FloatingToolbar = () => {
       cameraEnabled,
     });
 
+    sourceLostDuringStartRef.current = false;
+    shareEndedDuringStartRef.current = false;
+    startingRecordingRef.current = true;
     try {
       if (tab === 'window') {
         focusDesktopSourceWindow(selectedSource);
       }
 
       const cropArea = tab === 'area' ? selectedArea : null;
+      captureSourceRef.current = {
+        kind: tab,
+        ...(tab === 'window' && selectedSource?.appName && { appName: selectedSource.appName }),
+        ...(tab === 'window' &&
+          selectedSource?.windowTitle && { windowTitle: selectedSource.windowTitle }),
+      };
       if (captureBackendRef.current === 'wayland-portal') {
-        await startWaylandPortalCapture();
+        // Picked in the share dialog before the countdown (pickWaylandShare).
+        if (!screenStreamRef.current && !helperShareRef.current) {
+          await openWaylandPortalStream(pickWindowInDialog ? 'window' : 'screen');
+        }
         try {
-          await window.screenforge.startRecording(sourceId, cropArea, { rendererCapture: true });
+          if (helperShareRef.current) {
+            // The main process records the picked screen through the capture helper.
+            captureSourceRef.current = { kind: tab, displaySurface: 'monitor' };
+            await window.screenforge.startRecording(sourceId, cropArea);
+          } else {
+            startWaylandRecorder();
+            await window.screenforge.startRecording(sourceId, cropArea, { rendererCapture: true });
+          }
         } catch (err) {
           discardWaylandPortalCapture();
           throw err;
@@ -840,6 +1040,7 @@ export const FloatingToolbar = () => {
         await window.screenforge.startRecording(sourceId, cropArea);
       }
     } catch (err) {
+      startingRecordingRef.current = false;
       console.error('[recording] start failed:', err);
       logToolbarDiagnostic('toolbar.recording.start-failed', {
         sourceId,
@@ -847,9 +1048,14 @@ export const FloatingToolbar = () => {
       });
       setRecordState('idle');
       setCountdown(3);
-      window.screenforge.systemWarning(getErrorMessage(err));
+      // Ending the share while it started is the user's choice, not an error.
+      if (!shareEndedDuringStartRef.current) {
+        window.screenforge.systemWarning(getErrorMessage(err));
+      }
+      shareEndedDuringStartRef.current = false;
       return;
     }
+    startingRecordingRef.current = false;
 
     const startupLatencyMs = Date.now() - startedAt;
     logToolbarDiagnostic('toolbar.recording.start-resolved', {
@@ -898,51 +1104,173 @@ export const FloatingToolbar = () => {
       cameraRecorderRef.current = recorder;
       recorder.start(1000);
     }
+
+    if (sourceLostDuringStartRef.current) {
+      sourceLostDuringStartRef.current = false;
+      shareEndedDuringStartRef.current = false;
+      recordStateRef.current = 'idle';
+      window.screenforge.systemWarning(t('recordingDisplayRemoved'));
+      void handleStop();
+    } else if (shareEndedDuringStartRef.current) {
+      // The share was ended from the system while the capture started: keep what was captured.
+      shareEndedDuringStartRef.current = false;
+      recordStateRef.current = 'idle';
+      void handleStop();
+    }
   }
 
-  async function handleAreaRecordClick() {
-    if (recordState !== 'idle') {
-      return;
-    }
-
-    setTab('area');
-
+  async function takePhoto(request: ScreenshotCaptureRequest) {
     try {
-      setIsAppendMode(await window.screenforge.getAppendMode());
-    } catch {
-      setIsAppendMode(false);
+      const outcome = await window.screenforge.captureScreenshot(request);
+      // Wayland: the share dialog was closed without a pick. Nothing to warn about.
+      if (outcome === 'cancelled') {
+        return;
+      }
+      trackEvent('screenshot_taken', { kind: request.kind });
+    } catch (err) {
+      window.screenforge.writeDiagnosticLog('toolbar.screenshot.failed', {
+        kind: request.kind,
+        message: getErrorMessage(err),
+      });
+      trackEvent('screenshot_failed', { source: request.kind });
+      window.screenforge.systemWarning(t('captureFailed', { ns: 'screenshot' }));
     }
+  }
 
-    const hasRecordingPermissions = await ensureRecordingStartPermissions();
-    if (!hasRecordingPermissions) {
+  async function handleShutterClick() {
+    if (!(await ensureScreenshotPermissions())) {
       return;
     }
+    // Wayland: the screen or window is picked in the system share dialog.
+    if (captureBackendRef.current === 'wayland-portal') {
+      await takePhoto(
+        tab === 'window'
+          ? { kind: 'window', sourceId: WAYLAND_PICKED_WINDOW_ID }
+          : { kind: 'display', sourceId: WAYLAND_PICKED_SCREEN_ID },
+      );
+      return;
+    }
+    if (tab === 'window' && selectedSource) {
+      await takePhoto({ kind: 'window', sourceId: selectedSource.id });
+      return;
+    }
+    await takePhoto({
+      kind: 'display',
+      sourceId: resolveSourceIdForTab('display', selectedSource, sources) ?? 'screen:0',
+    });
+  }
 
-    const area = await window.screenforge.openAreaSelector();
+  async function handleAreaPhotoClick() {
+    // Wayland: the main process asks for the screen in the share dialog first, then the area is
+    // drawn on a still of it (as the screenshot shortcut does there).
+    if (captureBackendRef.current === 'wayland-portal') {
+      void window.screenforge.takeScreenshot();
+      return;
+    }
+    setTab('area');
+    if (!(await ensureScreenshotPermissions())) {
+      return;
+    }
+    const area = await window.screenforge.openAreaSelector('screenshot');
     if (!area) {
       setTab('display');
       return;
     }
-
-    setSelectedArea(area);
-    setCountdown(3);
-    setRecordState('countdown');
+    await takePhoto({
+      kind: 'area',
+      sourceId: resolveSourceIdForTab('display', selectedSource, sources) ?? 'screen:0',
+      area,
+    });
   }
 
-  async function handleRecordClick() {
-    try {
-      setIsAppendMode(await window.screenforge.getAppendMode());
-    } catch {
-      setIsAppendMode(false);
-    }
-
-    const hasRecordingPermissions = await ensureRecordingStartPermissions();
-    if (!hasRecordingPermissions) {
+  async function handleAreaRecordClick() {
+    if (
+      recordState !== 'idle' ||
+      pickingShareRef.current ||
+      !captureBackendKnownRef.current ||
+      waylandStopPending()
+    ) {
       return;
     }
 
-    setCountdown(3);
-    setRecordState('countdown');
+    const onPortal = captureBackendRef.current === 'wayland-portal';
+    pickingShareRef.current = onPortal;
+    setTab('area');
+    setPreparingRecordings((n) => n + 1);
+    try {
+      try {
+        setIsAppendMode(await window.screenforge.getAppendMode());
+      } catch {
+        setIsAppendMode(false);
+      }
+
+      const hasRecordingPermissions = await ensureRecordingStartPermissions();
+      if (!hasRecordingPermissions) {
+        return;
+      }
+
+      const area =
+        captureBackendRef.current === 'wayland-portal'
+          ? await pickWaylandArea()
+          : await window.screenforge.openAreaSelector();
+      if (!area) {
+        setTab('display');
+        return;
+      }
+
+      setSelectedArea(area);
+      setCountdown(3);
+      setRecordState('countdown');
+    } finally {
+      // Batched with the countdown above, so busy never dips in between.
+      setPreparingRecordings((n) => n - 1);
+      if (onPortal) {
+        pickingShareRef.current = false;
+      }
+    }
+  }
+
+  /**
+   * Wayland: the last recording is still being saved. Its stop lets the picked share go when it
+   * finishes, which must not be a share picked for the next recording meanwhile.
+   */
+  function waylandStopPending(): boolean {
+    return captureBackendRef.current === 'wayland-portal' && isSavingRecording;
+  }
+
+  async function handleRecordClick() {
+    if (pickingShareRef.current || !captureBackendKnownRef.current || waylandStopPending()) {
+      return;
+    }
+    const onPortal = captureBackendRef.current === 'wayland-portal';
+    pickingShareRef.current = onPortal;
+    setPreparingRecordings((n) => n + 1);
+    try {
+      try {
+        setIsAppendMode(await window.screenforge.getAppendMode());
+      } catch {
+        setIsAppendMode(false);
+      }
+
+      const hasRecordingPermissions = await ensureRecordingStartPermissions();
+      if (!hasRecordingPermissions) {
+        return;
+      }
+      if (
+        captureBackendRef.current === 'wayland-portal' &&
+        !(await pickWaylandShare(tab === 'window' ? 'window' : 'screen'))
+      ) {
+        return;
+      }
+
+      setCountdown(3);
+      setRecordState('countdown');
+    } finally {
+      setPreparingRecordings((n) => n - 1);
+      if (onPortal) {
+        pickingShareRef.current = false;
+      }
+    }
   }
 
   function handlePause() {
@@ -1013,6 +1341,10 @@ export const FloatingToolbar = () => {
   }
 
   async function handleStop() {
+    // What this recording captured, taken now: a next recording may start
+    // (and set its own) before this one has finished saving.
+    const captureSource = captureSourceRef.current;
+    captureSourceRef.current = null;
     logToolbarDiagnostic('toolbar.recording.stop-clicked', {
       elapsed,
       micEnabled,
@@ -1020,6 +1352,7 @@ export const FloatingToolbar = () => {
     });
     setDiscardConfirming(false);
     setRecordState('idle');
+    setIsSavingRecording(true);
 
     if (teleprompterOpen) {
       window.screenforge.closeTeleprompter();
@@ -1057,6 +1390,7 @@ export const FloatingToolbar = () => {
         hasEmbeddedAudio: sourceHasEmbeddedAudio,
         startTime,
         durationMs,
+        areaCrop,
       } = videoResult.value;
       // Use the probed media duration as the authoritative timeline length.
       // durationMs = effectiveDurationMs from stopRecording(), which uses ffprobe on the
@@ -1123,17 +1457,26 @@ export const FloatingToolbar = () => {
         startTime,
         recordingArea,
         captureBoundsTimeline,
+        areaCrop,
         hasEmbeddedAudio,
         audioPath: timelineAudioPath ?? undefined,
         cameraPath: cameraPath ?? undefined,
+        ...(captureSource && { captureSource }),
       });
     } catch (err) {
       console.error('[recording] stop pipeline failed:', err);
-      logToolbarDiagnostic('toolbar.recording.stop-failed', {
-        message: getErrorMessage(err),
+      const message = getErrorMessage(err);
+      logToolbarDiagnostic('toolbar.recording.stop-failed', { message });
+      trackEvent('recording_failed', {
+        error: message,
+        elapsed_seconds: elapsed,
+        has_mic: micEnabled,
+        has_camera: cameraEnabled,
+        is_append: isAppendMode,
       });
-      window.screenforge.recordingFailed(getErrorMessage(err));
+      window.screenforge.recordingFailed(message);
     } finally {
+      setIsSavingRecording(false);
       await window.screenforge.clearAppendMode().catch(() => undefined);
       setIsAppendMode(false);
       if (micEnabled && micStreamRef.current) {
@@ -1241,21 +1584,119 @@ export const FloatingToolbar = () => {
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     screenStreamRef.current = null;
     setScreenTrack(null);
+    if (helperShareRef.current) {
+      helperShareRef.current = false;
+      void window.screenforge.endShare().catch(() => undefined);
+    }
   }
 
-  async function startWaylandPortalCapture(): Promise<void> {
-    // Opens the OS screen-share picker (user chooses a screen or window).
+  /**
+   * Wayland: opens the OS share dialog on its screens or (from the Window tab) its windows, so the
+   * user picks what to record before the countdown. Resolves false when nothing was picked.
+   */
+  async function pickWaylandShare(kind: 'screen' | 'window'): Promise<boolean> {
+    try {
+      await openWaylandPortalStream(kind);
+      return true;
+    } catch (err) {
+      stopWaylandStream();
+      // Closing the dialog without a pick is a choice, not an error.
+      if (!(err instanceof DOMException && err.name === 'NotAllowedError')) {
+        console.error('[recording] share dialog failed:', err);
+        window.screenforge.systemWarning(getErrorMessage(err));
+      }
+      logToolbarDiagnostic('toolbar.recording.share-not-picked', {
+        kind,
+        message: getErrorMessage(err),
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Wayland: the screen is picked in the share dialog first, then the area is drawn on a still
+   * of it (a selector over the live screen could land on any monitor). Null when either is
+   * cancelled; the picked screen is let go then.
+   */
+  async function pickWaylandArea(): Promise<SelectedArea | null> {
+    if (!(await pickWaylandShare('screen'))) {
+      return null;
+    }
+    try {
+      const stream = screenStreamRef.current;
+      if (helperShareRef.current) {
+        const still = await window.screenforge.screenStill();
+        const area = await window.screenforge.selectAreaOnStill(still);
+        // The share may have been ended from the system indicator while the area was drawn.
+        if (area && helperShareRef.current) {
+          return area;
+        }
+      } else if (stream) {
+        const area = await window.screenforge.selectAreaOnStill(await grabStreamStill(stream));
+        // The share may have been ended from the system indicator while the area was drawn.
+        const stillShared =
+          screenStreamRef.current === stream &&
+          stream.getVideoTracks().some((track) => track.readyState === 'live');
+        if (area && stillShared) {
+          return area;
+        }
+      }
+    } catch (err) {
+      console.error('[recording] drawing the area on the picked screen failed:', err);
+      // Ended from the system indicator: the user stopped it, nothing to warn about.
+      const shared =
+        helperShareRef.current ||
+        screenStreamRef.current?.getVideoTracks().some((track) => track.readyState === 'live');
+      if (shared) {
+        window.screenforge.systemWarning(getErrorMessage(err));
+      }
+    }
+    stopWaylandStream();
+    return null;
+  }
+
+  async function openWaylandPortalStream(kind: 'screen' | 'window'): Promise<void> {
+    if (kind === 'screen') {
+      // The capture helper shares the screen without the system pointer, so the editor's drawn
+      // cursor is the only one; Chromium's share below always paints the pointer in.
+      const pick = await window.screenforge.pickScreen();
+      if (pick === 'picked') {
+        helperShareRef.current = true;
+        return;
+      }
+      if (pick === 'cancelled') {
+        throw new DOMException('The share dialog was closed.', 'NotAllowedError');
+      }
+    }
+    // Stored before the share request below reads it.
+    await window.screenforge.setShareKind(kind);
     const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: false,
       video: { frameRate: { ideal: 60, max: 60 } },
     });
     screenStreamRef.current = stream;
-    screenChunksRef.current = [];
-
     // Tracked via state so the track-ended effect below can react when the
     // user ends the capture from the OS screen-share indicator.
     const [videoTrack] = stream.getVideoTracks();
     setScreenTrack(videoTrack ?? null);
+  }
+
+  /** Records the stream picked in the share dialog, once the countdown is over. */
+  function startWaylandRecorder(): void {
+    const stream = screenStreamRef.current;
+    if (!stream) {
+      throw new Error('Nothing was picked to record.');
+    }
+    screenChunksRef.current = [];
+    const [videoTrack] = stream.getVideoTracks();
+    // The portal, not the toolbar, decides what's shared: a tab, a window or a screen.
+    const displaySurface = displaySurfaceOf(videoTrack);
+    if (displaySurface) {
+      captureSourceRef.current = {
+        kind: displaySurface === 'monitor' ? 'display' : 'window',
+        displaySurface,
+      };
+    }
 
     const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8'].find((candidate) =>
       MediaRecorder.isTypeSupported(candidate),
@@ -1339,6 +1780,15 @@ export const FloatingToolbar = () => {
     Awaited<ReturnType<typeof window.screenforge.stopRecording>>
   > {
     if (captureBackendRef.current === 'wayland-portal') {
+      if (!screenRecorderRef.current) {
+        // Recorded through the capture helper: the share is let go only once the main process
+        // has finished the file.
+        try {
+          return await window.screenforge.stopRecording();
+        } finally {
+          stopWaylandStream();
+        }
+      }
       const rendererCapture = await stopWaylandPortalCapture();
       return window.screenforge.stopRecording(rendererCapture ?? undefined);
     }
@@ -1456,7 +1906,7 @@ export const FloatingToolbar = () => {
   }, [windowMenuOpen, micMenuOpen, cameraMenuOpen, overlayActive, setToolbarMouseInteractivity]);
 
   useEffect(() => {
-    if (!IS_LINUX) {
+    if (!IS_LINUX || layout !== 'overlay') {
       return;
     }
 
@@ -1503,17 +1953,71 @@ export const FloatingToolbar = () => {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [recordState]);
+  }, [layout, recordState]);
+
+  // 'window' layout: keep the window just big enough for the pill and whatever menu or tooltip
+  // is open below it. Measured every frame (cheap: a few rects) so a menu never shows clipped.
+  useEffect(() => {
+    if (!asWindow) {
+      return;
+    }
+    let frame = 0;
+    let lastSent = '';
+    const measure = () => {
+      let right = 0;
+      let bottom = 0;
+      const parts = [
+        toolbarWrapperRef.current,
+        ...document.querySelectorAll('[data-radix-popper-content-wrapper]'),
+      ];
+      for (const part of parts) {
+        const rect = part?.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          continue;
+        }
+        right = Math.max(right, rect.right);
+        bottom = Math.max(bottom, rect.bottom);
+      }
+      if (right > 0 && bottom > 0) {
+        const size = {
+          width: Math.ceil(right + WINDOW_PAD),
+          height: Math.ceil(bottom + WINDOW_PAD),
+        };
+        const key = `${size.width}x${size.height}`;
+        if (key !== lastSent) {
+          lastSent = key;
+          window.screenforge.setToolbarSize(size);
+        }
+      }
+      frame = requestAnimationFrame(measure);
+    };
+    frame = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(frame);
+  }, [asWindow]);
+
+  if (layout === null) {
+    return null;
+  }
 
   return (
     <div
       ref={containerRef}
-      className="relative flex h-full w-full items-end justify-center pb-10 bg-transparent"
+      className={
+        asWindow
+          ? 'relative flex h-full w-full items-start justify-start bg-transparent'
+          : 'relative flex h-full w-full items-end justify-center pb-10 bg-transparent'
+      }
+      style={asWindow ? { padding: WINDOW_PAD, paddingTop: 0 } : undefined}
     >
       {/* Area recording indicator — dims outside the selected region during countdown/recording/paused */}
       <AnimatePresence>
-        {(recordState === 'countdown' || recordState === 'recording' || recordState === 'paused') &&
-          selectedArea && (
+        {!asWindow &&
+          (recordState === 'countdown' ||
+            recordState === 'recording' ||
+            recordState === 'paused') &&
+          selectedArea &&
+          // Drawn on a still (Wayland): in the still's pixels, not this window's.
+          !selectedArea.frame && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1534,7 +2038,9 @@ export const FloatingToolbar = () => {
       </AnimatePresence>
 
       <motion.div
-        drag
+        ref={toolbarWrapperRef}
+        // As a window, the drag handle moves the window itself (below), not the pill inside it.
+        drag={!asWindow}
         dragControls={dragControls}
         dragListener={false}
         dragMomentum={false}
@@ -1549,11 +2055,20 @@ export const FloatingToolbar = () => {
       >
         <div
           onPointerDown={(e) => {
+            if (asWindow) {
+              return;
+            }
             e.preventDefault();
             dragControls.start(e);
           }}
           data-toolbar-interactive="true"
-          className="absolute top-0 left-1/2 -translate-x-1/2 flex cursor-grab flex-col items-center gap-1 px-4 py-1 opacity-0 transition-opacity group-hover:opacity-100"
+          data-toolbar-drag-handle=""
+          className={cn(
+            'absolute top-0 left-1/2 -translate-x-1/2 flex cursor-grab flex-col items-center gap-1 px-4 py-1 transition-opacity group-hover:opacity-100',
+            // As a window the handle is a drag region, moving the window itself; it gets no
+            // hover events, so it stays faintly visible.
+            asWindow ? 'app-drag opacity-60' : 'opacity-0',
+          )}
         >
           <div className="flex gap-1">
             <div className="h-1 w-1 rounded-full bg-[#6b6b6b]" />
@@ -1617,7 +2132,9 @@ export const FloatingToolbar = () => {
                         <IconX size={15} />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('minimizeToDock')}</TooltipContent>
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                      {t('minimizeToDock')}
+                    </TooltipContent>
                   </Tooltip>
 
                   {/* Home */}
@@ -1637,8 +2154,68 @@ export const FloatingToolbar = () => {
                         <IconHome size={15} />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('home')}</TooltipContent>
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                      {t('home')}
+                    </TooltipContent>
                   </Tooltip>
+
+                  <div className="mx-3">
+                    <Divider />
+                  </div>
+
+                  {/* Video | Screenshot */}
+                  <div
+                    role="group"
+                    aria-label={t('captureMode')}
+                    className="flex items-center gap-0.5 rounded-full bg-sf-bg p-1"
+                  >
+                    {(['video', 'photo'] as const).map((mode) => (
+                      <Tooltip key={mode}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-pressed={captureMode === mode}
+                            aria-label={
+                              mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')
+                            }
+                            onClick={() => setCaptureMode(mode)}
+                            className={`${toolbarButtonCls} relative flex cursor-pointer items-center justify-center rounded-full p-2 outline-none hover:bg-transparent ${
+                              captureMode === mode
+                                ? 'text-sf-primary'
+                                : 'text-sf-secondary hover:text-sf-primary'
+                            } transition-colors duration-300`}
+                          >
+                            {/* One pill that slides between the two icons. */}
+                            {captureMode === mode && (
+                              <motion.span
+                                layoutId="capture-mode-pill"
+                                transition={modeSpring}
+                                className="absolute inset-0 rounded-full bg-[#1e1e22] shadow-sm"
+                              />
+                            )}
+                            <span className="relative z-10 flex">
+                              {mode === 'video' ? (
+                                <IconVideo size={16} />
+                              ) : (
+                                <IconCamera size={16} />
+                              )}
+                            </span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                          {mode === 'video' ? t('captureModeVideo') : t('captureModeScreenshot')}
+                          <ShortcutHint
+                            accelerator={
+                              mode === 'video'
+                                ? captureShortcuts.record
+                                : captureShortcuts.screenshot
+                            }
+                          />
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  </div>
 
                   <div className="mx-3">
                     <Divider />
@@ -1657,115 +2234,156 @@ export const FloatingToolbar = () => {
                           <IconDeviceDesktop size={16} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">{t('display')}</TooltipContent>
+                      <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                        {t('display')}
+                      </TooltipContent>
                     </Tooltip>
 
-                    <DropdownMenu
-                      onOpenChange={(open) => {
-                        setWindowMenuOpen(open);
-                        if (open) {
-                          setSources([]);
-                          setSourcesLoading(true);
-                          window.screenforge.getSources().then((s) => {
-                            setSources(s);
-                            setSourcesLoading(false);
-                          });
-                        } else {
-                          setSourcesLoading(false);
-                        }
-                      }}
-                    >
+                    {portalCapture ? (
+                      // Wayland: no list to show (apps cannot see other apps' windows there);
+                      // the window is picked in the share dialog when recording starts.
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => setTab('window')}
-                              className={`${toolbarButtonCls} ${tabCls(tab === 'window')}`}
-                            >
-                              <IconAppWindow size={16} />
-                            </Button>
-                          </DropdownMenuTrigger>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('window')}
+                            onClick={() => setTab('window')}
+                            className={`${toolbarButtonCls} ${tabCls(tab === 'window')}`}
+                          >
+                            <IconAppWindow size={16} />
+                          </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="top">
-                          {tab === 'window' && selectedSource
-                            ? getWindowSourcePrimaryLabel(selectedSource)
-                            : t('window')}
+                        <TooltipContent
+                          side={popSide}
+                          avoidCollisions={!asWindow}
+                          className="max-w-[180px] text-center"
+                        >
+                          {t('windowPickOnRecord')}
                         </TooltipContent>
                       </Tooltip>
-
-                      <DropdownMenuContent
-                        side="top"
-                        sideOffset={10}
-                        align="center"
-                        className="min-w-[240px] max-h-56"
+                    ) : (
+                      <DropdownMenu
+                        onOpenChange={(open) => {
+                          setWindowMenuOpen(open);
+                          if (open) {
+                            setSources([]);
+                            setSourcesLoading(true);
+                            window.screenforge.getSources().then((s) => {
+                              setSources(s);
+                              setSourcesLoading(false);
+                            });
+                          } else {
+                            setSourcesLoading(false);
+                          }
+                        }}
                       >
-                        {sourcesLoading ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Spinner className="size-4 text-sf-border fill-sf-primary" />
-                          </div>
-                        ) : windowSources.length === 0 ? (
-                          <FloatingToolbarMenuEmptyState
-                            icon={<IconAppWindow size={16} />}
-                            title={t('noWindows_title')}
-                            description={t('noWindows_desc')}
-                          />
-                        ) : (
-                          windowSources.map((src) => (
-                            <DropdownMenuItem
-                              key={src.id}
-                              textValue={[
-                                getWindowSourcePrimaryLabel(src),
-                                getWindowSourceSubtitle(src, duplicateWindowAppCounts),
-                              ]
-                                .filter(Boolean)
-                                .join(' ')}
-                              onSelect={() => {
-                                setSelectedSource(src);
-                                setTab('window');
-                                focusDesktopSourceWindow(src);
-                              }}
-                              className={
-                                selectedSource?.id === src.id ? 'bg-[#17171c] font-medium' : ''
-                              }
-                            >
-                              {src.appIcon && (
-                                <img
-                                  src={src.appIcon}
-                                  alt=""
-                                  className="h-4 w-4 shrink-0 rounded-sm"
-                                />
-                              )}
-                              <div className="flex min-w-0 flex-1 flex-col">
-                                <span className="truncate">{getWindowSourcePrimaryLabel(src)}</span>
-                                {getWindowSourceSubtitle(src, duplicateWindowAppCounts) && (
-                                  <span className="truncate text-xs text-sf-secondary">
-                                    {getWindowSourceSubtitle(src, duplicateWindowAppCounts)}
-                                  </span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={t('window')}
+                                onClick={() => setTab('window')}
+                                className={`${toolbarButtonCls} ${tabCls(tab === 'window')}`}
+                              >
+                                <IconAppWindow size={16} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {tab === 'window' && selectedSource
+                              ? getWindowSourcePrimaryLabel(selectedSource)
+                              : t('window')}
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <DropdownMenuContent
+                          side={popSide}
+                          avoidCollisions={!asWindow}
+                          sideOffset={10}
+                          align="center"
+                          className="min-w-[240px] max-h-56"
+                        >
+                          {sourcesLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Spinner className="size-4 text-sf-border fill-sf-primary" />
+                            </div>
+                          ) : windowSources.length === 0 ? (
+                            <FloatingToolbarMenuEmptyState
+                              icon={<IconAppWindow size={16} />}
+                              title={t('noWindows_title')}
+                              description={t('noWindows_desc')}
+                            />
+                          ) : (
+                            windowSources.map((src) => (
+                              <DropdownMenuItem
+                                key={src.id}
+                                textValue={[
+                                  getWindowSourcePrimaryLabel(src),
+                                  getWindowSourceSubtitle(src, duplicateWindowAppCounts),
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                onSelect={() => {
+                                  setSelectedSource(src);
+                                  setTab('window');
+                                  focusDesktopSourceWindow(src);
+                                }}
+                                className={
+                                  selectedSource?.id === src.id ? 'bg-[#17171c] font-medium' : ''
+                                }
+                              >
+                                {src.appIcon && (
+                                  <img
+                                    src={src.appIcon}
+                                    alt=""
+                                    className="h-4 w-4 shrink-0 rounded-sm"
+                                  />
                                 )}
-                              </div>
-                              {selectedSource?.id === src.id && (
-                                <IconCheck size={12} className="shrink-0 text-primary" />
-                              )}
-                            </DropdownMenuItem>
-                          ))
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                                <div className="flex min-w-0 flex-1 flex-col">
+                                  <span className="truncate">
+                                    {getWindowSourcePrimaryLabel(src)}
+                                  </span>
+                                  {getWindowSourceSubtitle(src, duplicateWindowAppCounts) && (
+                                    <span className="truncate text-xs text-sf-secondary">
+                                      {getWindowSourceSubtitle(src, duplicateWindowAppCounts)}
+                                    </span>
+                                  )}
+                                </div>
+                                {selectedSource?.id === src.id && (
+                                  <IconCheck size={12} className="shrink-0 text-primary" />
+                                )}
+                              </DropdownMenuItem>
+                            ))
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
 
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          onClick={() => void handleAreaRecordClick()}
+                          aria-label={t('area')}
+                          onClick={() =>
+                            void (captureMode === 'photo'
+                              ? handleAreaPhotoClick()
+                              : handleAreaRecordClick())
+                          }
                           className={`${toolbarButtonCls} ${tabCls(tab === 'area')}`}
                         >
                           <IconCrop size={16} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Area</TooltipContent>
+                      <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                        {t('area')}
+                        {captureMode === 'photo' && (
+                          <ShortcutHint accelerator={captureShortcuts.screenshot} />
+                        )}
+                      </TooltipContent>
                     </Tooltip>
                   </div>
 
@@ -1805,182 +2423,234 @@ export const FloatingToolbar = () => {
                     </AnimatePresence>
                   </motion.div>
 
-                  <div className="mx-3">
-                    <Divider />
-                  </div>
-
-                  {/* Mic */}
-                  <FloatingToolbarMic
-                    recordState={recordState}
-                    micEnabled={micEnabled}
-                    micLoading={micLoading}
-                    micLevel={micLevel}
-                    micDevices={micDevices}
-                    selectedMicId={selectedMic?.deviceId ?? null}
-                    onMenuOpenChange={setMicMenuOpen}
-                    onToggle={handleMicToggle}
-                    onSelectMicDevice={(deviceId) => {
-                      void handleMicDeviceSelect(deviceId);
-                    }}
-                    onOpenMicMenu={() => {
-                      void refreshMicDevices();
-                    }}
-                  />
-
-                  <div className="mx-3">
-                    <Divider />
-                  </div>
-
-                  {/* Camera */}
-                  <div className="flex items-center gap-1 rounded-full bg-sf-bg p-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => {
-                            void handleCameraToggle();
-                          }}
-                          disabled={cameraLocked || cameraLoading}
-                          className={`${toolbarButtonCls} cursor-pointer rounded-full transition-colors ${
-                            cameraEnabled
-                              ? 'bg-[#1e1e22] text-sf-primary'
-                              : 'text-sf-secondary hover:text-sf-primary'
-                          }`}
-                        >
-                          {cameraLoading ? (
-                            <Spinner className="size-4 text-sf-border fill-sf-primary" />
-                          ) : cameraEnabled ? (
-                            <IconVideo size={16} />
-                          ) : (
-                            <IconVideoOff size={16} />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {cameraLocked
-                          ? t('cameraLocked')
-                          : cameraLoading
-                            ? t('loadingCamera')
-                            : cameraEnabled
-                              ? t('cameraOff')
-                              : t('cameraOn')}
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <DropdownMenu
-                      onOpenChange={(open) => {
-                        setCameraMenuOpen(open);
-                        if (open) {
-                          void refreshCameraDevices();
-                        }
-                      }}
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              disabled={cameraLocked || cameraLoading || cameraDevices.length === 0}
-                              className={`${toolbarButtonCls} px-1.5 text-sf-primary/80 hover:bg-[#1e1e22] hover:text-sf-primary`}
-                            >
-                              <ChevronDown className="size-3.5" strokeWidth={2.25} />
-                            </Button>
-                          </DropdownMenuTrigger>
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          {selectedCamera?.label
-                            ? t('cameraSourceLabel', { label: selectedCamera.label })
-                            : t('cameraSource')}
-                        </TooltipContent>
-                      </Tooltip>
-
-                      <DropdownMenuContent
-                        side="top"
-                        sideOffset={10}
-                        align="center"
-                        className="min-w-[220px] max-h-56"
+                  {/* Video-only controls fold away for screenshots: the
+                      width springs shut while the controls fade and blur out
+                      ahead of it, so the toolbar reads as one piece reshaping
+                      rather than buttons popping. */}
+                  <AnimatePresence initial={false}>
+                    {captureMode === 'video' && (
+                      <motion.div
+                        key="video-controls"
+                        className="flex items-center"
+                        initial={{ width: 0, overflow: 'hidden' }}
+                        animate={{
+                          width: 'auto',
+                          transition: modeSpring,
+                          transitionEnd: { overflow: 'visible' },
+                        }}
+                        exit={{ width: 0, overflow: 'hidden', transition: modeSpring }}
                       >
-                        {cameraDevices.length === 0 ? (
-                          <FloatingToolbarMenuEmptyState
-                            icon={<IconVideoOff size={16} />}
-                            title={t('noCameras_title')}
-                            description={t('noCameras_desc')}
+                        <motion.div
+                          className="flex w-max items-center"
+                          initial={{ opacity: 0, scale: 0.92, filter: 'blur(4px)' }}
+                          animate={{
+                            opacity: 1,
+                            scale: 1,
+                            filter: 'blur(0px)',
+                            transition: { ...modeFade, delay: reduceMotion ? 0 : 0.08 },
+                          }}
+                          exit={{
+                            opacity: 0,
+                            scale: 0.92,
+                            filter: 'blur(4px)',
+                            transition: modeFade,
+                          }}
+                        >
+                          <div className="mx-3">
+                            <Divider />
+                          </div>
+
+                          {/* Mic */}
+                          <FloatingToolbarMic
+                            recordState={recordState}
+                            micEnabled={micEnabled}
+                            micLoading={micLoading}
+                            micLevel={micLevel}
+                            micDevices={micDevices}
+                            selectedMicId={selectedMic?.deviceId ?? null}
+                            systemAudioNotice={
+                              systemAudioNoticeKey ? t(systemAudioNoticeKey) : null
+                            }
+                            onMenuOpenChange={setMicMenuOpen}
+                            popSide={popSide}
+                            avoidCollisions={!asWindow}
+                            onToggle={handleMicToggle}
+                            onSelectMicDevice={(deviceId) => {
+                              void handleMicDeviceSelect(deviceId);
+                            }}
+                            onOpenMicMenu={() => {
+                              void refreshMicDevices();
+                            }}
                           />
-                        ) : (
-                          <DropdownMenuRadioGroup
-                            value={selectedCamera?.deviceId}
-                            onValueChange={(value) => {
-                              void handleCameraDeviceSelect(value);
+
+                          <div className="mx-3">
+                            <Divider />
+                          </div>
+
+                          {/* Camera */}
+                          <div className="flex items-center gap-1 rounded-full bg-sf-bg p-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => {
+                                    void handleCameraToggle();
+                                  }}
+                                  disabled={cameraLocked || cameraLoading}
+                                  className={`${toolbarButtonCls} cursor-pointer rounded-full transition-colors ${
+                                    cameraEnabled
+                                      ? 'bg-[#1e1e22] text-sf-primary'
+                                      : 'text-sf-secondary hover:text-sf-primary'
+                                  }`}
+                                >
+                                  {cameraLoading ? (
+                                    <Spinner className="size-4 text-sf-border fill-sf-primary" />
+                                  ) : cameraEnabled ? (
+                                    <IconVideo size={16} />
+                                  ) : (
+                                    <IconVideoOff size={16} />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                                {cameraLocked
+                                  ? t('cameraLocked')
+                                  : cameraLoading
+                                    ? t('loadingCamera')
+                                    : cameraEnabled
+                                      ? t('cameraOff')
+                                      : t('cameraOn')}
+                              </TooltipContent>
+                            </Tooltip>
+
+                            <DropdownMenu
+                              onOpenChange={(open) => {
+                                setCameraMenuOpen(open);
+                                if (open) {
+                                  void refreshCameraDevices();
+                                }
+                              }}
+                            >
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      disabled={
+                                        cameraLocked || cameraLoading || cameraDevices.length === 0
+                                      }
+                                      className={`${toolbarButtonCls} px-1.5 text-sf-primary/80 hover:bg-[#1e1e22] hover:text-sf-primary`}
+                                    >
+                                      <ChevronDown className="size-3.5" strokeWidth={2.25} />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                                  {selectedCamera?.label
+                                    ? t('cameraSourceLabel', { label: selectedCamera.label })
+                                    : t('cameraSource')}
+                                </TooltipContent>
+                              </Tooltip>
+
+                              <DropdownMenuContent
+                                side={popSide}
+                                avoidCollisions={!asWindow}
+                                sideOffset={10}
+                                align="center"
+                                className="min-w-[220px] max-h-56"
+                              >
+                                {cameraDevices.length === 0 ? (
+                                  <FloatingToolbarMenuEmptyState
+                                    icon={<IconVideoOff size={16} />}
+                                    title={t('noCameras_title')}
+                                    description={t('noCameras_desc')}
+                                  />
+                                ) : (
+                                  <DropdownMenuRadioGroup
+                                    value={selectedCamera?.deviceId}
+                                    onValueChange={(value) => {
+                                      void handleCameraDeviceSelect(value);
+                                    }}
+                                  >
+                                    {cameraDevices.map((device, idx) => (
+                                      <DropdownMenuRadioItem
+                                        key={device.deviceId}
+                                        value={device.deviceId}
+                                      >
+                                        {device.label || `Camera ${idx + 1}`}
+                                      </DropdownMenuRadioItem>
+                                    ))}
+                                  </DropdownMenuRadioGroup>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+
+                          <div className="mx-1"></div>
+
+                          {/* More options */}
+                          <DropdownMenu
+                            open={moreMenuOpen}
+                            onOpenChange={(open) => {
+                              if (!open && teleprompterLoadingRef.current) {
+                                return;
+                              }
+                              setMoreMenuOpen(open);
                             }}
                           >
-                            {cameraDevices.map((device, idx) => (
-                              <DropdownMenuRadioItem key={device.deviceId} value={device.deviceId}>
-                                {device.label || `Camera ${idx + 1}`}
-                              </DropdownMenuRadioItem>
-                            ))}
-                          </DropdownMenuRadioGroup>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  <div className="mx-1"></div>
-
-                  {/* More options */}
-                  <DropdownMenu
-                    open={moreMenuOpen}
-                    onOpenChange={(open) => {
-                      if (!open && teleprompterLoadingRef.current) {
-                        return;
-                      }
-                      setMoreMenuOpen(open);
-                    }}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className={`${toolbarButtonCls} cursor-pointer rounded-full text-sf-secondary hover:text-sf-primary ${moreMenuOpen ? 'bg-[#1e1e22] text-sf-primary' : ''}`}
-                          >
-                            <IconMoreVertical size={16} />
-                          </Button>
-                        </DropdownMenuTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{t('moreOptions')}</TooltipContent>
-                    </Tooltip>
-                    <DropdownMenuContent
-                      side="top"
-                      sideOffset={10}
-                      align="center"
-                      className="min-w-[180px]"
-                    >
-                      <DropdownMenuItem
-                        className="gap-2.5"
-                        onSelect={() => {
-                          const opening = !teleprompterOpen;
-                          window.screenforge.toggleTeleprompter();
-                          setTeleprompterOpen(opening);
-                          if (opening) {
-                            teleprompterLoadingRef.current = true;
-                            setTeleprompterLoading(true);
-                          }
-                        }}
-                      >
-                        <IconScript size={15} className="shrink-0 text-sf-secondary" />
-                        <span className="flex-1">{t('teleprompter')}</span>
-                        {teleprompterOpen &&
-                          (teleprompterLoading ? (
-                            <Spinner className="size-3 shrink-0 fill-sf-secondary text-sf-border" />
-                          ) : (
-                            <IconCheck size={12} className="shrink-0 text-primary" />
-                          ))}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={t('moreOptions')}
+                                    className={`${toolbarButtonCls} cursor-pointer rounded-full text-sf-secondary hover:text-sf-primary ${moreMenuOpen ? 'bg-[#1e1e22] text-sf-primary' : ''}`}
+                                  >
+                                    <IconMoreVertical size={16} />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                              </TooltipTrigger>
+                              <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                                {t('moreOptions')}
+                              </TooltipContent>
+                            </Tooltip>
+                            <DropdownMenuContent
+                              side={popSide}
+                              avoidCollisions={!asWindow}
+                              sideOffset={10}
+                              align="center"
+                              className="min-w-[180px]"
+                            >
+                              <DropdownMenuItem
+                                className="gap-2.5"
+                                onSelect={() => {
+                                  const opening = !teleprompterOpen;
+                                  window.screenforge.toggleTeleprompter();
+                                  setTeleprompterOpen(opening);
+                                  if (opening) {
+                                    teleprompterLoadingRef.current = true;
+                                    setTeleprompterLoading(true);
+                                  }
+                                }}
+                              >
+                                <IconScript size={15} className="shrink-0 text-sf-secondary" />
+                                <span className="flex-1">{t('teleprompter')}</span>
+                                {teleprompterOpen &&
+                                  (teleprompterLoading ? (
+                                    <Spinner className="size-3 shrink-0 fill-sf-secondary text-sf-border" />
+                                  ) : (
+                                    <IconCheck size={12} className="shrink-0 text-primary" />
+                                  ))}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <div className="mx-2"></div>
 
@@ -1991,16 +2661,69 @@ export const FloatingToolbar = () => {
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => {
-                          void handleRecordClick();
+                          void (captureMode === 'photo'
+                            ? handleShutterClick()
+                            : handleRecordClick());
                         }}
-                        aria-label={t('record')}
-                        disabled={(tab === 'window' && !selectedSource) || tab === 'area'}
-                        className={`${toolbarButtonCls} flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-[#e54d4d] text-white shadow-[0_0_14px_rgba(229,77,77,0.5)] transition-all hover:bg-[#ef5f5f] active:scale-95 disabled:opacity-40`}
+                        aria-label={captureMode === 'photo' ? t('takeScreenshot') : t('record')}
+                        disabled={
+                          (tab === 'window' && !selectedSource && !portalCapture) || tab === 'area'
+                        }
+                        className={`${toolbarButtonCls} relative flex h-9 w-9 cursor-pointer items-center justify-center overflow-visible rounded-full bg-transparent p-0 transition-transform hover:bg-transparent active:scale-95 disabled:opacity-40`}
                       >
-                        <IconPlayerRecordFilled size={14} />
+                        {/* The button's fill morphs red ↔ white on the same
+                            spring as the switch, then settles. */}
+                        <motion.span
+                          aria-hidden
+                          className="absolute inset-0 rounded-full"
+                          initial={false}
+                          animate={
+                            captureMode === 'photo'
+                              ? {
+                                  backgroundColor: '#f5f5f7',
+                                  boxShadow: '0 0 14px rgba(255,255,255,0.35)',
+                                }
+                              : {
+                                  backgroundColor: '#e54d4d',
+                                  boxShadow: '0 0 14px rgba(229,77,77,0.5)',
+                                }
+                          }
+                          transition={modeSpring}
+                        />
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.span
+                            key={captureMode}
+                            className={`relative z-10 flex ${
+                              captureMode === 'photo' ? 'text-[#111113]' : 'text-white'
+                            }`}
+                            initial={{ opacity: 0, scale: 0.5, rotate: -45, filter: 'blur(3px)' }}
+                            animate={{
+                              opacity: 1,
+                              scale: 1,
+                              rotate: 0,
+                              filter: 'blur(0px)',
+                              transition: modeSpring,
+                            }}
+                            exit={{
+                              opacity: 0,
+                              scale: 0.5,
+                              rotate: 45,
+                              filter: 'blur(3px)',
+                              transition: modeFade,
+                            }}
+                          >
+                            {captureMode === 'photo' ? (
+                              <IconCamera size={16} />
+                            ) : (
+                              <IconPlayerRecordFilled size={14} />
+                            )}
+                          </motion.span>
+                        </AnimatePresence>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('record')}</TooltipContent>
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                      {captureMode === 'photo' ? t('takeScreenshot') : t('record')}
+                    </TooltipContent>
                   </Tooltip>
                 </motion.div>
               ) : (
@@ -2075,7 +2798,9 @@ export const FloatingToolbar = () => {
                               <IconCheck size={13} />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">{t('ariaConfirmDiscard')}</TooltipContent>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {t('ariaConfirmDiscard')}
+                          </TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -2088,7 +2813,9 @@ export const FloatingToolbar = () => {
                               <IconX size={13} />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">{t('ariaCancelDiscard')}</TooltipContent>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {t('ariaCancelDiscard')}
+                          </TooltipContent>
                         </Tooltip>
                       </motion.div>
                     ) : (
@@ -2112,7 +2839,9 @@ export const FloatingToolbar = () => {
                               <IconTrash size={14} />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">{t('discardRecording')}</TooltipContent>
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                            {t('discardRecording')}
+                          </TooltipContent>
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -2130,7 +2859,7 @@ export const FloatingToolbar = () => {
                               )}
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent side="top">
+                          <TooltipContent side={popSide} avoidCollisions={!asWindow}>
                             {isPaused ? t('resumeRecording') : t('pauseRecording')}
                           </TooltipContent>
                         </Tooltip>
@@ -2150,7 +2879,9 @@ export const FloatingToolbar = () => {
                         <IconPlayerStopFilled size={14} />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">{t('stopRecording')}</TooltipContent>
+                    <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                      {t('stopRecording')}
+                    </TooltipContent>
                   </Tooltip>
                 </motion.div>
               )}

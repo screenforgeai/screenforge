@@ -17,5 +17,8 @@
   "addZoom": "Add Zoom",
   "addCinematicZoom": "Add Cinematic Zoom",
   "addText": "Add Text",
-  "addMask": "Add Mask"
+  "addMask": "Add Mask",
+  "captureAnywhere": "キャプチャ（どのアプリからでも）",
+  "takeScreenshot": "スクリーンショットを撮る",
+  "openRecordingToolbar": "録画ツールバーを開く"
 }

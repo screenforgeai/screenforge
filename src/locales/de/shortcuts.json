@@ -17,5 +17,8 @@
   "addZoom": "Add Zoom",
   "addCinematicZoom": "Add Cinematic Zoom",
   "addText": "Add Text",
-  "addMask": "Add Mask"
+  "addMask": "Add Mask",
+  "captureAnywhere": "Aufnehmen (in jeder App)",
+  "takeScreenshot": "Screenshot aufnehmen",
+  "openRecordingToolbar": "Aufnahmeleiste öffnen"
 }

@@ -6,6 +6,11 @@
 export const CH = {
   sources: {
     GET: 'sources:get',
+    SET_SHARE_KIND: 'sources:set-share-kind',
+    PICK_SCREEN: 'sources:pick-screen',
+    SCREEN_STILL: 'sources:screen-still',
+    END_SHARE: 'sources:end-share',
+    SHARE_ENDED: 'sources:share-ended',
   },
   recording: {
     START: 'recording:start',
@@ -29,6 +34,8 @@ export const CH = {
     CONCAT: 'recording:concat',
     REENCODE: 'recording:reencode',
     GET_BACKEND: 'recording:get-backend',
+    GET_SYSTEM_AUDIO_SUPPORT: 'recording:get-system-audio-support',
+    SOURCE_LOST: 'recording:source-lost',
   },
   library: {
     SAVE: 'library:save',
@@ -117,6 +124,9 @@ export const CH = {
     SIGN_OUT: 'director:sign-out',
     ACCOUNT_CHANGED: 'director:account-changed',
   },
+  whatsNew: {
+    CONSUME_ON_LAUNCH: 'whats-new:consume-on-launch',
+  },
   presets: {
     SAVE: 'presets:save',
     GET_ALL: 'presets:get-all',
@@ -140,6 +150,28 @@ export const CH = {
     OPEN: 'area-selector:open',
     CONFIRM: 'area-selector:confirm',
     CANCEL: 'area-selector:cancel',
+    // Wayland: the still the area is drawn on (picked in the share dialog first)
+    GET_STILL: 'area-selector:get-still',
+    // Toolbar → main (Wayland): draw a recording area on a still of the picked screen
+    OPEN_ON_STILL: 'area-selector:open-on-still',
+  },
+  captureShortcuts: {
+    // Renderer → main: which global capture shortcuts are live
+    GET: 'capture-shortcuts:get',
+    // Main → toolbar: the record shortcut was pressed, switch to Video
+    VIDEO_MODE_REQUESTED: 'capture-shortcuts:video-mode-requested',
+    // Toolbar → main: counting down or recording, so screenshots must wait
+    TOOLBAR_RECORDING: 'capture-shortcuts:toolbar-recording',
+  },
+  screenshot: {
+    // Toolbar → main: hide the toolbar, grab a still, hand it to the main window
+    CAPTURE: 'screenshot:capture',
+    // Main → main window: a still is ready for the Screenshot editor
+    CAPTURED: 'screenshot:captured',
+    // Renderer → main: put a rendered PNG on the system clipboard
+    COPY: 'screenshot:copy',
+    // Main window → main: select an area and take a screenshot, as the shortcut does
+    TAKE_AREA: 'screenshot:take-area',
   },
   app: {
     SAVE_SCREENSHOT: 'app:save-screenshot',
@@ -150,10 +182,13 @@ export const CH = {
     SET_TOOLBAR_MOUSE_INTERACTIVITY: 'app:set-toolbar-mouse-interactivity',
     SET_TOOLBAR_SHAPE: 'app:set-toolbar-shape',
     SET_TOOLBAR_VIEWPORT: 'app:set-toolbar-viewport',
+    GET_TOOLBAR_LAYOUT: 'app:get-toolbar-layout',
+    SET_TOOLBAR_SIZE: 'app:set-toolbar-size',
     FOCUS_WINDOW: 'app:focus-window',
     SYSTEM_WARNING: 'app:system-warning',
     GET_APP_VERSION: 'app:get-app-version',
     PREPARE_RECORDING_START_PERMISSIONS: 'app:prepare-recording-start-permissions',
+    PREPARE_SCREENSHOT_PERMISSIONS: 'app:prepare-screenshot-permissions',
     GET_STARTUP_PERMISSION_STATUSES: 'app:get-startup-permission-statuses',
     REQUEST_SCREEN_ACCESS: 'app:request-screen-access',
     REQUEST_MEDIA_ACCESS: 'app:request-media-access',

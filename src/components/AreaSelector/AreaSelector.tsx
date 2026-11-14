@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from 'src/lib/ui';
-import { IconPlayerRecordFilled, IconRestart } from 'src/lib/icons';
+import { IconCamera, IconPlayerRecordFilled, IconRestart } from 'src/lib/icons';
+import { nudgeForKey } from 'src/lib/areaNudge';
+import { selectionToImageRect } from 'src/lib/recording/waylandPicker';
+import type { AreaSelectorPurpose, AreaSelectorStill } from 'src/types';
 
 type SelectionRect = {
   x: number;
@@ -21,6 +24,7 @@ type DragState = {
 
 const MIN_AREA_SIZE = 32;
 const HANDLE_HIT = 20;
+
 const OVERLAY_COLOR = 'rgba(0,0,0,0.65)';
 
 function normalizeRect(x1: number, y1: number, x2: number, y2: number): SelectionRect {
@@ -72,7 +76,58 @@ function modeToCursor(mode: DragMode): string {
   }
 }
 
-export const AreaSelector = () => {
+type Props = {
+  /** Screenshot swaps the record button for the camera shutter. */
+  purpose?: AreaSelectorPurpose;
+};
+
+export const AreaSelector = ({ purpose = 'record' }: Props) => {
+  const isScreenshot = purpose === 'screenshot' || purpose === 'screenshot-still';
+  // Wayland: the area is drawn on a still of the screen picked in the share dialog, shown fitted
+  // here, and sent back in the still's own pixels.
+  const onStill = purpose === 'screenshot-still' || purpose === 'record-still';
+  const [still, setStill] = useState<AreaSelectorStill | null>(null);
+  // Read by confirm: the key handler that calls it is re-attached only after a render, so a key
+  // pressed just as the still arrives would otherwise see none.
+  const stillRef = useRef<AreaSelectorStill | null>(null);
+  useEffect(() => {
+    if (!onStill) {
+      return;
+    }
+    let live = true;
+    void window.screenforge.getAreaSelectorStill().then((next) => {
+      if (live) {
+        stillRef.current = next;
+        setStill(next);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [onStill]);
+
+  /** Sends a selection in this window's pixels, or in the still's when drawing on one. */
+  const confirm = useCallback(
+    (rect: SelectionRect) => {
+      if (!onStill) {
+        void window.screenforge.confirmAreaSelection(rect);
+        return;
+      }
+      const shown = stillRef.current;
+      if (!shown) {
+        return;
+      }
+      const onImage = selectionToImageRect(
+        rect,
+        { width: window.innerWidth, height: window.innerHeight },
+        shown,
+      );
+      if (onImage) {
+        void window.screenforge.confirmAreaSelection(onImage);
+      }
+    },
+    [onStill],
+  );
   const [confirmedRect, setConfirmedRect] = useState<SelectionRect | null>(null);
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
@@ -102,13 +157,13 @@ export const AreaSelector = () => {
     ) {
       return;
     }
-    window.screenforge.confirmAreaSelection({
+    confirm({
       x: confirmedRect.x,
       y: confirmedRect.y,
       width: confirmedRect.width,
       height: confirmedRect.height,
     });
-  }, [confirmedRect]);
+  }, [confirm, confirmedRect]);
 
   const handleCancel = useCallback(() => {
     window.screenforge.cancelAreaSelection();
@@ -118,14 +173,44 @@ export const AreaSelector = () => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleCancel();
+        return;
       }
-      if (e.key === 'Enter' && showConfirmButtons) {
-        handleConfirm();
+      if (e.key === 'Enter') {
+        if (showConfirmButtons) {
+          handleConfirm();
+        } else if (isScreenshot && !dragState) {
+          // Nothing drawn yet: Enter takes the whole screen.
+          confirm({
+            x: 0,
+            y: 0,
+            width: window.innerWidth,
+            height: window.innerHeight,
+          });
+        }
+        return;
+      }
+      if (showConfirmButtons && confirmedRect) {
+        const nudged = nudgeForKey(confirmedRect, e.key, e.shiftKey, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+        if (nudged) {
+          e.preventDefault();
+          setConfirmedRect(nudged);
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleCancel, handleConfirm, showConfirmButtons]);
+  }, [
+    confirm,
+    confirmedRect,
+    dragState,
+    handleCancel,
+    handleConfirm,
+    isScreenshot,
+    showConfirmButtons,
+  ]);
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) {
@@ -247,6 +332,14 @@ export const AreaSelector = () => {
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
     >
+      {onStill && still && (
+        <img
+          src={still.dataUrl}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+        />
+      )}
       {/* Four-panel overlay — avoids SVG mask rendering issues in transparent Electron windows */}
       {(!selection || !isValidSelection) && (
         <div
@@ -392,7 +485,9 @@ export const AreaSelector = () => {
                 whiteSpace: 'nowrap',
               }}
             >
-              Drag to select a recording area · Esc to cancel
+              {isScreenshot
+                ? 'Drag to select an area · Enter for the whole screen · Esc to cancel'
+                : 'Drag to select a recording area · Esc to cancel'}
             </div>
           </motion.div>
         )}
@@ -434,17 +529,24 @@ export const AreaSelector = () => {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="cursor-pointer flex h-9 w-9 items-center justify-center rounded-full bg-[#e54d4d] text-white shadow-[0_0_14px_rgba(229,77,77,0.5)] hover:bg-[#ef5f5f] active:scale-95"
+                  aria-label={isScreenshot ? 'Take screenshot' : 'Start Recording'}
+                  className={
+                    isScreenshot
+                      ? 'cursor-pointer flex h-9 w-9 items-center justify-center rounded-full bg-[#f5f5f7] text-[#111113] shadow-[0_0_14px_rgba(255,255,255,0.35)] hover:bg-white hover:text-[#111113] active:scale-95'
+                      : 'cursor-pointer flex h-9 w-9 items-center justify-center rounded-full bg-[#e54d4d] text-white shadow-[0_0_14px_rgba(229,77,77,0.5)] hover:bg-[#ef5f5f] active:scale-95'
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     handleConfirm();
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  <IconPlayerRecordFilled size={14} />
+                  {isScreenshot ? <IconCamera size={16} /> : <IconPlayerRecordFilled size={14} />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Start Recording</TooltipContent>
+              <TooltipContent side="top">
+                {isScreenshot ? 'Take screenshot' : 'Start Recording'}
+              </TooltipContent>
             </Tooltip>
           </motion.div>
         )}

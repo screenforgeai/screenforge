@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useStore } from '../store';
 import type { RecordingResult } from '../types/index';
 import { usePixiRenderer } from './usePixiRenderer';
 
@@ -135,5 +136,38 @@ describe('usePixiRenderer', () => {
     expect(() => runFrames(1)).not.toThrow();
     expect(firstUpdater).not.toHaveBeenCalled();
     await act(async () => undefined);
+  });
+
+  it('stops drawing the preview while the screenshot editor covers it', async () => {
+    const scene = fakeScene();
+    pixi.createPreviewPixiApp.mockResolvedValue(scene);
+    pixi.setupPixiPipeline.mockResolvedValue([]);
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'videoWidth', { value: 1280 });
+    Object.defineProperty(video, 'videoHeight', { value: 720 });
+    renderHook(() =>
+      usePixiRenderer(
+        { current: document.createElement('canvas') },
+        { current: video },
+        recording('/a.mp4'),
+      ),
+    );
+    await act(async () => undefined);
+    runFrames(1);
+    expect(scene.app.renderer.render).toHaveBeenCalled();
+
+    // The screenshot editor opens over the whole window: the GPU is all its own.
+    act(() =>
+      useStore.setState({
+        screenshotCapture: { kind: 'area', imageUrl: 'blob:shot', width: 800, height: 600 },
+      }),
+    );
+    scene.app.renderer.render.mockClear();
+    runFrames(3);
+    expect(scene.app.renderer.render).not.toHaveBeenCalled();
+
+    act(() => useStore.setState({ screenshotCapture: null }));
+    runFrames(1);
+    expect(scene.app.renderer.render).toHaveBeenCalled();
   });
 });

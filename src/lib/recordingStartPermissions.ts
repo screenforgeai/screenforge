@@ -21,8 +21,9 @@ export interface RecordingStartPermissionAPI {
   openSystemSettings: (permission: StartupPermission) => Promise<boolean | void> | boolean | void;
 }
 
-export async function ensureRecordingStartPermissions(
-  api: RecordingStartPermissionAPI,
+/** Screen access alone: all a screenshot needs, since it doesn't track the cursor. */
+export async function ensureScreenCapturePermission(
+  api: Pick<RecordingStartPermissionAPI, 'requestScreenAccess' | 'openSystemSettings'>,
 ): Promise<void> {
   const screenStatus = await api.requestScreenAccess();
   if (screenStatus !== 'granted') {
@@ -33,6 +34,12 @@ export async function ensureRecordingStartPermissions(
         : SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
     );
   }
+}
+
+export async function ensureRecordingStartPermissions(
+  api: RecordingStartPermissionAPI,
+): Promise<void> {
+  await ensureScreenCapturePermission(api);
 
   const accessibilityStatus = await api.getAccessibilityPermissionStatus();
   if (accessibilityStatus === 'granted') {

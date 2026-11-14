@@ -57,11 +57,23 @@ describe('createCaptureStoreSnapshot', () => {
       cursorMaxTilt: 4,
       cursorHideWhenIdle: false,
       cursorIdleHideSeconds: 5,
+      cursorEffect: 'spotlight' as const,
+      cursorClickShrink: true,
+      cursorColor: '#16A34A',
+      cursorLabel: 'Sam',
       maskClips: [],
       motionClips: [] as MotionClip[],
     };
 
     const snapshot = createCaptureStoreSnapshot(state);
+
+    // The export window renders from this snapshot, so the cursor effect settings must ride along.
+    expect(snapshot).toMatchObject({
+      cursorEffect: 'spotlight',
+      cursorClickShrink: true,
+      cursorColor: '#16A34A',
+      cursorLabel: 'Sam',
+    });
 
     snapshot.frame.cropRect.x = 0.25;
     snapshot.frame.background.padding = 40;

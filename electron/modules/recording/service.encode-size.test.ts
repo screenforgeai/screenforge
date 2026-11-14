@@ -68,7 +68,7 @@ vi.mock('../export/service', () => ({
   probeExportSource: exportServiceMock.probeExportSource,
 }));
 
-const { concatRecordings, cropRecording, reencodeRecording } = await import('./service');
+const { concatRecordings, reencodeRecording } = await import('./service');
 
 /** The audio probe runs `ffmpeg -i`: report one audio stream. */
 function fakeProbeWithAudio() {
@@ -132,18 +132,56 @@ describe('post-processing encodes stay within H.264 frame limits', () => {
 
     expect(argAfter(lastFFmpegArgs(), '-vf')).toBe('format=yuv420p,setsar=1');
   });
+});
 
-  it('scales a crop that is still larger than H.264 allows', async () => {
-    await cropRecording('/rec.mp4', { x: 0, y: 0, width: 2560, height: 1440 }, 2);
-
-    const vf = argAfter(lastFFmpegArgs(), '-vf');
-    expect(vf).toContain('crop=5120:2880:0:0');
-    expect(vf).toContain('scale=4096:2304');
+describe('appending a clip to a cropped project', () => {
+  beforeEach(() => {
+    ffmpegRunnerMock.runFFmpeg.mockReturnValue({ promise: Promise.resolve() });
+    childProcessMock.spawn.mockImplementation(fakeProbeWithAudio);
   });
 
-  it('crops a normal area without scaling, as before', async () => {
-    await cropRecording('/rec.mp4', { x: 10, y: 20, width: 800, height: 600 }, 2);
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
 
-    expect(argAfter(lastFFmpegArgs(), '-vf')).toBe('crop=1600:1200:20:40');
+  it('cuts an appended area recording to its area and fits it into the project crop', async () => {
+    exportServiceMock.probeExportSource.mockResolvedValue({ width: 3024, height: 1964 });
+
+    await concatRecordings('/first.mp4', '/second.mp4', {
+      secondCrop: { x: 302, y: 196, width: 1200, height: 802 },
+      target: { x: 151, y: 99, width: 1201, height: 803 },
+    });
+
+    const filter = argAfter(lastFFmpegArgs(), '-filter_complex');
+    expect(filter).toContain('[0:v]format=yuv420p,setsar=1[v0]');
+    expect(filter).toContain(
+      '[1:v]crop=1200:802:302:196:exact=1,format=yuv444p,scale=1201:803:force_original_aspect_ratio=decrease,pad=1201:803:(ow-iw)/2:(oh-ih)/2,pad=3024:1964:151:99,setsar=1,format=yuv420p[v1]',
+    );
+  });
+
+  it('only lets whole-pixel numbers into the filter', async () => {
+    exportServiceMock.probeExportSource.mockResolvedValue({ width: 1920, height: 1080 });
+
+    await concatRecordings('/first.mp4', '/second.mp4', {
+      secondCrop: { x: '7', y: 3, width: 641, height: 359 },
+      target: { x: '0,movie=/etc/passwd', y: 0, width: 10, height: 10 },
+    } as never);
+
+    const filter = argAfter(lastFFmpegArgs(), '-filter_complex');
+    expect(filter).toContain('[1:v]crop=641:359:7:3:exact=1,scale=1920:1080');
+    expect(filter).not.toContain('movie');
+  });
+
+  it('moves the project crop with the first clip when the join is scaled down', async () => {
+    exportServiceMock.probeExportSource.mockResolvedValue({ width: 5120, height: 2880 });
+
+    await concatRecordings('/first.mp4', '/second.mp4', {
+      target: { x: 1280, y: 720, width: 2560, height: 1440 },
+    });
+
+    const filter = argAfter(lastFFmpegArgs(), '-filter_complex');
+    // 4096/5120 = 0.8 of every edge.
+    expect(filter).toContain('pad=4096:2304:1024:576');
+    expect(filter).toContain('scale=2048:1152:force_original_aspect_ratio=decrease');
   });
 });

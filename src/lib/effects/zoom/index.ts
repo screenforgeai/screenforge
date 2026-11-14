@@ -4,6 +4,7 @@ import type { CursorData } from '../cursor/index';
 import { interpolateCursor } from '../cursor/render';
 import type { Effect } from '../types';
 import { detectZoomClips } from './analyze';
+import { getZoomCrop, toCropSpacePoint, toCropSpaceRecording } from './crop-space';
 import { resolveAutoFollowAxis, type FollowDirection } from './follow';
 import { interpolateCamera } from './render';
 
@@ -278,7 +279,9 @@ function clampSpringToBounds(pos: number, vel: number, min: number, max: number)
 export const zoomEffect: Effect<ZoomClip[]> = {
   id: 'zoom',
 
-  analyze: (recording) => detectZoomClips(recording),
+  // Auto zoom targets are positions in the cropped picture, like manual ones.
+  analyze: (recording) =>
+    detectZoomClips(toCropSpaceRecording(recording, getZoomCrop(useStore.getState()))),
 
   onLoad(data) {
     const { zoomClips, setZoom } = useStore.getState();
@@ -326,7 +329,10 @@ export const zoomEffect: Effect<ZoomClip[]> = {
       const { padding } = state.frame.background;
       const { cursorHalflife, cursorContinuousTracking } = state;
       const bounds = getCameraBounds(padding);
-      const pos = cursorData ? interpolateCursor(cursorData.moveEvents, t) : null;
+      // The camera centres on positions in the cropped picture; the cursor's
+      // are across the whole recording.
+      const cursorPos = cursorData ? interpolateCursor(cursorData.moveEvents, t) : null;
+      const pos = cursorPos ? toCropSpacePoint(cursorPos, getZoomCrop(state)) : null;
       const target = interpolateCamera(clips, t, pos ?? undefined);
 
       if (!target) {

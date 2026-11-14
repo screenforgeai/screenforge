@@ -13,6 +13,10 @@ type CursorStateSource = Pick<
   | 'cursorMaxTilt'
   | 'cursorHideWhenIdle'
   | 'cursorIdleHideSeconds'
+  | 'cursorEffect'
+  | 'cursorClickShrink'
+  | 'cursorColor'
+  | 'cursorLabel'
   | 'cursorClickSound'
   | 'cursorClickSoundVolume'
   | 'cursorContinuousTracking'
@@ -33,6 +37,10 @@ type ProjectStateSource = Pick<
   | 'cursorMaxTilt'
   | 'cursorHideWhenIdle'
   | 'cursorIdleHideSeconds'
+  | 'cursorEffect'
+  | 'cursorClickShrink'
+  | 'cursorColor'
+  | 'cursorLabel'
   | 'cursorClickSound'
   | 'cursorClickSoundVolume'
   | 'cursorContinuousTracking'
@@ -85,6 +93,10 @@ export function getCursorSnapshot(state: CursorStateSource): ProjectCursorSettin
     clickSound: state.cursorClickSound,
     clickSoundVolume: state.cursorClickSoundVolume,
     continuousTracking: state.cursorContinuousTracking,
+    effect: state.cursorEffect,
+    clickShrink: state.cursorClickShrink,
+    color: state.cursorColor,
+    label: state.cursorLabel,
   };
 }
 

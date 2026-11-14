@@ -9,8 +9,9 @@
  *   ├── shadowShape        — blurred preview shadow
  *   └── videoContainer     (masked to contentRect)
  *       ├── bgRepaintSprite — same background drawn inside content rect
- *       └── mediaContainer  (masked to mediaRect)
- *           └── videoSprite — source video, positioned to implement crop
+ *       └── mediaContainer  (masked to windowRect: bar + page)
+ *           ├── videoSprite — source video, positioned to implement crop
+ *           └── windowBarSprite — the window bar, over the top of the page
  *
  * The shadow is rendered as a separate blurred shape behind videoContainer so
  * the recorded screen pixels do not pass through a filter render texture.
@@ -27,6 +28,7 @@ import {
   VideoSource,
 } from 'pixi.js';
 import type { PixiEffect, PixiEffectUpdater, PixiScene } from '../../pixi/types';
+import { RECORDING_MASK_LABEL, RECORDING_VIDEO_SPRITE_LABEL } from '../../pixi/types';
 import {
   SCREEN_VIDEO_MAG_FILTER,
   SCREEN_VIDEO_MIN_FILTER,
@@ -52,6 +54,9 @@ import type { MediaSegment, ZoomClip } from '../../../types/timeline';
 import type { FrameGeometry } from './analyze';
 import { resolveCameraAtTime } from '../camera/layout';
 import { interpolateCamera } from '../zoom/render';
+import { WindowBarPainter, sampleTopBandBrightness } from './window-bar';
+import { recordingPageVisits } from '../../recording/captureSource';
+import { drawWindowBar } from '../../window-bar/canvas';
 
 // ── Clip-boundary fade ────────────────────────────────────────────────────────
 
@@ -293,6 +298,27 @@ function isHTMLVideoSource(source: CanvasImageSource): source is HTMLVideoElemen
   return typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement;
 }
 
+/**
+ * Whether the screen video can go to the GPU whole. Only an uncropped preview
+ * video can: its mip chain is built from everything uploaded, so with a crop
+ * the levels would blend pixels from outside it into its edges, and the media
+ * mask cannot take them back out. Everything else copies just the crop.
+ */
+export function uploadsWholeVideo(
+  source: CanvasImageSource,
+  crop: { x: number; y: number; width: number; height: number },
+  sourceWidth: number,
+  sourceHeight: number,
+): source is HTMLVideoElement {
+  return (
+    isHTMLVideoSource(source) &&
+    crop.x === 0 &&
+    crop.y === 0 &&
+    crop.width === sourceWidth &&
+    crop.height === sourceHeight
+  );
+}
+
 // ── Frame effect ──────────────────────────────────────────────────────────────
 
 export const framePixiEffect: PixiEffect<null> = {
@@ -307,13 +333,40 @@ export const framePixiEffect: PixiEffect<null> = {
     const videoSprite = new Sprite();
     videoSprite.eventMode = 'none';
     videoSprite.roundPixels = false;
+    // The cursor's magnifier finds the recording by this label.
+    videoSprite.label = RECORDING_VIDEO_SPRITE_LABEL;
 
     // ── Media container (masked to mediaRect with rounded corners) ──────────
     const mediaContainer = new Container();
     const mediaMask = new Graphics();
+    // The cursor magnifier clips to this too, so it never shows cropped-out pixels.
+    mediaMask.label = RECORDING_MASK_LABEL;
     mediaContainer.mask = mediaMask;
 
-    mediaContainer.addChild(videoSprite, mediaMask);
+    // ── Window bar ──────────────────────────────────────────────────────────
+    // Drawn as vectors onto its own canvas at the size it shows on screen
+    // (zoom included), so it is never an upscaled bitmap, then uploaded only
+    // when its pixels change (a page change crossfade, a zoom step).
+    const windowBar = new WindowBarPainter();
+    const windowBarCanvas = document.createElement('canvas');
+    windowBarCanvas.width = 1;
+    windowBarCanvas.height = 1;
+    const windowBarCtx = windowBarCanvas.getContext('2d');
+    let windowBarSource: CanvasSource | null = null;
+    const windowBarSprite = new Sprite();
+    windowBarSprite.eventMode = 'none';
+    windowBarSprite.visible = false;
+    let lastWindowBarKey = '';
+    // A web font that finishes loading after the first draw must redraw the bar.
+    let fontsLoaded = 0;
+    const onFontsLoaded = (): void => {
+      fontsLoaded++;
+    };
+    if (typeof document !== 'undefined' && document.fonts) {
+      document.fonts.addEventListener('loadingdone', onFontsLoaded);
+    }
+
+    mediaContainer.addChild(videoSprite, windowBarSprite, mediaMask);
 
     // ── Background repaint inside media rect ───────────────────────────────
     // Background redrawn only within mediaRect (not the full contentRect) so the
@@ -398,7 +451,12 @@ export const framePixiEffect: PixiEffect<null> = {
     let videoBridgeSource: CanvasSource | null = null;
     let videoElementSource: VideoSource | null = null;
     let videoElementSourceElement: HTMLVideoElement | null = null;
+    let videoElementTexture: Texture | null = null;
+    let videoBridgeTexture: Texture | null = null;
     let currentVideoTexture: Texture | null = null;
+    // True when the texture holds only the crop (the bridge canvas), so the
+    // sprite fills the media rect instead of being offset behind its mask.
+    let videoTextureIsCrop = false;
 
     // ── Renderer size tracking — reset change-detection guards on resize ──────
     let lastCw = -1;
@@ -449,6 +507,7 @@ export const framePixiEffect: PixiEffect<null> = {
 
     // ── Updater ──────────────────────────────────────────────────────────────
     return (t, dt, renderContext: RenderContext) => {
+      const renderState = useStore.getState();
       // Single getState() call — reading all required fields at once avoids
       // redundant Zustand store accesses inside a hot 60fps path.
       const {
@@ -460,7 +519,7 @@ export const framePixiEffect: PixiEffect<null> = {
         camera,
         cameraClips,
         zoomClips,
-      } = useStore.getState();
+      } = renderState;
 
       // Freeze to the full source during editing so the Pixi canvas matches the
       // overlay (which always positions itself against the full source). Using
@@ -548,6 +607,8 @@ export const framePixiEffect: PixiEffect<null> = {
             const toCR = cachedGeom.contentRect;
             const fromMR = lastPanelGeom.mediaRect;
             const toMR = cachedGeom.mediaRect;
+            const fromWR = lastPanelGeom.windowRect;
+            const toWR = cachedGeom.windowRect;
             contentGeom = {
               ...cachedGeom,
               contentRect: {
@@ -562,6 +623,15 @@ export const framePixiEffect: PixiEffect<null> = {
                 width: fromMR.width + (toMR.width - fromMR.width) * fadeAlpha,
                 height: fromMR.height + (toMR.height - fromMR.height) * fadeAlpha,
               },
+              windowRect: {
+                x: fromWR.x + (toWR.x - fromWR.x) * fadeAlpha,
+                y: fromWR.y + (toWR.y - fromWR.y) * fadeAlpha,
+                width: fromWR.width + (toWR.width - fromWR.width) * fadeAlpha,
+                height: fromWR.height + (toWR.height - fromWR.height) * fadeAlpha,
+              },
+              barHeight:
+                lastPanelGeom.barHeight +
+                (cachedGeom.barHeight - lastPanelGeom.barHeight) * fadeAlpha,
             };
           } else {
             lastPanelGeom = null;
@@ -571,7 +641,7 @@ export const framePixiEffect: PixiEffect<null> = {
         lastPanelGeom = null;
         screenRectFadeElapsed = 0;
       }
-      const { contentRect, cropRectPixels, mediaRect } = contentGeom;
+      const { contentRect, cropRectPixels, mediaRect, windowRect } = contentGeom;
 
       // For background rendering, use the frame geometry's canvas dimensions, NOT the
       // renderer dimensions. During export the renderer is sized to the standard encoder
@@ -602,19 +672,28 @@ export const framePixiEffect: PixiEffect<null> = {
         0,
         Math.min(scaledRadius, contentRect.width / 2, contentRect.height / 2),
       );
+      // Radius and shadow wrap the whole window (bar + page); windowRect is
+      // mediaRect itself when there is no bar.
       const mediaRadius = Math.max(
         0,
-        Math.min(scaledRadius, mediaRect.width / 2, mediaRect.height / 2),
+        Math.min(scaledRadius, windowRect.width / 2, windowRect.height / 2),
       );
 
       // ── Update video texture from renderContext ──────────────────────────
-      // Preview uses the HTMLVideoElement directly. Export/canvas sources use a
-      // 1:1 bridge canvas so the copy stays unsmoothed before GPU upload.
+      // An uncropped preview uses the HTMLVideoElement directly. Everything else
+      // (export, and a cropped preview) goes through a 1:1 bridge canvas so the
+      // copy stays unsmoothed before GPU upload. The bridge copies only the
+      // crop's exact pixels: scaling a full-source texture behind the media mask
+      // let the GPU blend in pixels from just outside the crop along its edges
+      // (and shifted it by a fraction of a pixel), and the mip chain built from
+      // a full-source upload does the same; an area recording must show neither.
       const videoSrc = renderContext.videoSource;
       if (videoSrc?.ready && videoSrc.source && videoSrc.width > 0 && videoSrc.height > 0) {
         const srcW = videoSrc.width;
         const srcH = videoSrc.height;
-        if (isHTMLVideoSource(videoSrc.source)) {
+        const crop = getFrameGeometry(effectiveFrame, srcW, srcH).cropRectPixels;
+        if (uploadsWholeVideo(videoSrc.source, crop, srcW, srcH)) {
+          videoTextureIsCrop = false;
           if (videoElementSourceElement !== videoSrc.source) {
             videoElementSource = new VideoSource({
               resource: videoSrc.source,
@@ -627,26 +706,51 @@ export const framePixiEffect: PixiEffect<null> = {
               magFilter: SCREEN_VIDEO_MAG_FILTER,
               minFilter: SCREEN_VIDEO_MIN_FILTER,
               mipmapFilter: SCREEN_VIDEO_MIPMAP_FILTER,
+              // As in export: a Retina recording is shown smaller than it is, and without a
+              // mip chain small text and UI edges shimmer and step.
+              autoGenerateMipmaps: true,
             });
             videoElementSource.autoUpdate = false;
             videoElementSourceElement = videoSrc.source;
-            currentVideoTexture = new Texture({ source: videoElementSource });
+            videoElementTexture = new Texture({ source: videoElementSource });
+          }
+          // Set every frame: cropping and uncropping switch between this and
+          // the bridge texture without either being rebuilt.
+          currentVideoTexture = videoElementTexture;
+          if (currentVideoTexture) {
             videoSprite.texture = currentVideoTexture;
           }
           videoElementSource?.update();
         } else if (videoBridgeCtx) {
-          if (videoBridgeCanvas.width !== srcW || videoBridgeCanvas.height !== srcH) {
-            videoBridgeCanvas.width = srcW;
-            videoBridgeCanvas.height = srcH;
+          if (videoBridgeCanvas.width !== crop.width || videoBridgeCanvas.height !== crop.height) {
+            videoBridgeCanvas.width = crop.width;
+            videoBridgeCanvas.height = crop.height;
             configureScreenVideoBridgeContext(videoBridgeCtx);
+            // A new size needs a new GPU source; the old one keeps the old size.
+            videoBridgeSource?.destroy();
+            videoBridgeSource = null;
           }
-          videoBridgeCtx.drawImage(videoSrc.source as CanvasImageSource, 0, 0);
+          videoBridgeCtx.drawImage(
+            videoSrc.source as CanvasImageSource,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            0,
+            0,
+            crop.width,
+            crop.height,
+          );
           if (!videoBridgeSource) {
             videoBridgeSource = createScreenVideoCanvasSource(videoBridgeCanvas);
-            currentVideoTexture = new Texture({ source: videoBridgeSource });
+            videoBridgeTexture = new Texture({ source: videoBridgeSource });
+          }
+          currentVideoTexture = videoBridgeTexture;
+          if (currentVideoTexture) {
             videoSprite.texture = currentVideoTexture;
           }
           videoBridgeSource.update();
+          videoTextureIsCrop = true;
         }
       }
 
@@ -1006,7 +1110,13 @@ export const framePixiEffect: PixiEffect<null> = {
       // ── Video sprite: crop + scale to mediaRect ──────────────────────────
       const videoHidden = hiddenLayers.video;
       videoSprite.visible = !videoHidden;
-      if (currentVideoTexture && !videoHidden) {
+      if (currentVideoTexture && !videoHidden && videoTextureIsCrop) {
+        // The texture is already the crop: fill the media rect with it.
+        videoSprite.x = mediaRect.x;
+        videoSprite.y = mediaRect.y;
+        videoSprite.width = mediaRect.width;
+        videoSprite.height = mediaRect.height;
+      } else if (currentVideoTexture && !videoHidden) {
         const scaleX = mediaRect.width / Math.max(cropRectPixels.width, 1);
         const scaleY = mediaRect.height / Math.max(cropRectPixels.height, 1);
         videoSprite.x = mediaRect.x - cropRectPixels.x * scaleX;
@@ -1015,27 +1125,78 @@ export const framePixiEffect: PixiEffect<null> = {
         videoSprite.height = scene.sourceHeight * scaleY;
       }
 
+      // ── Window bar ───────────────────────────────────────────────────────
+      const barScene = windowBarCtx
+        ? windowBar.sceneAt(
+            effectiveFrame,
+            contentGeom,
+            timelineT,
+            { pageVisits: recordingPageVisits(renderState.recordingResult) },
+            () =>
+              videoSrc?.ready && videoSrc.source
+                ? sampleTopBandBrightness(
+                    videoSrc.source,
+                    videoSrc.width,
+                    videoSrc.height,
+                    cropRectPixels.y,
+                  )
+                : null,
+          )
+        : null;
+      windowBarSprite.visible = !!barScene && !videoHidden;
+      if (barScene && windowBarCtx && !videoHidden) {
+        // Pixels per bar unit: the renderer's resolution times the zoom (in
+        // half steps), so a zoomed-in bar is redrawn sharp, not stretched.
+        const zoomStep = Math.max(1, Math.ceil(Math.abs(scene.cameraContainer.scale.x) * 2) / 2);
+        const pixelScale = Math.min(4, (scene.app.renderer.resolution || 1) * zoomStep);
+        const pw = Math.max(1, Math.ceil(barScene.width * pixelScale));
+        const ph = Math.max(1, Math.ceil(barScene.height * pixelScale));
+        const barKey = `${pw}x${ph}|${pixelScale}|${fontsLoaded}|${JSON.stringify(barScene.ops)}`;
+        if (barKey !== lastWindowBarKey) {
+          const resized = windowBarCanvas.width !== pw || windowBarCanvas.height !== ph;
+          if (resized) {
+            windowBarCanvas.width = pw;
+            windowBarCanvas.height = ph;
+          }
+          windowBarCtx.setTransform(1, 0, 0, 1, 0, 0);
+          windowBarCtx.clearRect(0, 0, pw, ph);
+          drawWindowBar(windowBarCtx, barScene, 0, 0, pixelScale);
+          if (!windowBarSource || resized) {
+            windowBarSource?.destroy();
+            windowBarSource = new CanvasSource({ resource: windowBarCanvas });
+            windowBarSprite.texture = new Texture({ source: windowBarSource });
+          } else {
+            windowBarSource.update();
+          }
+          lastWindowBarKey = barKey;
+        }
+        windowBarSprite.x = windowRect.x;
+        windowBarSprite.y = windowRect.y;
+        windowBarSprite.width = barScene.width;
+        windowBarSprite.height = barScene.height;
+      }
+
       // ── Media mask + BgRepaint mask (share the same geometry) ────────────
       // Only redrawn when geometry changes — e.g. user adjusts padding or corner
       // radius. During playback this is static, so we skip 3 GPU buffer uploads/frame.
-      const mediaMaskKey = `${mediaRect.x}|${mediaRect.y}|${mediaRect.width}|${mediaRect.height}|${mediaRadius}`;
+      const mediaMaskKey = `${windowRect.x}|${windowRect.y}|${windowRect.width}|${windowRect.height}|${mediaRadius}`;
       if (mediaMaskKey !== lastMediaMaskKey) {
         mediaMask.clear();
         mediaMask.roundRect(
-          mediaRect.x,
-          mediaRect.y,
-          mediaRect.width,
-          mediaRect.height,
+          windowRect.x,
+          windowRect.y,
+          windowRect.width,
+          windowRect.height,
           mediaRadius,
         );
         mediaMask.fill(0xffffff);
         // BgRepaint mask shares the same rect — update together.
         bgRepaintMask.clear();
         bgRepaintMask.roundRect(
-          mediaRect.x,
-          mediaRect.y,
-          mediaRect.width,
-          mediaRect.height,
+          windowRect.x,
+          windowRect.y,
+          windowRect.width,
+          windowRect.height,
           mediaRadius,
         );
         bgRepaintMask.fill(0xffffff);
@@ -1061,10 +1222,10 @@ export const framePixiEffect: PixiEffect<null> = {
       const shadowKey = [
         shadowBlur,
         shadowOpacity,
-        mediaRect.x,
-        mediaRect.y,
-        mediaRect.width,
-        mediaRect.height,
+        windowRect.x,
+        windowRect.y,
+        windowRect.width,
+        windowRect.height,
         mediaRadius,
         ch,
       ].join('|');
@@ -1081,7 +1242,7 @@ export const framePixiEffect: PixiEffect<null> = {
           shadowShape.x = baseShadowX;
           shadowShape.y = baseShadowY;
           shadowShape
-            .roundRect(mediaRect.x, mediaRect.y, mediaRect.width, mediaRect.height, mediaRadius)
+            .roundRect(windowRect.x, windowRect.y, windowRect.width, windowRect.height, mediaRadius)
             .fill(0x000000);
           shadowShape.filters = [shadowBlurFilter];
         } else {
