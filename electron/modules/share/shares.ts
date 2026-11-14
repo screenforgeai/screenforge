@@ -10,6 +10,7 @@ import {
   type UploadedPart,
 } from './upload';
 import type {
+  PendingShareDeletion,
   PendingShareUpload,
   ProjectShareLink,
   ShareActionResult,
@@ -33,6 +34,8 @@ export interface ShareManagerDeps {
   stat: (filePath: string) => Promise<{ size: number; mtimeMs: number } | null>;
   /** True for a file this app exported (sharing is limited to those). */
   isExported: (filePath: string) => Promise<boolean>;
+  /** The signed-in Director account as `workspace:user`, or null. */
+  currentAccount: () => string | null;
   /** Opens the file, refusing one that is no longer the size and time checked. */
   openSource: (
     filePath: string,
@@ -129,6 +132,18 @@ export function createShareManager(deps: ShareManagerDeps) {
       ? { ...link, status: 'expired' }
       : link;
 
+  /**
+   * Whether a saved record belongs to the signed-in account. Records are
+   * only acted on, and listed, under the account that made them (records
+   * from before accounts were kept belong to whoever is signed in).
+   */
+  const ownedNow = (record: { account?: string | null }): boolean => {
+    const account = deps.currentAccount();
+    return !record.account || account === null || record.account === account;
+  };
+  const actionableNow = (record: { account?: string | null }): boolean =>
+    !record.account || record.account === deps.currentAccount();
+
   /** A saved link as shown: local expiry applied, and no watch link that isn't https. */
   const fromStore = (link: ProjectShareLink): ProjectShareLink =>
     withLocalExpiry({ ...link, watchUrl: safeWatchUrl(link.watchUrl) });
@@ -140,6 +155,7 @@ export function createShareManager(deps: ShareManagerDeps) {
         : share.status === 'live' || (justCompleted && share.status !== 'removed')
           ? 'live'
           : 'removed';
+    const account = deps.currentAccount();
     return withLocalExpiry({
       shareId: share.id,
       title: share.title || title,
@@ -147,6 +163,7 @@ export function createShareManager(deps: ShareManagerDeps) {
       expiresAt: share.expiresAt,
       status,
       sharedAt: share.sharedAt,
+      ...(account ? { account } : {}),
     });
   };
 
@@ -154,7 +171,7 @@ export function createShareManager(deps: ShareManagerDeps) {
     const [links, uploads] = await Promise.all([deps.store.getLinks(), deps.store.getUploads()]);
     const pending: ShareLibrary['pending'] = {};
     for (const upload of uploads) {
-      if (upload.projectId) {
+      if (upload.projectId && ownedNow(upload)) {
         pending[upload.projectId] = {
           fileName: path.basename(upload.filePath),
           sizeBytes: upload.sizeBytes,
@@ -163,7 +180,9 @@ export function createShareManager(deps: ShareManagerDeps) {
     }
     return {
       links: Object.fromEntries(
-        Object.entries(links).map(([projectId, link]) => [projectId, fromStore(link)]),
+        Object.entries(links)
+          .filter(([, link]) => ownedNow(link))
+          .map(([projectId, link]) => [projectId, fromStore(link)]),
       ),
       pending,
     };
@@ -173,14 +192,45 @@ export function createShareManager(deps: ShareManagerDeps) {
     deps.onLibrary(await getLibrary());
   };
 
-  /** Removes an unfinished share here and, when it can, in Director. */
-  const forgetUpload = async (shareId: string) => {
-    await deps.store.removeUpload(shareId);
-    await deps.api.remove(shareId).catch(() => undefined);
+  /** Deletes a share in Director under its own account; true once it's gone there. */
+  const deleteRemote = async (deletion: PendingShareDeletion): Promise<boolean> => {
+    if (!actionableNow(deletion)) {
+      return false;
+    }
+    try {
+      await deps.api.remove(deletion.shareId);
+    } catch (err) {
+      if (shareErrorCode(err) !== 'not-found') {
+        return false;
+      }
+    }
+    await deps.store.removeDeletion(deletion.shareId);
+    return true;
+  };
+
+  /**
+   * Drops an unfinished upload here. Its deletion in Director is recorded
+   * first and kept until Director confirms it, so a failure never strands
+   * the parts already uploaded out of reach.
+   */
+  const forgetUpload = async (upload: { shareId: string; account?: string | null }) => {
+    const deletion = {
+      shareId: upload.shareId,
+      account: upload.account ?? deps.currentAccount(),
+    };
+    await deps.store.forgetUpload(deletion);
+    await deleteRemote(deletion);
+  };
+
+  /** Retries the deletions Director hasn't confirmed, for the signed-in account. */
+  const retryDeletions = async () => {
+    for (const deletion of await deps.store.getDeletions()) {
+      await deleteRemote(deletion);
+    }
   };
 
   const matchesFile = async (upload: PendingShareUpload | null) => {
-    if (!upload) {
+    if (!upload || !actionableNow(upload)) {
       return false;
     }
     const file = await deps.stat(upload.filePath);
@@ -227,7 +277,10 @@ export function createShareManager(deps: ShareManagerDeps) {
 
       const pending = await deps.store.findUpload({ filePath });
       const resumable =
-        !!pending && pending.sizeBytes === file.size && pending.mtimeMs === file.mtimeMs;
+        !!pending &&
+        actionableNow(pending) &&
+        pending.sizeBytes === file.size &&
+        pending.mtimeMs === file.mtimeMs;
       // Only a file this app exported, or one it was already uploading.
       if (!resumable && !(await deps.isExported(filePath))) {
         return fail('failed');
@@ -251,10 +304,12 @@ export function createShareManager(deps: ShareManagerDeps) {
             return fail(code === 'failed' ? 'interrupted' : code, true);
           }
           // Director no longer has it, or can't resume it: start over.
-          await forgetUpload(pending.shareId);
+          await forgetUpload(pending);
         }
       } else if (pending) {
-        await forgetUpload(pending.shareId);
+        // A changed file, or another account's upload: that account deletes
+        // it when it's next signed in here.
+        await forgetUpload(pending);
       }
       signal.throwIfAborted();
 
@@ -268,6 +323,7 @@ export function createShareManager(deps: ShareManagerDeps) {
         shareId = created.share.id;
         partSize = created.upload.partSize;
         targets = created.upload.parts;
+        const account = deps.currentAccount();
         await deps.store.putUpload({
           shareId,
           filePath,
@@ -277,6 +333,7 @@ export function createShareManager(deps: ShareManagerDeps) {
           title,
           durationS,
           contentType,
+          ...(account ? { account } : {}),
         });
         recorded = true;
         signal.throwIfAborted();
@@ -328,13 +385,14 @@ export function createShareManager(deps: ShareManagerDeps) {
       setState({ status: 'finishing', filePath, projectId });
       const parts = [...alreadyUploaded, ...sent].sort((a, b) => a.partNumber - b.partNumber);
       const completed = await deps.api.complete(shareId, parts);
-      await deps.store.removeUpload(shareId);
-      recorded = false;
-
       const link = toLink(completed, title, true);
+      // The link is saved before the upload record goes, so a failure here
+      // never leaves a live share the app has no record of.
       if (projectId) {
         await deps.store.setLink(projectId, link);
       }
+      await deps.store.removeUpload(shareId);
+      recorded = false;
       let copied = false;
       if (link.watchUrl) {
         try {
@@ -350,7 +408,7 @@ export function createShareManager(deps: ShareManagerDeps) {
     } catch (err) {
       if (signal.aborted || isAbort(err)) {
         if (shareId) {
-          await forgetUpload(shareId);
+          await forgetUpload({ shareId });
         }
         setState({ status: 'idle' });
         return state;
@@ -358,7 +416,7 @@ export function createShareManager(deps: ShareManagerDeps) {
       const code = shareErrorCode(err);
       const resumable = recorded && (code === 'interrupted' || code === 'signed-out');
       if (shareId && recorded && !resumable) {
-        await forgetUpload(shareId);
+        await forgetUpload({ shareId });
       }
       return fail(code, resumable);
     } finally {
@@ -382,7 +440,7 @@ export function createShareManager(deps: ShareManagerDeps) {
 
     async resumeProject(projectId: string): Promise<ShareJobState> {
       const upload = await deps.store.findUpload({ projectId });
-      if (!upload) {
+      if (!upload || !actionableNow(upload)) {
         return { status: 'failed', filePath: '', projectId, error: 'not-found', resumable: false };
       }
       return share({
@@ -395,8 +453,11 @@ export function createShareManager(deps: ShareManagerDeps) {
 
     async discardPending(projectId: string): Promise<ShareActionResult> {
       const upload = await deps.store.findUpload({ projectId });
+      if (upload && !actionableNow(upload)) {
+        return { ok: false, error: 'signed-out' };
+      }
       if (upload) {
-        await forgetUpload(upload.shareId);
+        await forgetUpload(upload);
         await publishLibrary();
       }
       return { ok: true };
@@ -407,11 +468,16 @@ export function createShareManager(deps: ShareManagerDeps) {
     /** Brings each link's status and expiry up to date; keeps what's saved when offline. */
     async refreshLibrary(): Promise<ShareLibrary> {
       try {
+        await retryDeletions();
         const shares = await deps.api.list();
         const byId = new Map(shares.map((s) => [s.id, s]));
         await deps.store.updateLinks((links) =>
           Object.fromEntries(
             Object.entries(links).map(([projectId, link]) => {
+              // Director lists only the signed-in account's shares.
+              if (!actionableNow(link)) {
+                return [projectId, link];
+              }
               const current = byId.get(link.shareId);
               return [
                 projectId,
@@ -432,6 +498,9 @@ export function createShareManager(deps: ShareManagerDeps) {
       const link = (await deps.store.getLinks())[projectId];
       if (!link) {
         return { ok: true };
+      }
+      if (!actionableNow(link)) {
+        return { ok: false, error: 'signed-out' };
       }
       if (withLocalExpiry(link).status === 'live') {
         try {

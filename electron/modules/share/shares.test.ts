@@ -53,6 +53,8 @@ interface SetupOptions {
   allowLoopbackUploads?: boolean;
   /** Whether this app exported the file (in this run). */
   exported?: boolean;
+  /** The signed-in account, as `workspace:user`; null when signed out. */
+  account?: string | null;
 }
 
 const setup = ({
@@ -61,7 +63,9 @@ const setup = ({
   fetch,
   allowLoopbackUploads,
   exported = true,
+  account = 'w1:u1',
 }: SetupOptions = {}) => {
+  let currentAccount = account;
   let file: { size: number; mtimeMs: number } | null = { size, mtimeMs };
   const bytes = new Uint8Array(size);
   const api = {
@@ -109,6 +113,7 @@ const setup = ({
     fetch: fetch ?? defaultFetch,
     stat: async () => file,
     isExported,
+    currentAccount: () => currentAccount,
     openSource,
     writeClipboard: clipboard,
     onState: (s) => states.push(s),
@@ -119,6 +124,9 @@ const setup = ({
   });
   const changeFile = (next: { size: number; mtimeMs: number } | null) => {
     file = next;
+  };
+  const switchAccount = (next: string | null) => {
+    currentAccount = next;
   };
   return {
     manager,
@@ -131,6 +139,7 @@ const setup = ({
     openSource,
     isExported,
     changeFile,
+    switchAccount,
     fetch: defaultFetch,
   };
 };
@@ -488,6 +497,142 @@ describe('share manager', () => {
       copied: true,
     });
     expect(clipboard).toHaveBeenCalledWith('https://help.customer.example/s/sh1');
+  });
+
+  describe('remote cleanup', () => {
+    const cancelledShare = async (removeFails: boolean) => {
+      const fetch = vi.fn(
+        (_url: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            (init?.signal as AbortSignal).addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            );
+          }),
+      );
+      const t = setup({ fetch });
+      if (removeFails) {
+        t.api.remove.mockRejectedValueOnce(new DirectorApiError(0, 'NETWORK_ERROR', 'offline'));
+      }
+      const pending = t.manager.share(REQUEST);
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+      t.manager.cancel();
+      await pending;
+      return t;
+    };
+
+    it('clears the deletion once Director confirms it', async () => {
+      const { store } = await cancelledShare(false);
+      expect(await store.getDeletions()).toEqual([]);
+    });
+
+    it('keeps a cancelled upload’s deletion until Director confirms it, and retries on refresh', async () => {
+      const { manager, api, store } = await cancelledShare(true);
+
+      expect(await store.getUploads()).toEqual([]);
+      expect(await store.getDeletions()).toEqual([{ shareId: 'sh1', account: 'w1:u1' }]);
+
+      api.remove.mockClear();
+      await manager.refreshLibrary();
+      expect(api.remove).toHaveBeenCalledWith('sh1');
+      expect(await store.getDeletions()).toEqual([]);
+    });
+
+    it('treats a share Director no longer has as deleted', async () => {
+      const { manager, api, store } = await cancelledShare(true);
+      api.remove.mockRejectedValueOnce(new DirectorApiError(404, 'NOT_FOUND', 'gone'));
+      await manager.refreshLibrary();
+      expect(await store.getDeletions()).toEqual([]);
+    });
+
+    it('keeps trying to delete a discarded upload in Director', async () => {
+      const { manager, api, store } = setup();
+      await store.putUpload({
+        shareId: 'sh9',
+        filePath: '/exports/demo.mp4',
+        sizeBytes: 25,
+        mtimeMs: 1000,
+        projectId: 'p1',
+        title: 'Demo',
+        durationS: 30,
+        contentType: 'video/mp4',
+        account: 'w1:u1',
+      });
+      api.remove.mockRejectedValueOnce(new DirectorApiError(503, 'HTTP_503', 'down'));
+
+      expect(await manager.discardPending('p1')).toEqual({ ok: true });
+      expect((await manager.getLibrary()).pending).toEqual({});
+      expect(await store.getDeletions()).toEqual([{ shareId: 'sh9', account: 'w1:u1' }]);
+    });
+
+    it('saves the project link before forgetting the finished upload', async () => {
+      const { manager, store } = setup();
+      const setLink = vi.spyOn(store, 'setLink');
+      const removeUpload = vi.spyOn(store, 'removeUpload');
+
+      await manager.share(REQUEST);
+
+      expect(setLink.mock.invocationCallOrder[0]).toBeLessThan(
+        removeUpload.mock.invocationCallOrder[0],
+      );
+    });
+  });
+
+  describe('accounts', () => {
+    it('records which account made each upload and link', async () => {
+      const { manager, store } = setup();
+      await manager.share(REQUEST);
+      expect((await store.getLinks()).p1).toMatchObject({ shareId: 'sh1', account: 'w1:u1' });
+    });
+
+    it('leaves another account’s links alone when refreshing, and doesn’t list them', async () => {
+      const { manager, api, store, switchAccount } = setup();
+      await manager.share(REQUEST);
+
+      switchAccount('w2:u2');
+      api.list.mockResolvedValueOnce([]);
+      const library = await manager.refreshLibrary();
+
+      expect(library.links).toEqual({});
+      expect((await store.getLinks()).p1).toMatchObject({ status: 'live', account: 'w1:u1' });
+
+      switchAccount('w1:u1');
+      expect((await manager.getLibrary()).links.p1).toMatchObject({ status: 'live' });
+    });
+
+    it('never asks Director to remove another account’s link', async () => {
+      const { manager, api, switchAccount } = setup();
+      await manager.share(REQUEST);
+
+      switchAccount('w2:u2');
+      expect(await manager.removeLink('p1')).toEqual({ ok: false, error: 'signed-out' });
+      expect(api.remove).not.toHaveBeenCalled();
+    });
+
+    it('neither resumes nor deletes another account’s upload, and deletes it once that account is back', async () => {
+      const { manager, api, store, switchAccount } = setup({ account: 'w2:u2' });
+      await store.putUpload({
+        shareId: 'old',
+        filePath: '/exports/demo.mp4',
+        sizeBytes: 25,
+        mtimeMs: 1000,
+        projectId: 'p1',
+        title: 'Demo',
+        durationS: 30,
+        contentType: 'video/mp4',
+        account: 'w1:u1',
+      });
+      expect(await manager.canResume('/exports/demo.mp4')).toBe(false);
+
+      expect((await manager.share(REQUEST)).status).toBe('done');
+      expect(api.resume).not.toHaveBeenCalled();
+      expect(api.remove).not.toHaveBeenCalledWith('old');
+      expect(await store.getDeletions()).toEqual([{ shareId: 'old', account: 'w1:u1' }]);
+
+      switchAccount('w1:u1');
+      await manager.refreshLibrary();
+      expect(api.remove).toHaveBeenCalledWith('old');
+      expect(await store.getDeletions()).toEqual([]);
+    });
   });
 
   describe('library', () => {

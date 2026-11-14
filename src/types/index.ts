@@ -665,6 +665,8 @@ export interface ProjectShareLink {
   expiresAt: string | null;
   status: 'live' | 'expired' | 'removed';
   sharedAt: string | null;
+  /** The Director account that shared it (`workspace:user`); absent on older records. */
+  account?: string;
 }
 
 /** An upload that stopped before it finished, kept so it can resume. */
@@ -677,6 +679,14 @@ export interface PendingShareUpload {
   title: string;
   durationS: number;
   contentType: ShareContentType;
+  /** The Director account uploading it (`workspace:user`); absent on older records. */
+  account?: string;
+}
+
+/** A share Director hasn't yet confirmed deleting; retried under its own account. */
+export interface PendingShareDeletion {
+  shareId: string;
+  account: string | null;
 }
 
 export type ShareErrorCode =

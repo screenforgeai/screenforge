@@ -1,5 +1,9 @@
 import path from 'node:path';
-import type { PendingShareUpload, ProjectShareLink } from '../../../src/types/index';
+import type {
+  PendingShareDeletion,
+  PendingShareUpload,
+  ProjectShareLink,
+} from '../../../src/types/index';
 
 /** The part of node:fs/promises the store uses. */
 export interface ShareStoreFs {
@@ -13,9 +17,11 @@ interface ShareData {
   uploads: PendingShareUpload[];
   /** Keyed by project id. */
   links: Record<string, ProjectShareLink>;
+  /** Shares to delete in Director, kept until it confirms. */
+  deletions: PendingShareDeletion[];
 }
 
-const empty = (): ShareData => ({ uploads: [], links: {} });
+const empty = (): ShareData => ({ uploads: [], links: {}, deletions: [] });
 
 /**
  * Share links and unfinished uploads, kept as JSON in userData. Holds no
@@ -34,6 +40,7 @@ export function createShareStore({ filePath, fs }: { filePath: string; fs: Share
       data = {
         uploads: Array.isArray(parsed.uploads) ? parsed.uploads : [],
         links: parsed.links && typeof parsed.links === 'object' ? parsed.links : {},
+        deletions: Array.isArray(parsed.deletions) ? parsed.deletions : [],
       };
     } catch {
       data = empty();
@@ -89,6 +96,26 @@ export function createShareStore({ filePath, fs }: { filePath: string; fs: Share
       return change((current) => ({
         ...current,
         uploads: current.uploads.filter((u) => u.shareId !== shareId),
+      }));
+    },
+    /**
+     * Drops an unfinished upload and records that Director should delete it,
+     * in one write: the intent survives until removeDeletion.
+     */
+    forgetUpload(deletion: PendingShareDeletion): Promise<void> {
+      return change((current) => ({
+        ...current,
+        uploads: current.uploads.filter((u) => u.shareId !== deletion.shareId),
+        deletions: [...current.deletions.filter((d) => d.shareId !== deletion.shareId), deletion],
+      }));
+    },
+    async getDeletions(): Promise<PendingShareDeletion[]> {
+      return [...(await read()).deletions];
+    },
+    removeDeletion(shareId: string): Promise<void> {
+      return change((current) => ({
+        ...current,
+        deletions: current.deletions.filter((d) => d.shareId !== shareId),
       }));
     },
     async getLinks(): Promise<Record<string, ProjectShareLink>> {

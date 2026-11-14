@@ -37,6 +37,10 @@ export function getShareManager(): ShareManager {
         return null;
       }
     },
+    currentAccount() {
+      const state = getDirectorAccount().getState();
+      return state.status === 'signed-in' ? `${state.workspace.id}:${state.user.id}` : null;
+    },
     async isExported(filePath) {
       try {
         const stats = await fs.stat(filePath);
