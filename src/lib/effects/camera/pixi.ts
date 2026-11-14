@@ -18,6 +18,7 @@ import { createScreenforgeFileUrl } from '../../screenforge-url';
 import { Container, Sprite, Graphics, Texture, BlurFilter, CanvasSource } from 'pixi.js';
 import { DropShadowFilter } from 'pixi-filters';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
+import { smoothFilterEdges } from '../../pixi/smoothEdges';
 import type { RenderContext } from '../types';
 import { useStore } from '../../../store';
 import {
@@ -149,8 +150,9 @@ export const cameraPixiEffect: PixiEffect<CameraData> = {
     cameraContainer.mask = clipMask;
     cameraContainer.addChild(clipMask, cameraSprite);
 
-    // DropShadowFilter on cameraContainer — used for pip layout only.
-    const dropShadow = new DropShadowFilter();
+    // DropShadowFilter on cameraContainer — used for pip layout only. It wraps the camera's
+    // round clip: keep that edge antialiased.
+    const dropShadow = smoothFilterEdges(new DropShadowFilter());
     dropShadow.color = 0x0c0c10;
 
     // Camera frame shadow — used for left/right fixed layouts.

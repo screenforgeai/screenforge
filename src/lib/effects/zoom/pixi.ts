@@ -19,10 +19,13 @@ import {
   setSharedPerspectiveState,
 } from './index';
 import { detectZoomClips } from './analyze';
+import { getZoomCrop, toCropSpacePoint, toCropSpaceRecording } from './crop-space';
 import { SharpenFilter } from '../../pixi/filters/SharpenFilter';
 import { CinematicZoomFilter } from '../../pixi/filters/CinematicZoomFilter';
+import { smoothFilterEdges } from '../../pixi/smoothEdges';
 import { sortMediaSegments } from '../../helpers/segments';
 import { getFrameGeometry } from '../frame/analyze';
+import type { CropRect } from '../frame';
 
 const CAM_HALFLIFE = 0.08;
 const CAMERA_FOLLOW_START_SCALE = 1.32;
@@ -143,12 +146,15 @@ export function getCinematicTiltFocusCacheKey(
   clipId: string | null,
   clipStart: number | null,
   mode: ZoomClip['mode'],
+  crop?: CropRect,
 ): string | null {
   if (!clipId || tiltMode === 'follow') {
     return null;
   }
 
-  return `${clipId}:${Number.isFinite(clipStart) ? clipStart : 'unknown'}:${mode}`;
+  // The focus is a position in the crop, so a new crop needs a new lock.
+  const cropKey = crop ? `:${crop.x},${crop.y},${crop.width},${crop.height}` : '';
+  return `${clipId}:${Number.isFinite(clipStart) ? clipStart : 'unknown'}:${mode}${cropKey}`;
 }
 
 export function resolveCinematicTiltFocusTarget(
@@ -158,6 +164,7 @@ export function resolveCinematicTiltFocusTarget(
     clipId: string | null;
     clipStart: number | null;
     mode: ZoomClip['mode'];
+    crop?: CropRect;
     cache: Map<string, CinematicTiltFocus>;
     resolveStartFocus?: () => CinematicTiltFocus | null;
   },
@@ -168,6 +175,7 @@ export function resolveCinematicTiltFocusTarget(
     options.clipId,
     options.clipStart,
     options.mode,
+    options.crop,
   );
 
   if (!cacheKey) {
@@ -672,7 +680,8 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
   id: 'zoom',
 
   analyze(recording) {
-    return detectZoomClips(recording);
+    // Auto zoom targets are positions in the cropped picture, like manual ones.
+    return detectZoomClips(toCropSpaceRecording(recording, getZoomCrop(useStore.getState())));
   },
 
   onLoad(data) {
@@ -689,13 +698,14 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
     // the FBO pass entirely when disabled, so there is zero rendering overhead
     // during unzoomed playback. On first zoom the FBO is allocated; after that
     // enable/disable is free and never causes a pipeline rebuild.
-    const sharpenFilter = new SharpenFilter(0.0);
+    // Both filters wrap the frame while zoomed: keep its rounded corners antialiased.
+    const sharpenFilter = smoothFilterEdges(new SharpenFilter(0.0));
     sharpenFilter.enabled = false;
     scene.app.stage.filters = [sharpenFilter];
 
     // Cinematic zoom is scoped to the preview surface so the backdrop stays flat
     // while the screen card and its shadow carry the optical treatment.
-    const cinematicZoomFilter = new CinematicZoomFilter();
+    const cinematicZoomFilter = smoothFilterEdges(new CinematicZoomFilter());
     cinematicZoomFilter.enabled = false;
     const cinematicFilterStack = [cinematicZoomFilter];
     const initScreen = scene.app.renderer.screen;
@@ -947,7 +957,11 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
       const { padding } = state.frame.background;
       const { cursorHalflife, cursorContinuousTracking, mediaSegments } = state;
       const bounds = getCameraBounds(padding);
-      const pos = cursorData ? interpolateCursor(cursorData.moveEvents, t) : null;
+      // The camera centres on positions in the cropped picture; the cursor's
+      // are across the whole recording.
+      const zoomCrop = getZoomCrop(state);
+      const cursorPos = cursorData ? interpolateCursor(cursorData.moveEvents, t) : null;
+      const pos = cursorPos ? toCropSpacePoint(cursorPos, zoomCrop) : null;
 
       if (mediaSegments !== lastMediaSegmentsRef) {
         cachedSortedSegs = sortMediaSegments(mediaSegments);
@@ -1103,6 +1117,7 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
         clipId: cinematic.clipId,
         clipStart: cinematic.clipStart,
         mode: cinematic.mode,
+        crop: zoomCrop,
         cache: staticTiltFocusCache,
         resolveStartFocus: () => {
           if (cinematic.mode === 'manual' || !cursorData) {
@@ -1118,7 +1133,9 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
           }
 
           const startPos = interpolateCursor(cursorData.moveEvents, sourceStart);
-          return startPos ? { nx: startPos.nx, ny: startPos.ny } : dynamicTiltFocus;
+          return startPos
+            ? toCropSpacePoint({ nx: startPos.nx, ny: startPos.ny }, zoomCrop)
+            : dynamicTiltFocus;
         },
       });
       const staticTiltFocusKey = getCinematicTiltFocusCacheKey(
@@ -1126,6 +1143,7 @@ export const zoomPixiEffect: PixiEffect<ZoomClip[]> = {
         cinematic.clipId,
         cinematic.clipStart,
         cinematic.mode,
+        zoomCrop,
       );
       if (staticTiltFocusKey !== lastStaticTiltFocusKey) {
         if (staticTiltFocusKey) {

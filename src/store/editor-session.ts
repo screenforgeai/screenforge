@@ -1,6 +1,6 @@
 import type { SavedProject } from '../types';
 import { createInitialMediaSegments, getInitialPlaybackTime } from '../lib/helpers/segments';
-import { DEFAULT_FRAME, cloneFrameSettings } from '../lib/effects/frame';
+import { DEFAULT_FRAME, cloneFrameSettings, cropRectFromPixels } from '../lib/effects/frame';
 import {
   DEFAULT_CAMERA_SETTINGS,
   DEFAULT_CURSOR_SETTINGS,
@@ -8,7 +8,13 @@ import {
 } from './defaults';
 import type { EditorSessionState } from './types';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
-import { normalizeCursorClickSound } from '../lib/effects/cursor/audio';
+import { normalizeCursorClickSound } from '../lib/effects/cursor/clickSoundOptions';
+import { normalizeCursorClickEffect, normalizeCursorEffect } from '../lib/effects/cursor/effects';
+import {
+  normalizeCursorColor,
+  normalizeCursorLabel,
+  normalizeCursorStyle,
+} from '../lib/effects/cursor/styles';
 import type { CameraClip, MediaSegment } from '../types/timeline';
 import {
   cloneMotionClips,
@@ -96,6 +102,10 @@ export function createEmptyEditorSession(): EditorSessionState {
     cursorMaxTilt: DEFAULT_CURSOR_SETTINGS.maxTilt,
     cursorHideWhenIdle: DEFAULT_CURSOR_SETTINGS.hideWhenIdle,
     cursorIdleHideSeconds: DEFAULT_CURSOR_SETTINGS.idleHideSeconds,
+    cursorEffect: DEFAULT_CURSOR_SETTINGS.effect,
+    cursorClickShrink: DEFAULT_CURSOR_SETTINGS.clickShrink,
+    cursorColor: DEFAULT_CURSOR_SETTINGS.color,
+    cursorLabel: DEFAULT_CURSOR_SETTINGS.label,
     cursorClickSound: DEFAULT_CURSOR_SETTINGS.clickSound,
     cursorClickSoundVolume: DEFAULT_CURSOR_SETTINGS.clickSoundVolume,
     cursorContinuousTracking: DEFAULT_CURSOR_SETTINGS.continuousTracking,
@@ -112,7 +122,20 @@ export function createEmptyEditorSession(): EditorSessionState {
     maskClips: [],
     motionClips: [],
     isCropEditing: false,
+    cropEditTarget: 'frame',
   };
+}
+
+/** An area recording opens cropped to exactly the area; anything else, uncropped. */
+function createRecordingFrame(
+  recordingResult: NonNullable<EditorSessionState['recordingResult']>,
+): EditorSessionState['frame'] {
+  const frame = cloneFrameSettings(DEFAULT_FRAME);
+  const { areaCrop } = recordingResult;
+  if (areaCrop) {
+    frame.cropRect = cropRectFromPixels(areaCrop, areaCrop.sourceWidth, areaCrop.sourceHeight);
+  }
+  return frame;
 }
 
 export function createRecordingSession(
@@ -122,6 +145,7 @@ export function createRecordingSession(
   return {
     ...createEmptyEditorSession(),
     recordingResult,
+    frame: createRecordingFrame(recordingResult),
     camera: {
       ...DEFAULT_CAMERA_SETTINGS,
       shadow: { ...DEFAULT_CAMERA_SETTINGS.shadow },
@@ -169,14 +193,21 @@ export function createProjectSession(project: SavedProject): EditorSessionState 
     currentTime: getInitialPlaybackTime(mediaSegments, motionClips),
     frame: project.frame ? cloneFrameSettings(project.frame) : DEFAULT_FRAME,
     cursorEnabled: project.cursor.enabled ?? true,
-    cursorStyle: project.cursor.style,
-    cursorClickEffect: project.cursor.clickEffect,
+    cursorStyle: normalizeCursorStyle(project.cursor.style),
+    cursorClickEffect: normalizeCursorClickEffect(project.cursor.clickEffect),
     cursorSize: project.cursor.size,
     cursorHalflife: project.cursor.halflife,
     cursorMotionBlur: project.cursor.motionBlur,
     cursorMaxTilt: project.cursor.maxTilt,
     cursorHideWhenIdle: project.cursor.hideWhenIdle,
     cursorIdleHideSeconds: project.cursor.idleHideSeconds,
+    cursorEffect: normalizeCursorEffect(project.cursor.effect),
+    cursorClickShrink: project.cursor.clickShrink === true,
+    cursorColor: normalizeCursorColor(project.cursor.color),
+    cursorLabel:
+      project.cursor.label === undefined
+        ? DEFAULT_CURSOR_SETTINGS.label
+        : normalizeCursorLabel(project.cursor.label),
     cursorClickSound: normalizeCursorClickSound(project.cursor.clickSound),
     cursorClickSoundVolume: project.cursor.clickSoundVolume,
     cursorContinuousTracking: project.cursor.continuousTracking ?? true,

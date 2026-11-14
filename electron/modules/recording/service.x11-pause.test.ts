@@ -20,6 +20,8 @@ const electronMock = vi.hoisted(() => {
     screen: {
       getAllDisplays: () => [primaryDisplay],
       getPrimaryDisplay: () => primaryDisplay,
+      on: () => undefined,
+      removeListener: () => undefined,
     },
   };
 });

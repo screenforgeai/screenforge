@@ -8,6 +8,7 @@ import {
 } from './defaults';
 import { MOTION_VERSION } from '../lib/animation/migrateTransitions';
 import type { SavedProject } from '../types';
+import { getCursorSnapshot } from '../lib/project-snapshot';
 
 const CROPPED_RECT = { x: 0.18, y: 0.12, width: 0.58, height: 0.64 };
 const RECORDING_RESULT = {
@@ -215,7 +216,9 @@ describe('click sound in saved projects', () => {
   it.each([
     ['magic-mouse', 'trackpad'],
     ['mx-master', 'mouse'],
-    ['pop', 'pop'],
+    ['pop', 'soft'],
+    ['tick', 'soft'],
+    ['mouse-2', 'mouse-2'],
     ['none', 'none'],
   ])('loads %s as %s', (saved, expected) => {
     act(() => {
@@ -224,5 +227,105 @@ describe('click sound in saved projects', () => {
 
     expect(useStore.getState().cursorClickSound).toBe(expected);
     expect(useStore.getState().cursorClickSoundVolume).toBe(0.3);
+  });
+});
+
+describe('cursor size', () => {
+  it("starts new projects at the cursor's natural size (100%)", () => {
+    expect(useStore.getState().cursorSize).toBe(100);
+  });
+});
+
+describe('cursor styles and effects in saved projects', () => {
+  const projectWithCursor = (cursor: Record<string, unknown>) =>
+    ({
+      id: 'project-4',
+      name: 'Cursor',
+      result: RECORDING_RESULT,
+      zoomClips: [],
+      frame: DEFAULT_FRAME,
+      cursor,
+      camera: DEFAULT_CAMERA_SETTINGS,
+      keyboard: DEFAULT_KEYBOARD_SETTINGS,
+      savedAt: new Date(0).toISOString(),
+      thumbnail: '',
+    }) as unknown as SavedProject;
+
+  it('opens projects saved before cursor effects with the plain defaults', () => {
+    const { effect, clickShrink, color, label, ...older } = DEFAULT_CURSOR_SETTINGS;
+    void effect;
+    void clickShrink;
+    void color;
+    void label;
+    act(() => {
+      useStore
+        .getState()
+        .loadProjectSession(projectWithCursor({ ...older, clickEffect: 'ripple' }));
+    });
+
+    const state = useStore.getState();
+    expect(state.cursorStyle).toBe('cursor01');
+    expect(state.cursorClickEffect).toBe('ripple');
+    expect(state.cursorEffect).toBe('none');
+    expect(state.cursorClickShrink).toBe(false);
+    expect(state.cursorColor).toBe(DEFAULT_CURSOR_SETTINGS.color);
+    expect(state.cursorLabel).toBe(DEFAULT_CURSOR_SETTINGS.label);
+  });
+
+  it('falls back to the macOS cursor and no effects for values it does not know', () => {
+    act(() => {
+      useStore.getState().loadProjectSession(
+        projectWithCursor({
+          ...DEFAULT_CURSOR_SETTINGS,
+          style: 'cursor99',
+          clickEffect: 'fireworks',
+          effect: 'rainbow',
+        }),
+      );
+    });
+
+    const state = useStore.getState();
+    expect(state.cursorStyle).toBe('cursor01');
+    expect(state.cursorClickEffect).toBe('none');
+    expect(state.cursorEffect).toBe('none');
+  });
+
+  it('saves and reopens the new cursor settings', () => {
+    act(() => {
+      useStore.getState().loadProjectSession(
+        projectWithCursor({
+          ...DEFAULT_CURSOR_SETTINGS,
+          style: 'collaborator',
+          clickEffect: 'confetti',
+          effect: 'spotlight',
+          clickShrink: true,
+          color: '#16A34A',
+          label: 'Sam',
+        }),
+      );
+    });
+
+    const saved = getCursorSnapshot(useStore.getState());
+    expect(saved).toMatchObject({
+      style: 'collaborator',
+      clickEffect: 'confetti',
+      effect: 'spotlight',
+      clickShrink: true,
+      color: '#16A34A',
+      label: 'Sam',
+    });
+  });
+
+  it('records a change of cursor effect as its own undo step', () => {
+    act(() => {
+      useStore.getState().loadProjectSession(projectWithCursor({ ...DEFAULT_CURSOR_SETTINGS }));
+      useStore.getState().commitEdit('Change cursor effect', () => ({ cursorEffect: 'highlight' }));
+    });
+    expect(useStore.getState().cursorEffect).toBe('highlight');
+
+    act(() => {
+      useStore.getState().undo();
+    });
+    expect(useStore.getState().cursorEffect).toBe('none');
   });
 });

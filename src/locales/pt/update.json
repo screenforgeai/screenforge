@@ -4,6 +4,8 @@
   "checking": "Verificando...",
   "retryUpdate": "Tentar atualização novamente",
   "updateReady": "Atualização pronta",
+  "updateAvailable": "Atualização disponível",
+  "updateAvailableTitle": "{{version}} já está disponível. Baixe e instale do mesmo jeito que você instalou o Screenforge.",
   "readyLabel": "Atualização pronta · {{version}}",
   "restartWhenDone": "Reiniciar quando terminar",
   "updateDesc": "{{version}} terminou de baixar em segundo plano. O Screenforge salvará seu trabalho antes de reiniciar.",

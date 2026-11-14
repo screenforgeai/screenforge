@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IconUpload } from 'src/lib/icons';
+import { CHANGELOG_URL } from 'src/lib/siteLinks';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -11,6 +12,10 @@ import {
   Button,
 } from 'src/lib/ui';
 import type { UpdaterState } from 'src/types';
+
+// Only Linux reaches the 'available' state: the user downloads the new
+// package and installs it the same way they installed Screenforge.
+const LINUX_DOWNLOAD_URL = 'https://screenforge.co/download/linux';
 
 type UpdateReadyPromptProps = {
   state: UpdaterState | null;
@@ -48,6 +53,24 @@ export const UpdateReadyPrompt = ({
       >
         <IconUpload />
         <span>{t('updateDownloaded')}</span>
+      </Button>
+    );
+  }
+
+  if (state?.status === 'available') {
+    const availableLabel = state.availableVersion ? `v${state.availableVersion}` : t('newVersion');
+
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-8 gap-1.5 border border-sf-border px-3 hover:border-sf-border-lt"
+        title={t('updateAvailableTitle', { version: availableLabel })}
+        onClick={() => void window.screenforge.openExternalUrl(LINUX_DOWNLOAD_URL)}
+      >
+        <IconUpload />
+        <span>{t('updateAvailable')}</span>
       </Button>
     );
   }
@@ -134,9 +157,7 @@ export const UpdateReadyPrompt = ({
             <button
               type="button"
               className="group flex items-center gap-1 text-sm text-sf-secondary transition-colors duration-150 hover:text-sf-primary"
-              onClick={() =>
-                window.screenforge.openExternalUrl('https://screenforgeai.com/changelog')
-              }
+              onClick={() => window.screenforge.openExternalUrl(CHANGELOG_URL)}
             >
               {t('viewChangelog')}
               <span className="text-sf-muted transition-colors duration-150 group-hover:text-sf-primary">

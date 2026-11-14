@@ -8,6 +8,7 @@ import type {
   StartupPermission,
   StartupPermissionMap,
   StartupPermissionStatus,
+  ToolbarLayout,
   ToolbarShapeRect,
   ToolbarViewportMode,
   WindowFocusTarget,
@@ -19,6 +20,7 @@ export const appBridge = {
   prepareRecordingStartPermissions: createInvokeBridge<[], void>(
     CH.app.PREPARE_RECORDING_START_PERMISSIONS,
   ),
+  prepareScreenshotPermissions: createInvokeBridge<[], void>(CH.app.PREPARE_SCREENSHOT_PERMISSIONS),
   getStartupPermissionStatuses: createInvokeBridge<[], StartupPermissionMap>(
     CH.app.GET_STARTUP_PERMISSION_STATUSES,
   ),
@@ -40,6 +42,8 @@ export const appBridge = {
   setToolbarMouseInteractivity: createSendBridge<[boolean]>(CH.app.SET_TOOLBAR_MOUSE_INTERACTIVITY),
   setToolbarShape: createSendBridge<[ToolbarShapeRect[]]>(CH.app.SET_TOOLBAR_SHAPE),
   setToolbarViewport: createSendBridge<[ToolbarViewportMode]>(CH.app.SET_TOOLBAR_VIEWPORT),
+  getToolbarLayout: createInvokeBridge<[], ToolbarLayout>(CH.app.GET_TOOLBAR_LAYOUT),
+  setToolbarSize: createSendBridge<[{ width: number; height: number }]>(CH.app.SET_TOOLBAR_SIZE),
   showMain: createSendBridge<[]>(CH.app.SHOW_MAIN),
   showToolbar: createSendBridge<[]>(CH.app.SHOW_TOOLBAR),
   systemWarning: createSendBridge<[string]>(CH.app.SYSTEM_WARNING),
@@ -50,7 +54,7 @@ export const appBridge = {
     CH.app.CAPTURE_EXCEPTION,
   ),
   submitFeedback: createSendBridge<[FeedbackSubmission]>(CH.app.SUBMIT_FEEDBACK),
-  saveScreenshot: createInvokeBridge<[string], string>(CH.app.SAVE_SCREENSHOT),
+  saveScreenshot: createInvokeBridge<[Uint8Array], string>(CH.app.SAVE_SCREENSHOT),
   saveMusic: createInvokeBridge<[string, string], { filePath: string; duration: number }>(
     CH.music.SAVE,
   ),

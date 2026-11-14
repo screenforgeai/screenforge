@@ -12,6 +12,7 @@ import { trackEvent } from '../lib/analytics';
 import { normalizeZoomClips } from '../lib/effects/zoom/clip';
 import { DEFAULT_CAMERA_SETTINGS } from './defaults';
 import { cloneMotionClips } from '../lib/animation/motionClips';
+import { releaseImageUrl } from '../lib/screenshot/png';
 
 export type {
   AppStore,
@@ -24,6 +25,7 @@ export type {
   SceneStatus,
   TextClip,
   CursorClickEffect,
+  CursorEffect,
   CursorClickSound,
   CursorStyle,
   EditorSessionState,
@@ -54,6 +56,10 @@ function cloneSnapshot(snapshot: HistorySnapshot): HistorySnapshot {
     cursorMaxTilt: snapshot.cursorMaxTilt,
     cursorHideWhenIdle: snapshot.cursorHideWhenIdle,
     cursorIdleHideSeconds: snapshot.cursorIdleHideSeconds,
+    cursorEffect: snapshot.cursorEffect,
+    cursorClickShrink: snapshot.cursorClickShrink,
+    cursorColor: snapshot.cursorColor,
+    cursorLabel: snapshot.cursorLabel,
     cursorClickSound: snapshot.cursorClickSound,
     cursorClickSoundVolume: snapshot.cursorClickSoundVolume,
     cursorContinuousTracking: snapshot.cursorContinuousTracking,
@@ -92,6 +98,10 @@ function createSnapshot(state: AppStore): HistorySnapshot {
     cursorMaxTilt: state.cursorMaxTilt,
     cursorHideWhenIdle: state.cursorHideWhenIdle,
     cursorIdleHideSeconds: state.cursorIdleHideSeconds,
+    cursorEffect: state.cursorEffect,
+    cursorClickShrink: state.cursorClickShrink,
+    cursorColor: state.cursorColor,
+    cursorLabel: state.cursorLabel,
     cursorClickSound: state.cursorClickSound,
     cursorClickSoundVolume: state.cursorClickSoundVolume,
     cursorContinuousTracking: state.cursorContinuousTracking,
@@ -122,6 +132,10 @@ function snapshotToPatch(snapshot: HistorySnapshot): EditableStorePatch {
     cursorMaxTilt: snapshot.cursorMaxTilt,
     cursorHideWhenIdle: snapshot.cursorHideWhenIdle,
     cursorIdleHideSeconds: snapshot.cursorIdleHideSeconds,
+    cursorEffect: snapshot.cursorEffect,
+    cursorClickShrink: snapshot.cursorClickShrink,
+    cursorColor: snapshot.cursorColor,
+    cursorLabel: snapshot.cursorLabel,
     cursorClickSound: snapshot.cursorClickSound,
     cursorClickSoundVolume: snapshot.cursorClickSoundVolume,
     cursorContinuousTracking: snapshot.cursorContinuousTracking,
@@ -173,6 +187,14 @@ function snapshotsEqual(a: HistorySnapshot, b: HistorySnapshot): boolean {
     return false;
   }
   if (a.cursorIdleHideSeconds !== b.cursorIdleHideSeconds) {
+    return false;
+  }
+  if (
+    a.cursorEffect !== b.cursorEffect ||
+    a.cursorClickShrink !== b.cursorClickShrink ||
+    a.cursorColor !== b.cursorColor ||
+    a.cursorLabel !== b.cursorLabel
+  ) {
     return false;
   }
   if (a.cursorClickSound !== b.cursorClickSound) {
@@ -325,6 +347,7 @@ export const useStore = create<AppStore>((set, get) => {
     },
     focusMode: false,
     isExporting: false,
+    screenshotCapture: null,
     past: [],
     future: [],
     activeGroup: null,
@@ -412,11 +435,25 @@ export const useStore = create<AppStore>((set, get) => {
     setActiveWidget: (tab) =>
       set(() => ({
         activeWidget: tab,
+        // Both crop editors (the crop box, the recorded toolbar line) live in Frame.
         ...(tab !== 'frame' ? { isCropEditing: false } : {}),
       })),
     setFocusMode: (v) => set({ focusMode: v }),
     setIsExporting: (v) => set({ isExporting: v }),
-    setIsCropEditing: (v) => set({ isCropEditing: v }),
+    // The editor owns its capture's blob: URL, so let go of it once nothing shows it.
+    openScreenshotEditor: (capture) => {
+      const previous = get().screenshotCapture;
+      if (previous && previous.imageUrl !== capture.imageUrl) {
+        releaseImageUrl(previous.imageUrl);
+      }
+      set({ screenshotCapture: capture });
+    },
+    closeScreenshotEditor: () => {
+      releaseImageUrl(get().screenshotCapture?.imageUrl);
+      set({ screenshotCapture: null });
+    },
+    setIsCropEditing: (v, target = 'frame') =>
+      set(v ? { isCropEditing: true, cropEditTarget: target } : { isCropEditing: false }),
     setLayerHidden: (layer, hidden) =>
       set((state) => ({ hiddenLayers: { ...state.hiddenLayers, [layer]: hidden } })),
     setIsAppendMode: (v) => set({ isAppendMode: v }),

@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { DropShadowFilter } from 'pixi-filters';
 import { useStore } from '../../../store';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
+import { smoothFilterEdges } from '../../pixi/smoothEdges';
 import { analyzeKeyboardData, resolveKeyboardCaptionState, type KeyboardData } from './analyze';
 import { isKeyboardPreviewActive } from './preview';
 import { resolveKeyboardCaptionPalette, resolveKeyboardCaptionSize } from './style';
@@ -142,7 +143,8 @@ export const keyboardPixiEffect: PixiEffect<KeyboardData> = {
     const textLayer = new Container();
     textLayer.eventMode = 'none';
 
-    const dropShadow = new DropShadowFilter();
+    // The shadow wraps the key caps: keep their rounded corners antialiased.
+    const dropShadow = smoothFilterEdges(new DropShadowFilter());
     dropShadow.color = 0x000000;
     dropShadow.alpha = 0.22;
     dropShadow.blur = 18;

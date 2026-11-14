@@ -1,3 +1,5 @@
+import type { CaptureShortcutAction } from '../lib/captureShortcuts';
+
 export interface PreloadProgress {
   task: string;
   completed: number;
@@ -36,10 +38,13 @@ export type StartupPermissionStatus =
 
 export type StartupPermissionMap = Record<StartupPermission, StartupPermissionStatus>;
 
+// 'available' means a newer version exists that the user installs themselves
+// (Linux, where the app can't update itself).
 export type UpdaterStatus =
   | 'disabled'
   | 'idle'
   | 'checking'
+  | 'available'
   | 'downloading'
   | 'downloaded'
   | 'ready'
@@ -69,6 +74,19 @@ export interface UpdaterState {
  */
 export type CaptureBackend = 'native' | 'ffmpeg-x11' | 'wayland-portal' | 'unsupported';
 
+/** Why system (desktop) audio can't be recorded alongside the screen here. */
+export type SystemAudioUnsupportedReason =
+  | 'macos-too-old'
+  | 'linux-not-supported'
+  | 'platform-not-supported';
+
+export type SystemAudioSupport =
+  | { supported: true }
+  | { supported: false; reason: SystemAudioUnsupportedReason };
+
+/** Why a recording had to stop on its own (sent to the toolbar). */
+export type RecordingSourceLostReason = 'display-removed';
+
 export interface DesktopSource {
   id: string;
   name: string;
@@ -76,6 +94,68 @@ export interface DesktopSource {
   appIcon: string | null;
   appName?: string;
   windowTitle?: string;
+}
+
+export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
+
+/** A rectangle picked in the area selector, in DIPs of the display it was drawn on. */
+/** Wayland: a still of the picked screen to draw an area on, as PNG bytes and its pixel size. */
+export interface AreaSelectorStillRequest {
+  png: Uint8Array;
+  width: number;
+  height: number;
+}
+
+export interface SelectedArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** The display the selector covered, as it was then (DIP size). */
+  display?: { id: number; width: number; height: number };
+  /**
+   * Wayland: the area was drawn on a still of the screen picked in the share dialog, in the
+   * still's own pixels; this is the still's size, so the area can be found in the recorded video.
+   */
+  frame?: { width: number; height: number };
+}
+
+export interface ScreenshotCaptureRequest {
+  kind: ScreenshotCaptureKind;
+  /** Desktop source id ("screen:…" / "window:…"). Ignored for areas (their display decides). */
+  sourceId: string;
+  /** Area selection (from the area selector). */
+  area?: SelectedArea | null;
+}
+
+/** A still as the main process sends it: PNG bytes, never base64. */
+/** A screenshot taken, or a share dialog closed without a pick (Wayland). */
+export type ScreenshotCaptureOutcome = 'taken' | 'cancelled';
+
+export interface ScreenshotCaptureData {
+  kind: ScreenshotCaptureKind;
+  png: Uint8Array;
+  width: number;
+  height: number;
+  /** A captured window's title, for its window bar. */
+  windowTitle?: string;
+  /** Image pixels per screen point (2 on a Retina display). */
+  scaleFactor?: number;
+}
+
+/** A still image handed to the Screenshot editor. */
+export interface ScreenshotCapture {
+  /** Where it came from: a live capture, or the editor's current preview frame. */
+  kind: ScreenshotCaptureKind | 'frame';
+  /** PNG URL: a blob: URL (revoked when the editor lets go of it) or a data: URL. */
+  imageUrl: string;
+  width: number;
+  height: number;
+  /** The captured window's app and title at the moment of capture, for its window bar. */
+  appName?: string;
+  windowTitle?: string;
+  /** Image pixels per screen point (2 on a Retina display); 1 when unknown. */
+  scaleFactor?: number;
 }
 
 export interface WindowFocusTarget {
@@ -132,6 +212,46 @@ export interface RecordingBoundsSample extends RecordingArea {
   scaleFactor?: number;
 }
 
+/**
+ * The area selected for an area recording, in the recorded video's pixels.
+ * The video holds the whole display; the editor opens it cropped to this.
+ */
+export interface AreaCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Size of the video these pixels are in. */
+  sourceWidth: number;
+  sourceHeight: number;
+}
+
+/**
+ * How `concatRecordings` fits an appended clip, in pixels: `secondCrop` is the
+ * appended area recording's area, `target` the project's crop in the first clip.
+ */
+export interface ConcatRecordingsOptions {
+  secondCrop?: RecordingArea;
+  target?: RecordingArea;
+}
+
+/**
+ * What was recorded, as picked at the start: the window bar uses it to tell
+ * a browser window (whose real toolbar should be cropped off) from a whole
+ * screen, and to show the page's title.
+ */
+export interface RecordingCaptureSource {
+  kind: 'display' | 'window' | 'area';
+  /**
+   * Wayland's screen-share picker: getDisplayMedia's displaySurface, which
+   * says whether the person shared a tab, a window or a whole screen.
+   */
+  displaySurface?: 'browser' | 'window' | 'monitor';
+  /** The recorded window's app ("Google Chrome") and title, when known. */
+  appName?: string;
+  windowTitle?: string;
+}
+
 export interface RecordingResult {
   filePath: string;
   mouseData: CursorEvent[];
@@ -139,23 +259,34 @@ export interface RecordingResult {
   startTime: number; // Date.now() when recording began — anchor for event timestamps
   recordingArea: RecordingArea; // logical-pixel bounds of the captured area at recording start
   captureBoundsTimeline?: RecordingBoundsSample[];
+  areaCrop?: AreaCrop;
   hasEmbeddedAudio?: boolean;
   audioPath?: string;
   cameraPath?: string;
   isImported?: boolean; // true for user-imported videos (no native cursor data)
+  /** Absent on recordings made before it was kept, and on imports. */
+  captureSource?: RecordingCaptureSource;
 }
 
 export interface ProjectCursorSettings {
   enabled: boolean;
   style: import('../lib/effects/cursor/cursors').CursorStyle;
-  clickEffect: 'ripple' | 'none';
+  clickEffect: import('../lib/effects/cursor/effects').CursorClickEffect;
+  /** Cursor effect (highlight, spotlight, …). Missing in projects saved before it existed. */
+  effect: import('../lib/effects/cursor/effects').CursorEffect;
+  /** Deeper shrink on click. */
+  clickShrink: boolean;
+  /** Collaborator cursor colour. */
+  color: string;
+  /** Collaborator cursor name tag. */
+  label: string;
   size: number;
   halflife: number;
   motionBlur: boolean;
   maxTilt: number;
   hideWhenIdle: boolean;
   idleHideSeconds: number;
-  clickSound: 'none' | 'soft' | 'mouse' | 'trackpad' | 'pop' | 'tick';
+  clickSound: 'none' | 'mouse' | 'mouse-2' | 'trackpad' | 'soft';
   clickSoundVolume: number;
   continuousTracking: boolean;
 }
@@ -256,12 +387,16 @@ export interface CaptureStoreSnapshot {
   cursorEnabled: boolean;
   cursorStyle: string; // CursorStyle — string union, kept as string to avoid renderer-only imports
   cursorSize: number;
-  cursorClickEffect: string; // CursorClickEffect — 'ripple' | 'none'
+  cursorClickEffect: string; // CursorClickEffect
   cursorHalflife: number;
   cursorMotionBlur: boolean;
   cursorMaxTilt: number;
   cursorHideWhenIdle: boolean;
   cursorIdleHideSeconds: number;
+  cursorEffect: string; // CursorEffect
+  cursorClickShrink: boolean;
+  cursorColor: string;
+  cursorLabel: string;
   captions?: CaptionSettings;
   cameraClips: unknown[];
   maskClips: unknown[];
@@ -389,6 +524,7 @@ export interface ExportRuntimeStats {
   sampledAt: number;
 }
 
+export type ToolbarLayout = 'overlay' | 'window';
 export type ToolbarViewportMode = 'compact' | 'expanded';
 
 /** Interactive region of the toolbar window, in window (CSS pixel) coordinates. */
@@ -438,6 +574,8 @@ export interface StylePreset {
   name: string;
   savedAt: string;
   background: import('../lib/effects/frame').BackgroundSettings;
+  /** The window bar; absent on presets saved before it existed. */
+  windowBar?: import('../lib/window-bar').WindowBarSettings;
   cursor: ProjectCursorSettings;
   camera: ProjectCameraSettings;
   keyboard: ProjectKeyboardSettings;
@@ -597,6 +735,19 @@ export interface ShareLibrary {
 /** Result of a library action (remove a link, discard an upload, ...). */
 export type ShareActionResult = { ok: true } | { ok: false; error: ShareErrorCode };
 
+/** 'screenshot-still': Wayland, drawing on a still of the screen picked in the share dialog. */
+export type AreaSelectorPurpose = 'record' | 'screenshot' | 'screenshot-still' | 'record-still';
+
+/** Wayland: the still an area is drawn on, and its size in pixels. */
+export interface AreaSelectorStill {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+/** Global capture shortcuts that registered, as accelerators; one another app holds is missing. */
+export type RegisteredCaptureShortcuts = Partial<Record<CaptureShortcutAction, string>>;
+
 export interface ScreenforgeAPI {
   onPreloadProgress: (cb: (p: PreloadProgress) => void) => () => void;
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void;
@@ -604,6 +755,8 @@ export interface ScreenforgeAPI {
   checkForUpdatesNow: () => Promise<UpdaterState>;
   getAppVersion: () => Promise<string>;
   prepareRecordingStartPermissions: () => Promise<void>;
+  /** Screen access only (no Accessibility), for screenshots. */
+  prepareScreenshotPermissions: () => Promise<void>;
   getStartupPermissionStatuses: () => Promise<StartupPermissionMap>;
   requestScreenAccess: () => Promise<StartupPermissionStatus>;
   requestMediaAccess: (permission: RequestableMediaPermission) => Promise<StartupPermissionStatus>;
@@ -614,9 +767,15 @@ export interface ScreenforgeAPI {
   relaunchApp: () => void;
   openSystemSettings: (permission: StartupPermission) => void;
   getSources: () => Promise<DesktopSource[]>;
+  /** Wayland: what the next screen-share dialog asks for, a screen or a window. */
+  setShareKind: (kind: 'screen' | 'window') => Promise<void>;
+  pickScreen: () => Promise<'picked' | 'cancelled' | 'unavailable'>;
+  screenStill: () => Promise<AreaSelectorStillRequest>;
+  endShare: () => Promise<void>;
+  onShareEnded: (cb: () => void) => () => void;
   startRecording: (
     sourceId: string,
-    cropArea?: { x: number; y: number; width: number; height: number } | null,
+    cropArea?: SelectedArea | null,
     options?: { rendererCapture?: boolean },
   ) => Promise<void>;
   getCaptureBackend: () => Promise<CaptureBackend>;
@@ -633,6 +792,7 @@ export interface ScreenforgeAPI {
     captureBoundsTimeline?: RecordingBoundsSample[];
     hasEmbeddedAudio: boolean;
     filePath: string;
+    areaCrop?: AreaCrop;
   }>;
   pauseRecording: () => void;
   resumeRecording: () => void;
@@ -648,10 +808,16 @@ export interface ScreenforgeAPI {
   onRecordingProcessing: (cb: () => void) => () => void;
   onRecordingFailed: (cb: (message: string) => void) => () => void;
   onStopRequested: (cb: () => void) => () => void;
+  onRecordingSourceLost: (cb: (info: { reason: RecordingSourceLostReason }) => void) => () => void;
+  getSystemAudioSupport: () => Promise<SystemAudioSupport>;
   activateAppendMode: () => void;
   getAppendMode: () => Promise<boolean>;
   clearAppendMode: () => Promise<void>;
-  concatRecordings: (firstPath: string, secondPath: string) => Promise<string>;
+  concatRecordings: (
+    firstPath: string,
+    secondPath: string,
+    options?: ConcatRecordingsOptions,
+  ) => Promise<string>;
   reencodeRecording: (filePath: string) => Promise<string>;
   saveProject: (project: SavedProject) => Promise<SavedProject>;
   getProjects: () => Promise<SavedProject[]>;
@@ -680,11 +846,26 @@ export interface ScreenforgeAPI {
   copyShareLink: (projectId: string) => Promise<boolean>;
   resumeProjectShare: (projectId: string) => Promise<ShareJobState>;
   discardProjectShare: (projectId: string) => Promise<ShareActionResult>;
-  getSettings: () => Promise<{ profile: { name: string; email: string }; language: string }>;
+  /** Main window startup only: whether to open "What's new". Marks the running version as seen. */
+  consumeWhatsNewOnLaunch: () => Promise<{
+    show: boolean;
+    sinceVersion: string | null;
+    currentVersion: string;
+  }>;
+  getSettings: () => Promise<{
+    profile: { name: string; email: string };
+    language: string;
+    telemetryEnabled: boolean;
+  }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };
     language?: string;
-  }) => Promise<{ profile: { name: string; email: string }; language: string }>;
+    telemetryEnabled?: boolean;
+  }) => Promise<{
+    profile: { name: string; email: string };
+    language: string;
+    telemetryEnabled: boolean;
+  }>;
   startExport: (request: ExportRequest) => Promise<ExportResult>;
   cancelExport: (jobId: string) => Promise<void>;
   pickExportPath: (
@@ -759,6 +940,10 @@ export interface ScreenforgeAPI {
   setToolbarMouseInteractivity: (interactive: boolean) => void;
   setToolbarShape: (rects: ToolbarShapeRect[]) => void;
   setToolbarViewport: (mode: ToolbarViewportMode) => void;
+  /** How the toolbar's window is laid out (see electron/modules/app/toolbar-layout.ts). */
+  getToolbarLayout: () => Promise<ToolbarLayout>;
+  /** 'window' layout: size the toolbar window to its content (pill plus any open menu). */
+  setToolbarSize: (size: { width: number; height: number }) => void;
   focusWindow: (target: WindowFocusTarget) => void;
   showMain: () => void;
   showToolbar: () => void;
@@ -769,7 +954,14 @@ export interface ScreenforgeAPI {
   identifyUser: (profile: { name?: string; email?: string }) => void;
   captureException: (error: SerializedError, properties?: Record<string, unknown>) => void;
   submitFeedback: (feedback: FeedbackSubmission) => void;
-  saveScreenshot: (dataUrl: string) => Promise<string>;
+  /** Writes PNG bytes to Pictures/Screenforge; resolves with the file path. */
+  saveScreenshot: (png: Uint8Array) => Promise<string>;
+  /** 'cancelled': the share dialog was closed without a pick (Wayland). */
+  captureScreenshot: (request: ScreenshotCaptureRequest) => Promise<ScreenshotCaptureOutcome>;
+  copyScreenshotToClipboard: (png: Uint8Array) => Promise<void>;
+  /** Selects an area and takes a screenshot, as the global shortcut does. */
+  takeScreenshot: () => Promise<void>;
+  onScreenshotCaptured: (cb: (capture: ScreenshotCaptureData) => void) => () => void;
   minimizeToDock: () => void;
   quitApp: () => void;
   toggleTeleprompter: () => void;
@@ -798,12 +990,17 @@ export interface ScreenforgeAPI {
     height: number;
   }) => Promise<void>;
   cancelAreaSelection: () => void;
-  openAreaSelector: () => Promise<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>;
+  /** Wayland: the still the open area selector draws on, if any. */
+  getAreaSelectorStill: () => Promise<AreaSelectorStill | null>;
+  /** `purpose` picks the confirm button: record (default) or take a screenshot. */
+  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
+  /** Wayland: draw a recording area on a still of the screen picked in the share dialog. */
+  selectAreaOnStill: (still: AreaSelectorStillRequest) => Promise<SelectedArea | null>;
+  getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;
+  /** The record shortcut asks an open toolbar to switch back to Video. */
+  onVideoModeRequested: (cb: () => void) => () => void;
+  /** Tells main the toolbar is counting down or recording (true) or idle (false). */
+  setToolbarRecording: (active: boolean) => void;
 }
 
 declare global {

@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../store';
 import { useProjectPersistence } from '../components/ProjectPersistenceProvider';
 import { trackEvent } from '../lib/analytics';
+import { getAppendPlacement } from '../lib/recording/appendPlacement';
 
 export const useImportVideo = () => {
   const [isImporting, setIsImporting] = useState(false);
@@ -73,9 +74,16 @@ export const useImportVideo = () => {
           timelineEnd: insertTime + imported.duration,
         });
 
+        const placement = await getAppendPlacement(
+          recordingResult.filePath,
+          useStore.getState().frame,
+          undefined,
+          window.screenforge.probeExportSource,
+        );
         const mergedPath = await window.screenforge.concatRecordings(
           recordingResult.filePath,
           imported.filePath,
+          placement,
         );
 
         // Probe the actual merged file duration so sourceStart is frame-accurate.

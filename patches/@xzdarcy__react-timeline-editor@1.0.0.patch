@@ -1,0 +1,147 @@
+diff --git a/dist/index.es.js b/dist/index.es.js
+index b48875e9ab04f3ec66c0224a92759d125b2be978..b78b384b4fd7de33b944f045181ef126571ddd44 100644
+--- a/dist/index.es.js
++++ b/dist/index.es.js
+@@ -8412,7 +8412,7 @@ const rc = /* @__PURE__ */ no(nc), ic = ({ children: s, interactRef: i, draggabl
+     parentRef: L,
+     deltaScrollLeft: q
+   }, P) => {
+-    const W = Ae(null), I = Ae(0), V = Ae(!1), { initAutoScroll: x, dealDragAutoScroll: j, dealResizeAutoScroll: ie, stopAutoScroll: te } = Jl(L);
++    const W = Ae(null), I = Ae(0), V = Ae(!1), origin = Ae({ left: 0, width: 0 }), { initAutoScroll: x, dealDragAutoScroll: j, dealResizeAutoScroll: ie, stopAutoScroll: te } = Jl(L);
+     Qe(() => () => {
+       W.current && W.current.unset();
+     }, []), ar(P, () => ({
+@@ -8443,29 +8443,35 @@ const rc = /* @__PURE__ */ no(nc), ic = ({ children: s, interactRef: i, draggabl
+       const U = W.current?.target;
+       return parseFloat(U?.dataset?.width || "0");
+     }, pe = (U) => {
+-      I.current = 0, V.current = !1, x(), z && z();
++      I.current = 0, V.current = !1, origin.current = { left: de(), width: he() }, x(), z && z();
+     }, Se = (U) => {
+-      const { preLeft: X, preWidth: Y, scrollDelta: Z } = U, ne = V.current ? m : c;
+-      if (Math.abs(I.current) >= ne) {
+-        const fe = parseInt(I.current / ne + "");
+-        let A = X + fe * ne, se = A, Ce = Number.MAX_SAFE_INTEGER;
+-        if (S.forEach((H) => {
+-          const J = Math.abs(H - A);
+-          J < m && J < Ce && (se = H);
+-          const re = Math.abs(H - (A + Y));
+-          re < m && re < Ce && (se = H - Y);
+-        }), se !== A ? (V.current = !0, A = se) : ((A - a) % c !== 0 && (A = a + c * Math.round((A - a) / c)), V.current = !1), I.current = I.current % ne, A < u.left ? A = u.left : A + Y > u.right && (A = u.right - Y), k && k(
+-          {
+-            lastLeft: X,
+-            left: A,
+-            lastWidth: Y,
+-            width: Y
+-          },
+-          Z
+-        ) === !1)
+-          return;
+-        Q(A, !1);
+-      }
++      // Screenforge patch: derive the left from where the pointer is (drag origin +
++      // total pointer travel), then snap. Upstream stepped from the last, possibly
++      // snapped, left and dropped the snap offset, so every snap guide the clip passed
++      // left it further ahead of or behind the cursor.
++      const { preLeft: X, preWidth: Y, scrollDelta: Z } = U;
++      let A = origin.current.left + I.current;
++      (A - a) % c !== 0 && (A = a + c * Math.round((A - a) / c));
++      let se = A, Ce = m;
++      S.forEach((H) => {
++        const J = Math.abs(H - A);
++        J < Ce && (Ce = J, se = H);
++        const re = Math.abs(H - (A + Y));
++        re < Ce && (Ce = re, se = H - Y);
++      });
++      V.current = se !== A, A = se;
++      A < u.left ? A = u.left : A + Y > u.right && (A = u.right - Y);
++      if (A === X || k && k(
++        {
++          lastLeft: X,
++          left: A,
++          lastWidth: Y,
++          width: Y
++        },
++        Z
++      ) === !1)
++        return;
++      Q(A, !1);
+     }, Te = (U) => {
+       const X = U.target;
+       if (q && L?.current && !j(U, (se) => {
+@@ -8484,44 +8490,41 @@ const rc = /* @__PURE__ */ no(nc), ic = ({ children: s, interactRef: i, draggabl
+       let { left: Y, width: Z } = X.dataset;
+       E && E({ left: parseFloat(Y || "0"), width: parseFloat(Z || "0") });
+     }, Re = (U) => {
+-      I.current = 0, V.current = !1, x();
++      I.current = 0, V.current = !1, origin.current = { left: de(), width: he() }, x();
+       let X = U.edges?.right ? "right" : "left";
+       b && b(X);
+     }, G = (U) => {
+-      const { dir: X, preWidth: Y, preLeft: Z } = U, ne = V.current ? m : c;
++      // Screenforge patch: same pointer-anchored snapping as Se, for the dragged edge.
++      const { dir: X, preWidth: Y, preLeft: Z } = U;
+       if (X === "left") {
+-        if (Math.abs(I.current) >= ne) {
+-          const fe = parseInt(I.current / ne + "");
+-          let A = Z + fe * ne, se = A, Ce = Number.MAX_SAFE_INTEGER;
+-          S.forEach((re) => {
+-            const ue = Math.abs(re - A);
+-            ue < m && ue < Ce && (se = re);
+-          }), se !== A ? (V.current = !0, A = se) : ((A - a) % c !== 0 && (A = a + c * Math.round((A - a) / c)), V.current = !1), I.current = I.current % ne;
+-          const H = Z + Y;
+-          A < u.left && (A = u.left);
+-          const J = H - A;
+-          if (C && C("left", {
+-            lastLeft: Z,
+-            lastWidth: Y,
+-            left: A,
+-            width: J
+-          }) === !1)
+-            return;
+-          Q(A, !1), ce(J, !1);
+-        }
+-      } else if (X === "right" && Math.abs(I.current) >= ne) {
+-        const fe = parseInt(I.current / c + "");
+-        let A = Y + fe * c, se = Z + A, Ce = Number.MAX_SAFE_INTEGER;
+-        if (S.forEach((H) => {
+-          const J = Math.abs(H - (Z + A));
+-          J < m && J < Ce && (se = H);
+-        }), se !== Z + A)
+-          V.current = !0, A = se - Z;
+-        else {
+-          let H = Z + A;
+-          (H - a) % c !== 0 && (H = a + c * Math.round((H - a) / c), A = H - Z), V.current = !1;
+-        }
+-        if (I.current = I.current % ne, Z + A > u.right && (A = u.right - Z), C && C("right", {
++        let A = origin.current.left + I.current;
++        (A - a) % c !== 0 && (A = a + c * Math.round((A - a) / c));
++        let se = A, Ce = m;
++        S.forEach((re) => {
++          const ue = Math.abs(re - A);
++          ue < Ce && (Ce = ue, se = re);
++        }), V.current = se !== A, A = se;
++        const H = Z + Y;
++        A < u.left && (A = u.left);
++        const J = H - A;
++        if (A === Z && J === Y || C && C("left", {
++          lastLeft: Z,
++          lastWidth: Y,
++          left: A,
++          width: J
++        }) === !1)
++          return;
++        Q(A, !1), ce(J, !1);
++      } else if (X === "right") {
++        let H = origin.current.left + origin.current.width + I.current;
++        (H - a) % c !== 0 && (H = a + c * Math.round((H - a) / c));
++        let se = H, Ce = m;
++        S.forEach((J) => {
++          const re = Math.abs(J - H);
++          re < Ce && (Ce = re, se = J);
++        }), V.current = se !== H;
++        let A = se - Z;
++        if (Z + A > u.right && (A = u.right - Z), A === Y || C && C("right", {
+           lastLeft: Z,
+           lastWidth: Y,
+           left: Z,

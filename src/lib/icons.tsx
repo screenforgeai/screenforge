@@ -1,6 +1,11 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { HugeiconsProps, IconSvgElement } from '@hugeicons/react';
 import {
+  Sun03Icon,
+  Sun01Icon,
+  SunCloud02Icon,
+  Remove01Icon,
+  CenterFocusIcon,
   Add01Icon,
   ArrowDown01Icon,
   ArrowLeft01Icon,
@@ -10,6 +15,7 @@ import {
   Cancel01Icon,
   ComputerVideoIcon,
   CropIcon,
+  Shield01Icon,
   SearchAddIcon,
   Cursor01Icon,
   Delete02Icon,
@@ -68,12 +74,12 @@ import {
   QuotesIcon,
   Note01Icon,
   FavouriteIcon,
+  Megaphone01Icon,
   ChatFeedbackIcon,
   Settings01Icon,
   LogoutSquare01Icon,
   UserAccountIcon,
   Link01Icon,
-  Copy01Icon,
   GlobeIcon,
   Camera01Icon,
   MusicNote01Icon,
@@ -82,6 +88,12 @@ import {
   Timer02Icon,
   Layers01Icon,
   Coffee01Icon,
+  ArrowUpRight01Icon,
+  SquareIcon,
+  HighlighterIcon,
+  HashtagIcon,
+  Copy01Icon,
+  Download01Icon,
   // @ts-expect-error hugeicons free icon exports are not fully represented in the package types.
 } from '@hugeicons/core-free-icons';
 import { forwardRef } from 'react';
@@ -177,13 +189,14 @@ export const IconFilm = createIcon(Film02Icon, 'IconFilm');
 export const IconQuote = createIcon(QuotesIcon, 'IconQuote');
 export const IconNote = createIcon(Note01Icon, 'IconNote');
 export const IconHeart = createIcon(FavouriteIcon, 'IconHeart');
+export const IconMegaphone = createIcon(Megaphone01Icon, 'IconMegaphone');
 export const IconChatFeedback = createIcon(ChatFeedbackIcon, 'IconChatFeedback');
 export const IconSettings = createIcon(Settings01Icon, 'IconSettings');
 export const IconLogoutSquare = createIcon(LogoutSquare01Icon, 'IconLogoutSquare');
 export const IconUserAccount = createIcon(UserAccountIcon, 'IconUserAccount');
 export const IconLink = createIcon(Link01Icon, 'IconLink');
-export const IconCopy = createIcon(Copy01Icon, 'IconCopy');
 export const IconGlobe = createIcon(GlobeIcon, 'IconGlobe');
+export const IconShield = createIcon(Shield01Icon, 'IconShield');
 export const IconBlur = createIcon(BlurIcon, 'IconBlur');
 export const IconCamera = createIcon(Camera01Icon, 'IconCamera');
 export const IconMusicNote = createIcon(MusicNote01Icon, 'IconMusicNote');
@@ -192,5 +205,16 @@ export const IconMusic3 = createIcon(MusicThreeIcon, 'IconMusic3');
 export const IconTimer = createIcon(Timer02Icon, 'IconTimer');
 export const IconLayers = createIcon(Layers01Icon, 'IconLayers');
 export const IconCoffee = createIcon(Coffee01Icon, 'IconCoffee');
+export const IconArrowUpRight = createIcon(ArrowUpRight01Icon, 'IconArrowUpRight');
+export const IconSquare = createIcon(SquareIcon, 'IconSquare');
+export const IconHighlighter = createIcon(HighlighterIcon, 'IconHighlighter');
+export const IconHash = createIcon(HashtagIcon, 'IconHash');
+export const IconCopy = createIcon(Copy01Icon, 'IconCopy');
+export const IconDownload = createIcon(Download01Icon, 'IconDownload');
 
 export type { CompatIconProps };
+export const IconSun = createIcon(Sun03Icon, 'IconSun');
+export const IconMinus = createIcon(Remove01Icon, 'IconMinus');
+export const IconFocusPoint = createIcon(CenterFocusIcon, 'IconFocusPoint');
+export const IconSunSoft = createIcon(SunCloud02Icon, 'IconSunSoft');
+export const IconSunCrisp = createIcon(Sun01Icon, 'IconSunCrisp');

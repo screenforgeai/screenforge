@@ -1,5 +1,50 @@
 # screenforge
 
+## 0.9.1
+
+### Patch Changes
+
+- 27a7ae1: Smoother edges in the preview and in exports: the cursor's outline and name tag, the window's rounded corners and traffic lights, the webcam bubble, click rings, captions and key caps no longer look jagged, including while zoomed in. Small text in a Retina recording no longer shimmers in the preview.
+- 4a22ac8: Screenshots now open in a lit 3D studio, seen through a macro lens: the screenshot sits on a thin glass panel with soft reflections, a shadow on the backdrop and a soft focus band. Everything happens on the canvas: click to focus (it starts on the most detailed part of the screenshot), scroll over the focus ring to widen what stays sharp, drag to turn the camera, scroll to zoom, hold Space and drag or scroll to move the screenshot, and drag the sun to move the light (scroll over it for brightness). Hover the focus ring or the sun for a few more options: a wider or narrower sharp area, more or less blur, a brighter or dimmer light, and softer or crisper shadows. The Style sidebar sets the aspect ratio (16:9 to start), the background behind the screenshot (the dark studio wall to start, one of the recording wallpapers or a solid colour), the padding, the corner radius (square to start), the shadow and the window bar. Double-click empty space to reset the view. Annotations are drawn straight onto the tilted screen, and Copy and Save export the finished image at full quality. Without 3D support (no WebGL 2), the editor falls back to the flat frame. To edit a screenshot you already have, choose Import image from the + menu, next to Take screenshot.
+- fde8727: On Linux with Wayland, Display and Area recordings now show the drawn cursor in your chosen style, following your pointer, with the system pointer kept out of the video so only one cursor shows. You still pick the screen in the system share dialog. If Screenforge can't record the screen this way on your desktop (its Wayland recorder is missing or can't run, or the desktop's screen sharing can't keep the pointer apart), recordings work as before, with the system pointer and no drawn cursor. Clicks aren't recorded on Wayland yet, and Window recordings work as before.
+- c35cc4c: On Linux with Wayland, pressing Record now opens the system's share dialog straight away, and the countdown starts only after you pick a screen or window. Closing the dialog simply cancels. Area recording works the same way: pick the screen first, then draw the area on a still of it, and the recording is cropped to exactly that area on any monitor. The Window button no longer opens an empty list; its tooltip says you choose the app when recording starts.
+
+## 0.9.0
+
+### Minor Changes
+
+- 46ac82a: Take a screenshot from any app with Option+Shift+S on macOS (Alt+Shift+S on Windows and Linux): drag over an area, or press Enter for the whole screen, and it opens in the Screenshot editor. Option+Shift+R (Alt+Shift+R) opens the toolbar ready to record. The menu bar icon has a new Take Screenshot item, the toolbar's tooltips and the Keyboard Shortcuts dialog list both shortcuts, and arrow keys nudge a selected area (hold Shift to move it faster). If another app already uses one of these shortcuts, Screenforge leaves it alone and doesn't show it.
+- 120c2c3: The Mouse click sound is now a real recorded mouse button, pressed and released, and a second recorded option, Mouse 2, joins it. Trackpad and Soft are unchanged. Pop and Tick are gone; projects that used them now open with Soft.
+- ffacda6: Add a window bar: a Mac, Windows or browser-style bar drawn over the top of your recording. Pick a style under Window bar in the Frame panel (hover a style to preview it), choose its theme (Auto matches the page), and type what it shows (it starts with the recorded page's title; an address gets the lock icon). Frame's corners and shadow wrap the bar and the page as one window, and the bar zooms with it. Screenshots can get the same bar, drawn sharp at 2x, whatever was captured. When you record a browser window and turn the bar on, Screenforge looks for the browser's own toolbar and crops it off when it's sure, so the two bars don't stack. Otherwise it asks you to adjust the crop, and you can drag the crop line yourself or turn it off. Style presets now save the window bar too.
+
+### Patch Changes
+
+- a89c732: Area recordings now open the moment you stop, at any length. They used to be trimmed to the area first, which took about half the recording's length and failed after 15 seconds, so area recordings longer than about 45 seconds never opened. The editor now crops to exactly the area you selected, and you can adjust it afterwards in Frame. Auto zoom and the zoom position picker now aim correctly in any cropped recording.
+- 7aa8aeb: Click sounds no longer sound hollow or "zappy" on trackpad taps. Tap-to-click reports the release a few milliseconds after the press, which played the click twice almost on top of itself; releases that close to their press are now skipped, so a tap sounds like a single click.
+- 96ef01f: The What's new dialog is easier to read: each new feature gets its own heading with the details below it, fixes are listed compactly with the first few shown and the rest a click away, and a Full changelog link opens every release on the website.
+
+## 0.8.0
+
+### Minor Changes
+
+- 93db093: Add click sounds: pick Mouse, Trackpad, Soft, Pop or Tick from a new Click sound dropdown in the Cursor panel, with a play button on each option and a volume slider. Clicks play a press and, for Mouse, Trackpad and Soft, a release on mouse-up, in both the preview and exports. Projects that used the old click sound presets open with the closest new sound.
+- 4960c6e: On Linux, Screenforge now checks for a new version when it starts and every 6 hours. When one is out, an Update available button appears in the top bar and opens the Linux download page, so you can install it the same way you installed Screenforge.
+- ff66fe7: Screenshot mode: switch the toolbar from Video to Screenshot and take a screenshot of the whole screen, a window or a selected area with the same source picker you record from, then frame it with the same backgrounds, padding, shadow and style presets as your videos. Annotate it with arrows, boxes, highlights, blur, text and numbered steps, and copy it to the clipboard or save it as a PNG.
+- 5e1b087: Add a Share usage data switch under Settings → Privacy. It is on by default; turning it off stops usage events, error reports and crash reports from being sent, right away and from the next launch on. Feedback you submit yourself is still sent.
+- bf54f79: After an update, Screenforge now opens a What's new dialog the first time you launch it, listing what changed since the version you last used. It doesn't appear on a fresh install, and it shows each version's notes only once. Open it again any time from the megaphone button at the bottom of the sidebar.
+
+### Patch Changes
+
+- 664a8eb: New recordings start with the cursor at 100% size instead of 125%. Projects you already made keep the size they were saved with.
+- 8b47250: A recording that captured nothing (for example, when macOS never sent a frame of the window) now stops with "Nothing was captured" instead of opening as a blank recording that later failed to export with "416 Requested Range Not Satisfiable". Exporting a recording whose video file is empty or missing now says so too, and recording and export errors no longer start with "Error invoking remote method".
+- 2247b55: The update prompt's "View changelog" link opens screenforge.co instead of the old screenforgeai.com address.
+- af776f5: Recording is more reliable on multi-monitor setups. On Windows the cursor now lines up on a monitor whose scale differs from another monitor's. Area recordings always capture the display the area was drawn on, and crop with that display's scale even if the main display changes. If the display being recorded is unplugged, the recording stops, keeps what was captured, and says why. The microphone menu now says when system audio can't be recorded (Linux, and macOS before 13), so it isn't silently missing.
+- An area recording also stops before it starts if the display you drew the area on has changed resolution since, and asks you to select the area again, instead of recording the wrong part of the screen.
+- a6a388f: An area screenshot is always taken from the display you drew it on, even if your main display changes before the capture finishes. If that display has been disconnected or resized in the meantime, you get a warning instead of the wrong picture.
+- 9b88107: Usage data and error reports (when sharing is on) no longer include your user name: file paths in error messages are sent with the home folder shown as `~`.
+- e1f5ac4: Fix clips drifting away from the cursor while dragging or resizing them on the timeline. Each time a clip snapped to another clip's edge or the playhead it kept the snap offset, so after a few edges the clip sat well ahead of or behind the cursor and moved in jumps. Clips still snap to nearby edges, then follow the cursor exactly once you move past.
+- cec9347: Linux (X11) recordings keep their on-screen colours. The capture used FFmpeg's default BT.601 colour conversion without saying so, while the editor and export read it as BT.709, so reds, oranges and blues were shifted in the preview and in exported videos.
+
 ## 0.7.0
 
 ### Minor Changes

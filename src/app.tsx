@@ -12,7 +12,12 @@ import { Toaster } from 'sonner';
 import { useStore } from './store';
 import { getToastStyle, getToasterStyle, TOASTER_TOAST_CLASSNAMES } from './lib/toast';
 import { FFmpegSetupModal } from './components/FFmpegSetupModal';
+import { WhatsNewOnLaunch } from './components/WhatsNew/WhatsNewOnLaunch';
+import { playShutterSound } from './lib/screenshot/shutter-sound';
+import { createPngUrl } from './lib/screenshot/png';
+import { ScreenshotEditor } from './components/ScreenshotEditor';
 import { trackEvent } from './lib/analytics';
+import { getAppendPlacement } from './lib/recording/appendPlacement';
 import i18n from './i18n';
 
 type AppShellProps = {
@@ -46,6 +51,9 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
     cameraMediaSegments,
     cameraClips,
     camera,
+    screenshotCapture,
+    openScreenshotEditor,
+    closeScreenshotEditor,
   } = useStore(
     useShallow((s) => ({
       setIsProcessing: s.setIsProcessing,
@@ -63,10 +71,14 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
       cameraMediaSegments: s.cameraMediaSegments,
       cameraClips: s.cameraClips,
       camera: s.camera,
+      screenshotCapture: s.screenshotCapture,
+      openScreenshotEditor: s.openScreenshotEditor,
+      closeScreenshotEditor: s.closeScreenshotEditor,
     })),
   );
 
   const [ffmpegMissing, setFfmpegMissing] = useState(false);
+  const [ffmpegChecked, setFfmpegChecked] = useState(false);
 
   useEffect(() => {
     trackEvent('app_opened');
@@ -82,12 +94,16 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   }, []);
 
   useEffect(() => {
-    window.screenforge.checkFFmpegStatus().then(({ available }) => {
-      if (!available) {
-        setFfmpegMissing(true);
-        trackEvent('ffmpeg_missing_shown');
-      }
-    });
+    window.screenforge
+      .checkFFmpegStatus()
+      .then(({ available }) => {
+        if (!available) {
+          setFfmpegMissing(true);
+          trackEvent('ffmpeg_missing_shown');
+        }
+      })
+      // Lets What's new open only once FFmpeg setup can no longer pop over it.
+      .finally(() => setFfmpegChecked(true));
   }, []);
 
   useEffect(() => {
@@ -114,8 +130,18 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
             timelineStart: appendTimelineStartPreview,
             timelineEnd: appendTimelineStartPreview + result.duration,
           });
+          const placement = await getAppendPlacement(
+            recordingResult.filePath,
+            useStore.getState().frame,
+            result.areaCrop,
+            window.screenforge.probeExportSource,
+          );
           const [mergedPath, mergedCameraPath] = await Promise.all([
-            window.screenforge.concatRecordings(recordingResult.filePath, result.filePath),
+            window.screenforge.concatRecordings(
+              recordingResult.filePath,
+              result.filePath,
+              placement,
+            ),
             recordingResult.cameraPath && result.cameraPath
               ? window.screenforge.concatRecordings(recordingResult.cameraPath, result.cameraPath)
               : Promise.resolve(result.cameraPath ?? recordingResult.cameraPath ?? undefined),
@@ -299,6 +325,16 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
   }, [loadRecordingSession, incrementRecordingCount, setActiveWidget, beginNewRecording]);
 
   useEffect(() => {
+    return window.screenforge.onScreenshotCaptured(({ png, ...capture }) => {
+      // Same shutter as the preview's camera button. Played here, not in the
+      // toolbar, because the toolbar window is gone by the time a capture lands.
+      playShutterSound();
+      openScreenshotEditor({ ...capture, imageUrl: createPngUrl(png) });
+      trackEvent('screenshot_editor_opened', { kind: capture.kind });
+    });
+  }, [openScreenshotEditor]);
+
+  useEffect(() => {
     window.screenforge.getProjects().then(setSavedProjects);
   }, [setSavedProjects]);
 
@@ -324,6 +360,13 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
           <Canvas videoRef={videoRef} canvasRef={previewCanvasRef} />
         </div>
       </main>
+      {screenshotCapture && (
+        <ScreenshotEditor
+          key={screenshotCapture.imageUrl}
+          capture={screenshotCapture}
+          onClose={closeScreenshotEditor}
+        />
+      )}
       <Toaster
         theme="dark"
         richColors={false}
@@ -339,6 +382,7 @@ const AppShell = ({ videoRef, previewCanvasRef }: AppShellProps) => {
         }}
       />
       <FFmpegSetupModal open={ffmpegMissing} onReady={() => setFfmpegMissing(false)} />
+      <WhatsNewOnLaunch deferred={!ffmpegChecked || ffmpegMissing} />
     </>
   );
 };

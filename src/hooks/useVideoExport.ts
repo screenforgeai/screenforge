@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { captureException, trackEvent } from '../lib/analytics';
+import { readableErrorMessage } from '../lib/ipcError';
 import type {
   CaptureStoreSnapshot,
   CaptureWindowParams,
@@ -194,6 +195,10 @@ export function useVideoExport() {
       cursorMaxTilt,
       cursorHideWhenIdle,
       cursorIdleHideSeconds,
+      cursorEffect,
+      cursorClickShrink,
+      cursorColor,
+      cursorLabel,
       musicClips,
       cameraClips,
       maskClips,
@@ -321,6 +326,10 @@ export function useVideoExport() {
           cursorMaxTilt,
           cursorHideWhenIdle,
           cursorIdleHideSeconds,
+          cursorEffect,
+          cursorClickShrink,
+          cursorColor,
+          cursorLabel,
           cameraClips,
           maskClips,
           // A hidden Motion lane exports without motion, matching the preview.
@@ -409,7 +418,9 @@ export function useVideoExport() {
       });
       return result.outputPath;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Export failed';
+      // Without Electron's "Error invoking remote method ..." wrapper, so the
+      // person sees the actual reason.
+      const message = readableErrorMessage(error, 'Export failed');
       // Treat as cancellation when:
       //  - The user explicitly cancelled this job (cancelledJobIdsRef)
       //  - The error message mentions "cancel" (abort error from service)

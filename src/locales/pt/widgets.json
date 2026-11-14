@@ -17,5 +17,8 @@
   "comingSoon": "Em breve",
   "unsavedRecording_title": "Gravação não salva",
   "unsavedRecording_desc": "Você tem uma gravação não salva.",
-  "discard": "Descartar"
+  "discard": "Descartar",
+  "takeScreenshot": "Fazer captura",
+  "importImage": "Importar imagem",
+  "openImageFailed": "Não foi possível abrir esse arquivo como imagem."
 }

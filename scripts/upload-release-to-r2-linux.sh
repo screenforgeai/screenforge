@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Uploads Linux release artifacts (.deb, .rpm, AppImage, .zip) and SHA256SUMS
-# to R2 under <prefix>/<tag>/. Linux has no in-app updater, so unlike macOS and
-# Windows there is no update feed to publish.
+# to R2 under <prefix>/<tag>/. Linux can't update itself, so unlike macOS and
+# Windows there is no update feed to publish: the app only compares its version
+# with the latest Linux release on screenforge.co/api/builds.
 
 if ! command -v aws >/dev/null 2>&1; then
   echo "aws CLI is required but was not found." >&2

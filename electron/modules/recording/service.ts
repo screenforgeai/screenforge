@@ -7,10 +7,14 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import type {
+  AreaCrop,
   CursorEvent,
   CursorType,
   RecordingArea,
   RecordingBoundsSample,
+  RecordingSourceLostReason,
+  SelectedArea,
+  SystemAudioSupport,
 } from '../../../src/types/index';
 import { buildMergeAudioArgs } from '../../../src/lib/recording/audioMerge';
 import { summarizeCursorEvents } from '../../../src/lib/recording/cursorTiming';
@@ -33,7 +37,7 @@ import {
   type CaptureBackend,
 } from '../../lib/linux-capture';
 import { prepareRecordingStartPermissionsIfNeeded } from '../app/service';
-import { createNativeCursorPointNormalizer } from './utils/native-cursor-normalizer';
+import { createNativeCursorPointMapper } from './utils/cursor-point-mapper';
 import { getMacWindowMetadata, parseWindowIdFromSourceId } from '../sources/service';
 import { probeExportSource } from '../export/service';
 import { computeFallbackCaptureBitrate, formatFFmpegBitrate } from './captureQuality';
@@ -43,12 +47,29 @@ import {
   buildSegmentConcatList,
   buildWaylandTranscodeArgs,
   buildX11GrabArgs,
+  buildAppendClipFilter,
   clampCaptureBounds,
+  computeAreaCropPixels,
   fitH264FrameSize,
+  matchesDisplayShape,
+  matchesDisplaySize,
+  toPixelBounds,
   type CaptureBounds,
   type CaptureSegment,
 } from './capture-args';
 import { getX11WindowGeometry } from './x11-window-geometry';
+import {
+  endWaylandShare,
+  finishWaylandShareRecording,
+  getWaylandShare,
+  getWaylandSharePointer,
+  hasWaylandShare,
+  pauseWaylandShareRecording,
+  resumeWaylandShareRecording,
+  setWaylandShareMoveListener,
+  startWaylandShareRecording,
+} from './wayland-capture';
+import { getSystemAudioSupport } from './system-audio';
 import {
   normalizeKeyboardModifiers,
   normalizeKeyLabel,
@@ -122,6 +143,10 @@ let nativeMediaStartTime: number | null = null;
 // MediaRecorder and hands the finished webm back at stop time. The main
 // process only tracks timing and transcodes the result.
 let rendererCaptureActive = false;
+// Wayland: the capture helper records the screen picked in its share dialog
+// (wayland-capture.ts), with the pointer kept out of the picture.
+let shareCaptureActive = false;
+let shareCapturePath: string | null = null;
 
 let toolbarWindowTitleForCapture: string | undefined;
 let activeWindowRecording = false;
@@ -170,6 +195,8 @@ const STOP_SIGINT_DELAY_MS = process.platform === 'win32' ? 12000 : 2000;
 const FFMPEG_CAPTURE_FRAME_MS = 1000 / 60;
 const STOP_SIGTERM_DELAY_MS = process.platform === 'win32' ? 18000 : 8000;
 const STOP_SIGKILL_DELAY_MS = process.platform === 'win32' ? 25000 : 12000;
+const NOTHING_CAPTURED_MESSAGE =
+  "Nothing was captured. Make sure what you're recording stays visible on screen, then try again.";
 
 type UiohookModule = typeof import('uiohook-napi');
 type UiohookInstance = UiohookModule['uIOhook'];
@@ -189,12 +216,94 @@ export function onRecordingActivityChanged(listener: () => void): () => void {
   };
 }
 
+// ── Display changes during a recording ───────────────────────────────────────
+
+type RecordingSourceLostListener = (info: { reason: RecordingSourceLostReason }) => void;
+
+const recordingSourceLostListeners = new Set<RecordingSourceLostListener>();
+let stopWatchingDisplays: (() => void) | null = null;
+
+/**
+ * Fires when the display being recorded disappears mid-recording (unplugged,
+ * lid closed, monitor switched off). The capture can't continue on it, so the
+ * UI should stop the recording and keep what was captured so far.
+ */
+export function onRecordingSourceLost(listener: RecordingSourceLostListener): () => void {
+  recordingSourceLostListeners.add(listener);
+  return () => {
+    recordingSourceLostListeners.delete(listener);
+  };
+}
+
+/**
+ * Watches display changes for the length of a recording. `capturedDisplayId`
+ * is null for window recordings: the OS moves a window off a removed display,
+ * and the capture follows it, so only display recordings are stopped.
+ */
+function watchDisplaysDuringRecording(capturedDisplayId: number | null): void {
+  unwatchDisplaysDuringRecording();
+
+  const onRemoved = (_event: unknown, removed: Electron.Display) => {
+    const isCaptured = capturedDisplayId !== null && removed.id === capturedDisplayId;
+    log.warn('[recording] display removed during recording', {
+      removedId: removed.id,
+      capturedDisplayId,
+      isCaptured,
+    });
+    if (!isCaptured) {
+      return;
+    }
+    for (const listener of recordingSourceLostListeners) {
+      listener({ reason: 'display-removed' });
+    }
+  };
+  const onAdded = (_event: unknown, added: Electron.Display) => {
+    log.info('[recording] display added during recording', {
+      addedId: added.id,
+      bounds: added.bounds,
+      scaleFactor: added.scaleFactor,
+    });
+  };
+  const onMetricsChanged = (
+    _event: unknown,
+    changed: Electron.Display,
+    changedMetrics: string[],
+  ) => {
+    if (changed.id !== capturedDisplayId) {
+      return;
+    }
+    // Resolution or scale changes mid-recording keep capturing at the old
+    // size; cursor positions use the bounds from when recording started.
+    log.warn('[recording] recorded display changed during recording', {
+      displayId: changed.id,
+      changedMetrics,
+      bounds: changed.bounds,
+      scaleFactor: changed.scaleFactor,
+    });
+  };
+
+  screen.on('display-removed', onRemoved);
+  screen.on('display-added', onAdded);
+  screen.on('display-metrics-changed', onMetricsChanged);
+  stopWatchingDisplays = () => {
+    screen.removeListener('display-removed', onRemoved);
+    screen.removeListener('display-added', onAdded);
+    screen.removeListener('display-metrics-changed', onMetricsChanged);
+  };
+}
+
+function unwatchDisplaysDuringRecording(): void {
+  stopWatchingDisplays?.();
+  stopWatchingDisplays = null;
+}
+
 export function isRecordingBusy(): boolean {
   return (
     captureProc !== null ||
     ffmpegProc !== null ||
     ffmpegCaptureSpawn !== null ||
-    rendererCaptureActive
+    rendererCaptureActive ||
+    shareCaptureActive
   );
 }
 
@@ -212,6 +321,14 @@ export function getCaptureBackend(): CaptureBackend {
   }
   // macOS < 13 AVFoundation / any other FFmpeg-based fallback
   return 'ffmpeg-x11';
+}
+
+/** Whether this machine's capture path records system audio, and why not. */
+export function getSystemAudioSupportForCapture(): SystemAudioSupport {
+  return getSystemAudioSupport({
+    platform: process.platform,
+    captureBackend: getCaptureBackend(),
+  });
 }
 
 function getPackagedUiohookDir(resourcesPath: string): string {
@@ -463,6 +580,28 @@ function recordCursorEvent(event: Omit<CursorEvent, 'timestamp'>): void {
   cursorEvents.push({ ...event, timestamp: Date.now() });
 }
 
+/** A pointer move, at most 120 a second and only once it has moved a pixel. */
+function recordPointerMove(x: number, y: number): void {
+  const now = Date.now();
+  const dx = x - lastMoveX;
+  const dy = y - lastMoveY;
+  if (now - lastMoveMs < MOVE_MIN_INTERVAL_MS || dx * dx + dy * dy < MOVE_MIN_DISTANCE_SQ) {
+    return;
+  }
+  lastMoveX = x;
+  lastMoveY = y;
+  lastMoveMs = now;
+  recordCursorEvent({ type: 'move', x, y });
+}
+
+// Wayland: the capture helper reports the pointer from the screen pick on;
+// only moves made while recording count.
+setWaylandShareMoveListener((x, y) => {
+  if (shareCaptureActive) {
+    recordPointerMove(x, y);
+  }
+});
+
 async function loadUiohook(): Promise<UiohookInstance> {
   if (loadedUiohook) {
     return loadedUiohook;
@@ -520,16 +659,7 @@ async function startCursorTracking(): Promise<void> {
   uIOhook.removeAllListeners();
 
   uIOhook.on('mousemove', (e) => {
-    const now = Date.now();
-    const dx = e.x - lastMoveX;
-    const dy = e.y - lastMoveY;
-    if (now - lastMoveMs < MOVE_MIN_INTERVAL_MS || dx * dx + dy * dy < MOVE_MIN_DISTANCE_SQ) {
-      return;
-    }
-    lastMoveX = e.x;
-    lastMoveY = e.y;
-    lastMoveMs = now;
-    recordCursorEvent({ type: 'move', x: e.x, y: e.y });
+    recordPointerMove(e.x, e.y);
   });
 
   uIOhook.on('mousedown', (e) => {
@@ -702,12 +832,17 @@ async function startNativeCapture(
 
   const normalizePoint =
     sourceWindowId === null
-      ? createNativeCursorPointNormalizer(display, (info) => {
-          log.info(
-            '[recording:native] cursor coordinate mode:',
-            info.mode,
-            `(scale=${info.scaleFactor}, logicalHits=${info.logicalHits}, scaledHits=${info.scaledHits}, samples=${info.samples})`,
-          );
+      ? createNativeCursorPointMapper(display, {
+          platform: process.platform,
+          screenToDipPoint:
+            process.platform === 'win32' ? (point) => screen.screenToDipPoint(point) : undefined,
+          onModeResolved: (info) => {
+            log.info(
+              '[recording:native] cursor coordinate mode:',
+              info.mode,
+              `(scale=${info.scaleFactor}, logicalHits=${info.logicalHits}, scaledHits=${info.scaledHits}, samples=${info.samples})`,
+            );
+          },
         })
       : null;
 
@@ -960,9 +1095,17 @@ async function stopNativeCapture(): Promise<string> {
       settled = true;
       clearStopTimers();
 
-      const hasOutput = await fileExistsAndHasData(outPath);
+      // The helper exits 0 even when it wrote nothing (on macOS, when
+      // ScreenCaptureKit never delivers a frame). An empty file would open as a
+      // blank recording and only fail at export, so fail here instead.
+      if (!(await fileExistsAndHasData(outPath))) {
+        log.error('[native:capture] no video was written', 'code=', code, 'signal=', signal);
+        reject(new Error(NOTHING_CAPTURED_MESSAGE));
+        return;
+      }
+
       const canUseAbnormalOutput =
-        hasOutput && (process.platform !== 'win32' || (await canReadVideoFrame(outPath)));
+        process.platform !== 'win32' || (await canReadVideoFrame(outPath));
       if (code === 0 || canUseAbnormalOutput) {
         if (code !== 0) {
           log.warn(
@@ -981,7 +1124,7 @@ async function stopNativeCapture(): Promise<string> {
 
       // On Windows the IMFSinkWriter may have been interrupted before writing the moov
       // atom, leaving the MP4 unreadable. Attempt to recover whatever frames were written.
-      if (process.platform === 'win32' && hasOutput) {
+      if (process.platform === 'win32') {
         const recoveredPath = await tryRecoverIncompleteCapture(outPath);
         if (recoveredPath) {
           resolve(recoveredPath);
@@ -1048,59 +1191,30 @@ async function stopNativeCapture(): Promise<string> {
 
 // ── Crop recording ────────────────────────────────────────────────────────────
 
-let activeCropArea: { x: number; y: number; width: number; height: number } | null = null;
+let activeCropArea: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  frame?: { width: number; height: number };
+} | null = null;
+// The display the crop area was drawn on, fixed at start: the crop is in its
+// logical pixels, and the primary display can change while recording.
+let activeCropDisplay: Pick<Electron.Display, 'bounds' | 'scaleFactor'> | null = null;
 
 export function setActiveCropArea(area: {
   x: number;
   y: number;
   width: number;
   height: number;
+  frame?: { width: number; height: number };
 }): void {
   activeCropArea = area;
 }
 
 export function clearActiveCropArea(): void {
   activeCropArea = null;
-}
-
-/**
- * Crops a recording to `area` (logical pixels, scaled by `scaleFactor`) and
- * re-encodes it, scaled down when the crop is too large for H.264.
- */
-export async function cropRecording(
-  filePath: string,
-  area: { x: number; y: number; width: number; height: number },
-  scaleFactor: number,
-): Promise<string> {
-  const outPath = createTempPath('screenforge-cropped', 'mp4');
-  const px = Math.round(area.x * scaleFactor);
-  const py = Math.round(area.y * scaleFactor);
-  const pw = Math.round(area.width * scaleFactor);
-  const ph = Math.round(area.height * scaleFactor);
-
-  const w = pw % 2 === 0 ? pw : pw - 1;
-  const h = ph % 2 === 0 ? ph : ph - 1;
-
-  const fit = fitH264FrameSize(w, h);
-
-  log.info('[recording] cropRecording:', { px, py, w, h, scaleFactor, encodeSize: fit });
-
-  const args = [
-    '-y',
-    '-i',
-    filePath,
-    '-vf',
-    `crop=${w}:${h}:${px}:${py}` + (fit.scaled ? `,scale=${fit.width}:${fit.height}` : ''),
-    ...buildH264EncodeArgs('20000k'),
-    '-c:a',
-    'copy',
-    '-movflags',
-    '+faststart',
-    outPath,
-  ];
-
-  await runFFmpeg(args, outPath).promise;
-  return outPath;
+  activeCropDisplay = null;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -1225,8 +1339,16 @@ export function clearAppendMode(): void {
 /**
  * Joins two clips into one H.264/AAC file at the first clip's size, capped to
  * what the encoder accepts, and returns its temp path.
+ *
+ * `secondCrop` cuts an appended area recording to its area. `target` is the
+ * project's crop in the first clip's pixels: the second clip is fitted into
+ * it, so it fills the cropped picture the editor shows.
  */
-export async function concatRecordings(firstPath: string, secondPath: string): Promise<string> {
+export async function concatRecordings(
+  firstPath: string,
+  secondPath: string,
+  options: { secondCrop?: CaptureBounds; target?: CaptureBounds } = {},
+): Promise<string> {
   const outPath = createTempPath('screenforge-concat', 'mp4');
 
   // Probe dimensions for output sizing. We always re-encode rather than stream-copying
@@ -1241,14 +1363,25 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
 
   // The first clip sets the size, capped to what the H.264 encoder accepts;
   // when it's capped, the first clip is scaled down too.
-  const fit = fitH264FrameSize(firstInfo.width ?? 1280, firstInfo.height ?? 800);
+  const firstWidth = firstInfo.width ?? 1280;
+  const firstHeight = firstInfo.height ?? 800;
+  const fit = fitH264FrameSize(firstWidth, firstHeight);
   const { width: w, height: h } = fit;
-  const scaleFilter = [
-    `scale=${w}:${h}:force_original_aspect_ratio=decrease`,
-    `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`,
-    'setsar=1',
-    'format=yuv420p',
-  ].join(',');
+  const scaleFilter = buildAppendClipFilter({ width: w, height: h });
+  // The target is in the first clip's pixels; follow it when the join is scaled.
+  const requestedTarget = toPixelBounds(options.target);
+  const target = requestedTarget && {
+    x: Math.round((requestedTarget.x * w) / firstWidth),
+    y: Math.round((requestedTarget.y * h) / firstHeight),
+    width: Math.round((requestedTarget.width * w) / firstWidth),
+    height: Math.round((requestedTarget.height * h) / firstHeight),
+  };
+  const secondFilter = buildAppendClipFilter({
+    width: w,
+    height: h,
+    sourceCrop: toPixelBounds(options.secondCrop),
+    target: toPixelBounds(target),
+  });
 
   const [firstHasAudio, secondHasAudio] = await Promise.all([
     hasAudioStream(firstPath),
@@ -1258,7 +1391,7 @@ export async function concatRecordings(firstPath: string, secondPath: string): P
 
   const filterParts = [
     fit.scaled ? `[0:v]${scaleFilter}[v0]` : `[0:v]format=yuv420p,setsar=1[v0]`,
-    `[1:v]${scaleFilter}[v1]`,
+    `[1:v]${secondFilter}[v1]`,
   ];
 
   if (withAudio) {
@@ -1373,9 +1506,33 @@ async function resolveWindowRecordingStartArea(sourceId: string): Promise<Record
   };
 }
 
+/**
+ * The display an area was selected on. The selector records it, because the
+ * primary display can change between selecting and pressing Record; if that
+ * display is gone, refuse rather than record a different screen.
+ */
+function resolveAreaDisplay(selectedOn: SelectedArea['display']): Electron.Display {
+  if (!selectedOn) {
+    return screen.getPrimaryDisplay();
+  }
+  const display = screen.getAllDisplays().find((d) => d.id === selectedOn.id);
+  if (!display) {
+    throw new Error(
+      'The display the area was selected on is no longer connected. Select the area again.',
+    );
+  }
+  // The area's coordinates describe the display at the size it had then.
+  if (display.bounds.width !== selectedOn.width || display.bounds.height !== selectedOn.height) {
+    throw new Error(
+      'The display the area was selected on has changed resolution. Select the area again.',
+    );
+  }
+  return display;
+}
+
 export async function startRecording(
   sourceId: string,
-  cropArea?: { x: number; y: number; width: number; height: number } | null,
+  cropArea?: SelectedArea | null,
   options?: { rendererCapture?: boolean },
 ): Promise<void> {
   const startedAt = Date.now();
@@ -1421,9 +1578,20 @@ export async function startRecording(
     );
   }
 
-  let display = resolveDisplayForSource(sourceId);
-  const sourceDisplayId = parseDisplayIdFromSource(sourceId);
+  // The area selector only opens on the primary display, so an area is always
+  // in the primary display's coordinates — record that display, whichever
+  // screen source the toolbar happened to pass.
+  const isAreaCapture = Boolean(cropArea) && !isWindowCapture;
+  let display = isAreaCapture
+    ? resolveAreaDisplay(cropArea?.display)
+    : resolveDisplayForSource(sourceId);
+  const sourceDisplayId = isAreaCapture
+    ? resolveDisplayId(display)
+    : parseDisplayIdFromSource(sourceId);
   const sourceWindowId = parseWindowIdFromSourceId(sourceId);
+  if (isAreaCapture) {
+    activeCropDisplay = { bounds: { ...display.bounds }, scaleFactor: display.scaleFactor };
+  }
 
   if (isWindowCapture) {
     let initialBounds = await resolveWindowRecordingStartArea(sourceId);
@@ -1454,11 +1622,31 @@ export async function startRecording(
     recordingArea = display.bounds;
   }
 
-  // Wayland: the renderer owns the capture (PipeWire portal stream recorded
-  // with MediaRecorder). The main process only anchors timing here; the webm
-  // arrives via stopRecording(). Global input hooks are blocked on Wayland,
-  // so cursor tracking is skipped and cursor effects degrade gracefully.
+  // Wayland: a screen picked through the capture helper is recorded by it,
+  // without the system pointer, which it reports apart for the drawn cursor.
+  // Otherwise (a window, or no helper) the renderer records Chromium's share
+  // with MediaRecorder and the webm arrives via stopRecording(); global input
+  // hooks are blocked on Wayland, so those recordings have no pointer moves.
   if (process.platform === 'linux' && isWaylandSession()) {
+    if (!options?.rendererCapture && hasWaylandShare()) {
+      const outPath = createTempPath('screenforge-wayland', 'mp4');
+      const { fps } = await startWaylandShareRecording(await getFFmpegPath(), outPath);
+      shareCapturePath = outPath;
+      shareCaptureActive = true;
+      emitRecordingActivityChanged();
+      recordingStartTime = Date.now();
+      // A pointer that holds still sends no moves: start from where it was last reported.
+      const pointer = getWaylandSharePointer();
+      if (pointer) {
+        recordPointerMove(pointer.x, pointer.y);
+      }
+      log.info('[recording:wayland] share capture started', {
+        recordingStartTime,
+        fps,
+        startupLatencyMs: Date.now() - startedAt,
+      });
+      return;
+    }
     if (!options?.rendererCapture) {
       throw new Error(
         'Screen recording on Wayland uses the system screen-share dialog, which could not be started. Please try again.',
@@ -1476,45 +1664,15 @@ export async function startRecording(
 
   const outPath = createTempPath('screenforge', 'mp4');
 
-  if (shouldUseNativeCapture()) {
-    log.info('[recording] using native capture helper');
-    await startNativeCapture(display, outPath, sourceDisplayId, sourceWindowId);
-    recordingStartTime = Date.now();
-    log.info('[recording:native] recordingStartTime set after "Recording started"', {
-      recordingStartTime,
-      nativeMediaStartTimeAtSet: nativeMediaStartTime,
-      alreadyHaveMediaStart: nativeMediaStartTime !== null,
-    });
-    if (activeWindowRecording && recordingBoundsTimeline.length === 0) {
-      ensureRecordingBoundsSample({ ...recordingArea, timestamp: recordingStartTime });
-    }
-    // CGEventTap in the helper replaces uiohook-napi on macOS 13+
-  } else {
-    const bin = await getFFmpegPath();
-    const captureArea = isWindowCapture && recordingArea ? recordingArea : undefined;
-    ffmpegCaptureSpawn = {
-      bin,
-      buildArgs: (segmentPath) => buildCaptureArgs(display, segmentPath, captureArea),
-    };
-    ffmpegSegments = [];
-    ffmpegSegmentTransition = Promise.resolve();
-
-    // Wait until FFmpeg opens the output file before starting mouse tracking.
-    try {
-      await startFFmpegSegment(outPath);
-    } catch (error) {
-      ffmpegCaptureSpawn = null;
-      emitRecordingActivityChanged();
-      throw error;
-    }
-
-    recordingStartTime = Date.now();
-    try {
-      await startCursorTracking();
-    } catch (error) {
-      await stopFFmpegCapture().catch(() => undefined);
-      throw error;
-    }
+  // Watch from before the capture starts: a display unplugged while FFmpeg or
+  // the native helper is still starting must not leave a dead recording.
+  watchDisplaysDuringRecording(isWindowCapture ? null : resolveDisplayId(display));
+  try {
+    await startCapture();
+  } catch (error) {
+    unwatchDisplaysDuringRecording();
+    activeCropDisplay = null;
+    throw error;
   }
 
   log.info('[recording] start completed', {
@@ -1522,6 +1680,49 @@ export async function startRecording(
     outputPath: outPath,
     startupLatencyMs: Date.now() - startedAt,
   });
+
+  async function startCapture(): Promise<void> {
+    if (shouldUseNativeCapture()) {
+      log.info('[recording] using native capture helper');
+      await startNativeCapture(display, outPath, sourceDisplayId, sourceWindowId);
+      recordingStartTime = Date.now();
+      log.info('[recording:native] recordingStartTime set after "Recording started"', {
+        recordingStartTime,
+        nativeMediaStartTimeAtSet: nativeMediaStartTime,
+        alreadyHaveMediaStart: nativeMediaStartTime !== null,
+      });
+      if (activeWindowRecording && recordingBoundsTimeline.length === 0) {
+        ensureRecordingBoundsSample({ ...recordingArea, timestamp: recordingStartTime });
+      }
+      // CGEventTap in the helper replaces uiohook-napi on macOS 13+
+    } else {
+      const bin = await getFFmpegPath();
+      const captureArea = isWindowCapture && recordingArea ? recordingArea : undefined;
+      ffmpegCaptureSpawn = {
+        bin,
+        buildArgs: (segmentPath) => buildCaptureArgs(display, segmentPath, captureArea),
+      };
+      ffmpegSegments = [];
+      ffmpegSegmentTransition = Promise.resolve();
+
+      // Wait until FFmpeg opens the output file before starting mouse tracking.
+      try {
+        await startFFmpegSegment(outPath);
+      } catch (error) {
+        ffmpegCaptureSpawn = null;
+        emitRecordingActivityChanged();
+        throw error;
+      }
+
+      recordingStartTime = Date.now();
+      try {
+        await startCursorTracking();
+      } catch (error) {
+        await stopFFmpegCapture().catch(() => undefined);
+        throw error;
+      }
+    }
+  }
 }
 
 export async function stopRecording(rendererCapture?: {
@@ -1537,8 +1738,10 @@ export async function stopRecording(rendererCapture?: {
   captureBoundsTimeline?: RecordingBoundsSample[];
   hasEmbeddedAudio: boolean;
   filePath: string;
+  areaCrop?: AreaCrop;
 }> {
   log.info('[recording] stop requested');
+  unwatchDisplaysDuringRecording();
   // Let an in-flight FFmpeg pause/resume settle so its pause span is closed.
   await ffmpegSegmentTransition;
   const wallStopTime = Date.now();
@@ -1546,8 +1749,27 @@ export async function stopRecording(rendererCapture?: {
   const wallStopTimeActive = computeActiveStopTime(recordingStartTime, wallStopTime, pauseSpans);
   const wallDurationMs = computeActiveDurationMs(recordingStartTime, wallStopTime, pauseSpans);
   let filePath: string;
+  // On Wayland the screen-share picker chose the monitor, so the video isn't
+  // necessarily the display the area was drawn on.
+  const fromScreenSharePicker = rendererCaptureActive || shareCaptureActive;
 
-  if (rendererCaptureActive) {
+  if (shareCaptureActive) {
+    shareCaptureActive = false;
+    emitRecordingActivityChanged();
+    const result = await finishWaylandShareRecording();
+    const picked = getWaylandShare();
+    endWaylandShare();
+    filePath = shareCapturePath ?? '';
+    shareCapturePath = null;
+    if (!result.ok || result.frames === 0 || !picked) {
+      throw new Error('The screen recording could not be saved.');
+    }
+    if (result.late > 0) {
+      log.warn('[recording:wayland] the encoder fell behind', result);
+    }
+    // The pointer moves are in desktop coordinates, the screen's own space.
+    recordingArea = { ...picked.screen };
+  } else if (rendererCaptureActive) {
     rendererCaptureActive = false;
     emitRecordingActivityChanged();
     if (!rendererCapture?.webmPath) {
@@ -1579,24 +1801,62 @@ export async function stopRecording(rendererCapture?: {
     filePath = await stopFFmpegCapture();
   }
 
-  // Apply crop if an active crop area was set before recording started
-  const cropAreaToApply = activeCropArea;
+  // An area recording keeps the whole display. Re-encoding it down to the area
+  // here took about half the recording's length (minutes for long takes), so
+  // the editor crops it instead: measure the area's exact pixels in the video.
+  const selectedArea = activeCropArea;
+  const areaDisplay = activeCropDisplay ?? screen.getPrimaryDisplay();
   clearActiveCropArea();
 
-  if (cropAreaToApply) {
-    try {
-      const display = screen.getPrimaryDisplay();
-      const scaleFactor = display.scaleFactor ?? 1;
-      log.info('[recording] applying crop area', { cropAreaToApply, scaleFactor });
-      filePath = await cropRecording(filePath, cropAreaToApply, scaleFactor);
-      recordingArea = {
-        x: cropAreaToApply.x,
-        y: cropAreaToApply.y,
-        width: cropAreaToApply.width,
-        height: cropAreaToApply.height,
+  let areaCrop: AreaCrop | undefined;
+  if (selectedArea) {
+    const scaleFactor = areaDisplay.scaleFactor ?? 1;
+    const probed = await probeExportSource(filePath);
+    const stream =
+      rendererCapture?.width && rendererCapture?.height
+        ? { width: rendererCapture.width, height: rendererCapture.height }
+        : null;
+    // A native or X11 capture records the area's own display, so its size can
+    // be assumed when the probe fails; a picker stream's can't.
+    const video =
+      probed.width && probed.height
+        ? { width: probed.width, height: probed.height }
+        : fromScreenSharePicker
+          ? stream
+          : {
+              width: Math.round(areaDisplay.bounds.width * scaleFactor),
+              height: Math.round(areaDisplay.bounds.height * scaleFactor),
+            };
+    // Drawn on a still of the picked stream (Wayland): the video is that picture, maybe scaled.
+    // Otherwise the picker gives no monitor id, so a picker stream must be the area
+    // display at its exact pixel size; a capture of that display only needs
+    // its shape (it may be scaled down). Identical monitors still can't be
+    // told apart from a picker stream.
+    const drawnOn = selectedArea.frame ?? areaDisplay.bounds;
+    const isAreaDisplay =
+      video !== null &&
+      (selectedArea.frame
+        ? matchesDisplayShape(video, selectedArea.frame)
+        : fromScreenSharePicker
+          ? matchesDisplaySize(video, areaDisplay.bounds, scaleFactor)
+          : matchesDisplayShape(video, areaDisplay.bounds));
+    if (video && isAreaDisplay) {
+      areaCrop = {
+        ...computeAreaCropPixels(selectedArea, drawnOn, video),
+        sourceWidth: video.width,
+        sourceHeight: video.height,
       };
-    } catch (err) {
-      log.error('[recording] cropRecording failed, using uncropped output:', err);
+      log.info('[recording] area crop', { selectedArea, scaleFactor, video, areaCrop });
+    } else {
+      // Not a video of the display the area was drawn on: open it uncropped
+      // rather than crop the wrong picture.
+      log.warn('[recording] video does not match the area display, not cropping', {
+        selectedArea,
+        display: areaDisplay.bounds,
+        scaleFactor,
+        video,
+        fromScreenSharePicker,
+      });
     }
   }
 
@@ -1700,11 +1960,13 @@ export async function stopRecording(rendererCapture?: {
     captureBoundsTimeline,
     hasEmbeddedAudio,
     filePath,
+    areaCrop,
   };
 }
 
 export async function discardRecording(): Promise<void> {
   log.info('[recording] discard requested');
+  unwatchDisplaysDuringRecording();
   appendMode = false;
   clearActiveCropArea();
 
@@ -1714,6 +1976,14 @@ export async function discardRecording(): Promise<void> {
       // Wayland: the renderer discards its own MediaRecorder chunks.
       rendererCaptureActive = false;
       emitRecordingActivityChanged();
+    } else if (shareCaptureActive) {
+      shareCaptureActive = false;
+      endWaylandShare();
+      emitRecordingActivityChanged();
+      if (shareCapturePath) {
+        filePaths = [shareCapturePath];
+      }
+      shareCapturePath = null;
     } else if (captureProc) {
       filePaths = [await stopNativeCapture()];
     } else {
@@ -1754,6 +2024,10 @@ export function pauseRecording(): void {
     // bookkeeping above is needed here.
     return;
   }
+  if (shareCaptureActive) {
+    pauseWaylandShareRecording();
+    return;
+  }
 
   if (captureProc) {
     // Use stdin message instead of SIGSTOP to avoid AVAssetWriter timestamp corruption
@@ -1785,6 +2059,20 @@ export function resumeRecording(): void {
 
   if (rendererCaptureActive) {
     endPauseSpan();
+    return;
+  }
+  if (shareCaptureActive) {
+    resumeWaylandShareRecording();
+    endPauseSpan();
+    // Moves made while paused were dropped: carry on from where the pointer is now.
+    const pointer = getWaylandSharePointer();
+    if (pointer) {
+      // The paused moves still moved the throttle along: start it afresh.
+      lastMoveX = -1;
+      lastMoveY = -1;
+      lastMoveMs = 0;
+      recordPointerMove(pointer.x, pointer.y);
+    }
     return;
   }
 

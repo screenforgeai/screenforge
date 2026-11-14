@@ -3,7 +3,11 @@ import type { RecordingResult, ProjectCursorSettings } from '../../types/index';
 import type { MediaSegment } from '../../types/timeline';
 import type { CursorData } from '../effects/cursor';
 import type { MusicClip } from '../timeline';
-import { buildClickSoundHits, scheduleCursorClickSound } from '../effects/cursor/audio';
+import {
+  buildClickSoundHits,
+  loadCursorClickSound,
+  scheduleCursorClickSound,
+} from '../effects/cursor/audio';
 import { isMediaTrackEnabled } from '../helpers/segments';
 import { resolveAudioDecodeCandidates } from '../recording/audioSource';
 
@@ -283,6 +287,9 @@ export async function renderTimelineAudio(
   }
 
   if (hasCursorClickAudio) {
+    // Recorded click sounds must be decoded before they can be scheduled.
+    await loadCursorClickSound(offline, cursor.clickSound);
+    assertNotAborted(signal);
     for (const hit of buildClickSoundHits(clickEvents, pressEvents)) {
       if (hit.t < 0 || hit.t > duration) {
         continue;

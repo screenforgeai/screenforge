@@ -1,5 +1,5 @@
 /** Lets any part of the app open Settings on a given section. */
-export type SettingsSection = 'profile' | 'language' | 'director';
+export type SettingsSection = 'profile' | 'language' | 'director' | 'privacy';
 
 const listeners = new Set<(section: SettingsSection) => void>();
 let pending: SettingsSection | null = null;

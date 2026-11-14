@@ -4,6 +4,8 @@
   "checking": "確認中...",
   "retryUpdate": "アップデートを再試行",
   "updateReady": "アップデート準備完了",
+  "updateAvailable": "アップデートがあります",
+  "updateAvailableTitle": "{{version}}が公開されました。ダウンロードして、Screenforgeをインストールしたときと同じ方法でインストールしてください。",
   "readyLabel": "アップデート準備完了 · {{version}}",
   "restartWhenDone": "終了したら再起動",
   "updateDesc": "{{version}}のダウンロードがバックグラウンドで完了しました。Screenforgeは再起動前に作業を保存します。",

@@ -19,6 +19,7 @@ import {
   defaultZoomClip,
   inferZoomDefaultsAtTime,
 } from 'src/lib/effects/zoom';
+import { getZoomCrop, toCropSpaceRecording } from 'src/lib/effects/zoom/crop-space';
 import type { CinematicTiltDirection } from 'src/types/timeline';
 import {
   Button,
@@ -56,9 +57,11 @@ export const ZoomWidget = () => {
     currentTime,
     selectedClip,
     requestSeekTo,
+    zoomCrop,
   } = useStore(
     useShallow((state) => ({
       recordingResult: state.recordingResult,
+      zoomCrop: getZoomCrop(state),
       zoomClips: state.zoomClips,
       commitEdit: state.commitEdit,
       beginHistoryGroup: state.beginHistoryGroup,
@@ -83,7 +86,11 @@ export const ZoomWidget = () => {
 
   const handleAddZoom = (preset: 'standard' | 'cinematic' = 'standard') => {
     const start = currentTime;
-    const defaults = inferZoomDefaultsAtTime(recordingResult, currentTime);
+    // Zoom targets are positions in the cropped picture.
+    const defaults = inferZoomDefaultsAtTime(
+      toCropSpaceRecording(recordingResult, zoomCrop),
+      currentTime,
+    );
     const scale =
       defaults.confidence >= ADD_ZOOM_MIN_CONFIDENCE ? defaults.scale : ADD_ZOOM_FALLBACK_SCALE;
     const clip =
@@ -344,6 +351,7 @@ export const ZoomWidget = () => {
                               <ZoomPositionPicker
                                 videoPath={recordingResult.filePath}
                                 videoTime={currentTime}
+                                crop={zoomCrop}
                                 cx={clip.cx}
                                 cy={clip.cy}
                                 scale={clip.scale}

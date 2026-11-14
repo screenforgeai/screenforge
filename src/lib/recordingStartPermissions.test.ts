@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ACCESSIBILITY_PERMISSION_RESTART_REQUIRED_MESSAGE,
   ensureRecordingStartPermissions,
+  ensureScreenCapturePermission,
   SCREEN_RECORDING_PERMISSION_RESTART_REQUIRED_MESSAGE,
   SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE,
   type RecordingStartPermissionAPI,
@@ -93,5 +94,29 @@ describe('ensureRecordingStartPermissions', () => {
     );
 
     expect(api.openSystemSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe('ensureScreenCapturePermission', () => {
+  it('needs only screen access, never Accessibility', async () => {
+    const api = createPermissionApi({
+      getAccessibilityPermissionStatus: vi.fn().mockResolvedValue('denied'),
+    });
+
+    await expect(ensureScreenCapturePermission(api)).resolves.toBeUndefined();
+
+    expect(api.getAccessibilityPermissionStatus).not.toHaveBeenCalled();
+    expect(api.requestAccessibilityAccess).not.toHaveBeenCalled();
+  });
+
+  it('opens screen settings and throws when screen access is missing', async () => {
+    const api = createPermissionApi({
+      requestScreenAccess: vi.fn().mockResolvedValue('denied'),
+    });
+
+    await expect(ensureScreenCapturePermission(api)).rejects.toThrow(
+      SCREEN_RECORDING_PERMISSION_REQUIRED_MESSAGE,
+    );
+    expect(api.openSystemSettings).toHaveBeenCalledWith('screen');
   });
 });

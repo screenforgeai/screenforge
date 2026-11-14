@@ -1,4 +1,5 @@
 import type { PixiEffect } from '../../pixi/types';
+import { smoothFilterEdges } from '../../pixi/smoothEdges';
 import type { RenderContext } from '../types';
 import { useStore } from '../../../store';
 import { isIdentityMotion } from '../../animation/sceneMotion';
@@ -21,7 +22,8 @@ export const motionPixiEffect: PixiEffect<null> = {
 
   setup(_data, _allData, scene) {
     const container = scene.motionContainer;
-    const tiltFilter = new SceneTiltFilter();
+    // The tilt wraps the frame: keep its rounded corners antialiased.
+    const tiltFilter = smoothFilterEdges(new SceneTiltFilter());
     tiltFilter.enabled = false;
     container.filters = [tiltFilter];
 

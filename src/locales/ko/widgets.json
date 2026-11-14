@@ -17,5 +17,8 @@
   "comingSoon": "출시 예정",
   "unsavedRecording_title": "저장되지 않은 녹화",
   "unsavedRecording_desc": "저장되지 않은 녹화가 있습니다.",
-  "discard": "버리기"
+  "discard": "버리기",
+  "takeScreenshot": "스크린샷 찍기",
+  "importImage": "이미지 가져오기",
+  "openImageFailed": "이 파일을 이미지로 열 수 없습니다."
 }

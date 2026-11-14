@@ -24,6 +24,9 @@ export default defineConfig(({ mode }) => {
       'process.env.SCREENFORGE_WIN_UPDATE_BASE_URL': JSON.stringify(
         env.SCREENFORGE_WIN_UPDATE_BASE_URL ?? '',
       ),
+      'process.env.SCREENFORGE_LINUX_RELEASES_URL': JSON.stringify(
+        env.SCREENFORGE_LINUX_RELEASES_URL ?? '',
+      ),
     },
   };
 });

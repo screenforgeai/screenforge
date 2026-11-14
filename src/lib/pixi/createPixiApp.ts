@@ -64,7 +64,8 @@ export async function createPreviewPixiApp(canvas: HTMLCanvasElement): Promise<P
   await app.init({
     canvas,
     backgroundAlpha: 0,
-    antialias: false,
+    // 4× MSAA: rounded corners, masks, click rings and shapes have smooth edges, not steps.
+    antialias: true,
     // Project thumbnails read the preview canvas via toDataURL(). WebGL may
     // otherwise expose a cleared buffer even when the on-screen preview is fine.
     preserveDrawingBuffer: true,
@@ -87,8 +88,8 @@ export async function createPreviewPixiApp(canvas: HTMLCanvasElement): Promise<P
  * resolution=1 — renderSizing scales the canvas to the encoder target resolution
  * so captureTimeline's drawImage step is always a 1:1 pixel blit.
  * autoStart=false — captureTimeline drives rendering one frame at a time.
- * antialias=false — MSAA disabled to avoid per-frame GPU overhead; the 1:1 blit
- * means there is no downstream downscale that would otherwise justify MSAA.
+ * antialias=true — 4× MSAA, as in the preview: rounded corners, masks, click rings and
+ * shapes are drawn as geometry, whose edges step without it (the 1:1 blit cannot smooth them).
  */
 export async function createExportPixiApp(width: number, height: number): Promise<PixiScene> {
   const app = new Application();
@@ -97,7 +98,7 @@ export async function createExportPixiApp(width: number, height: number): Promis
     width,
     height,
     backgroundAlpha: 0,
-    antialias: false,
+    antialias: true,
     failIfMajorPerformanceCaveat: false,
     // preserveDrawingBuffer so the WebGL backbuffer remains readable after render()
     // and before the next render call — VideoFrame reads directly from the WebGL

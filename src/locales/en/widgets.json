@@ -18,5 +18,8 @@
   "comingSoon": "Coming soon",
   "unsavedRecording_title": "Unsaved recording",
   "unsavedRecording_desc": "You have an unsaved recording.",
-  "discard": "Discard"
+  "discard": "Discard",
+  "takeScreenshot": "Take screenshot",
+  "importImage": "Import image",
+  "openImageFailed": "That file couldn't be opened as an image."
 }
