@@ -49,7 +49,7 @@ const okWithEtag = (etag: string) => new Response(null, { status: 200, headers: 
 const parts = (n: number) =>
   Array.from({ length: n }, (_, i) => ({
     partNumber: i + 1,
-    url: `https://r2.test/part-${i + 1}`,
+    url: `https://acct.r2.cloudflarestorage.com/part-${i + 1}`,
   }));
 
 describe('partRange', () => {
@@ -85,10 +85,10 @@ describe('uploadParts', () => {
       { partNumber: 2, etag: '"etag-2"' },
       { partNumber: 3, etag: '"etag-3"' },
     ]);
-    expect(Array.from(received.get('https://r2.test/part-1') ?? [])).toEqual(
+    expect(Array.from(received.get('https://acct.r2.cloudflarestorage.com/part-1') ?? [])).toEqual(
       Array.from(bytes.subarray(0, 10)),
     );
-    expect(Array.from(received.get('https://r2.test/part-3') ?? [])).toEqual(
+    expect(Array.from(received.get('https://acct.r2.cloudflarestorage.com/part-3') ?? [])).toEqual(
       Array.from(bytes.subarray(20, 25)),
     );
     const lengths = fetch.mock.calls.map(
@@ -297,5 +297,59 @@ describe('uploadParts', () => {
     ).rejects.toMatchObject({ name: 'PartUploadError', status: 403 });
     expect(signals.slice(1).every((s) => s.aborted)).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('part URL checks', () => {
+  const upload = (urls: string[], allowLoopback?: boolean) => {
+    const { source, reads } = memorySource(fileOf(10 * urls.length));
+    const fetch = vi.fn(async () => okWithEtag('"e"'));
+    const result = uploadParts({
+      source,
+      sizeBytes: 10 * urls.length,
+      partSize: 10,
+      parts: urls.map((url, i) => ({ partNumber: i + 1, url })),
+      fetch,
+      allowLoopback,
+      sleep: async () => undefined,
+    });
+    return { result, reads, fetch };
+  };
+
+  it.each([
+    'https://evil.example/part-2',
+    'http://acct.r2.cloudflarestorage.com/part-2',
+    'https://r2.cloudflarestorage.com.evil.example/part-2',
+    'https://evilr2.cloudflarestorage.com/part-2',
+    'file:///etc/passwd',
+    'not a url',
+    'http://localhost:9000/part-2',
+  ])('refuses %s before reading or sending any bytes', async (bad) => {
+    const { result, reads, fetch } = upload(['https://acct.r2.cloudflarestorage.com/part-1', bad]);
+    await expect(result).rejects.toThrow(/upload URL/);
+    expect(reads).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('accepts Cloudflare R2 hosts', async () => {
+    const { result, fetch } = upload([
+      'https://r2.cloudflarestorage.com/bucket/part-1',
+      'https://acct.r2.cloudflarestorage.com/part-2',
+      'https://bucket.acct.eu.r2.cloudflarestorage.com/part-3',
+    ]);
+    await expect(result).resolves.toHaveLength(3);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('allows http on this computer only when Director itself is local', async () => {
+    const local = upload(
+      ['http://localhost:9000/part-1', 'http://127.0.0.1:9000/part-2', 'http://[::1]:9000/part-3'],
+      true,
+    );
+    await expect(local.result).resolves.toHaveLength(3);
+
+    const elsewhere = upload(['http://evil.example/part-1'], true);
+    await expect(elsewhere.result).rejects.toThrow(/upload URL/);
+    expect(elsewhere.fetch).not.toHaveBeenCalled();
   });
 });

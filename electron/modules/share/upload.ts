@@ -46,9 +46,27 @@ export interface UploadPartsOptions {
   /** Bytes read from disk per step; also how often progress moves. */
   chunkSize?: number;
   signal?: AbortSignal;
+  /** Also accept http part URLs on this computer (Director itself runs locally). */
+  allowLoopback?: boolean;
   /** Bytes sent so far in this call (falls back when a part is retried). */
   onProgress?: (uploadedBytes: number) => void;
   sleep?: (ms: number) => Promise<void>;
+}
+
+const R2_HOST = 'r2.cloudflarestorage.com';
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** Director signs Cloudflare R2 URLs; the file's bytes go nowhere else. */
+export function isAllowedPartUrl(value: string, allowLoopback = false): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:') {
+      return url.hostname === R2_HOST || url.hostname.endsWith(`.${R2_HOST}`);
+    }
+    return allowLoopback && url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 const DEFAULT_CONCURRENCY = 3;
@@ -100,6 +118,11 @@ export async function uploadParts(options: UploadPartsOptions): Promise<Uploaded
     chunkSize = DEFAULT_CHUNK_SIZE,
     onProgress,
   } = options;
+
+  // Checked before any byte is read: a bad URL fails the whole upload for good.
+  if (options.parts.some((part) => !isAllowedPartUrl(part.url, options.allowLoopback))) {
+    throw new Error('Director sent an upload URL outside its storage.');
+  }
 
   // One controller for every part: the caller's cancel, or a part that failed for good.
   const controller = new AbortController();

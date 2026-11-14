@@ -41,15 +41,19 @@ const share = (over: Partial<DirectorShare> = {}): DirectorShare => ({
 });
 
 const targets = (numbers: number[]) =>
-  numbers.map((partNumber) => ({ partNumber, url: `https://r2.test/sh1/${partNumber}` }));
+  numbers.map((partNumber) => ({
+    partNumber,
+    url: `https://acct.r2.cloudflarestorage.com/sh1/${partNumber}`,
+  }));
 
 interface SetupOptions {
   size?: number;
   mtimeMs?: number;
   fetch?: typeof globalThis.fetch;
+  allowLoopbackUploads?: boolean;
 }
 
-const setup = ({ size = 25, mtimeMs = 1000, fetch }: SetupOptions = {}) => {
+const setup = ({ size = 25, mtimeMs = 1000, fetch, allowLoopbackUploads }: SetupOptions = {}) => {
   let file: { size: number; mtimeMs: number } | null = { size, mtimeMs };
   const bytes = new Uint8Array(size);
   const api = {
@@ -92,6 +96,7 @@ const setup = ({ size = 25, mtimeMs = 1000, fetch }: SetupOptions = {}) => {
     onLibrary: (l) => libraries.push(l),
     now: () => Date.parse('2026-11-06T12:00:00.000Z'),
     sleep: async () => undefined,
+    allowLoopbackUploads,
   });
   const changeFile = (next: { size: number; mtimeMs: number } | null) => {
     file = next;
@@ -219,8 +224,8 @@ describe('share manager', () => {
     expect(api.create).toHaveBeenCalledTimes(1);
     expect(api.resume).toHaveBeenCalledWith('sh1');
     expect(fetch.mock.calls.map(([url]) => String(url))).toEqual([
-      'https://r2.test/sh1/2',
-      'https://r2.test/sh1/3',
+      'https://acct.r2.cloudflarestorage.com/sh1/2',
+      'https://acct.r2.cloudflarestorage.com/sh1/3',
     ]);
     expect(api.complete).toHaveBeenLastCalledWith('sh1', [
       { partNumber: 1, etag: '"e1"' },
@@ -308,7 +313,102 @@ describe('share manager', () => {
     expect(await store.getLinks()).toEqual({});
   });
 
+  it('fails a share whose part URLs are not Cloudflare R2, sending nothing and keeping nothing', async () => {
+    const { manager, api, store, fetch } = setup();
+    api.create.mockResolvedValueOnce({
+      share: share({ status: 'uploading', watchUrl: null, sharedAt: null }),
+      upload: {
+        partSize: 10,
+        parts: [
+          { partNumber: 1, url: 'https://acct.r2.cloudflarestorage.com/sh1/1' },
+          { partNumber: 2, url: 'https://evil.example/sh1/2' },
+          { partNumber: 3, url: 'https://acct.r2.cloudflarestorage.com/sh1/3' },
+        ],
+      },
+    });
+    expect(await manager.share(REQUEST)).toMatchObject({
+      status: 'failed',
+      error: 'failed',
+      resumable: false,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(api.complete).not.toHaveBeenCalled();
+    expect(api.remove).toHaveBeenCalledWith('sh1');
+    expect(await store.getUploads()).toEqual([]);
+  });
+
+  it('uploads to local part URLs only when Director itself is local', async () => {
+    const localParts = {
+      partSize: 10,
+      parts: [1, 2, 3].map((partNumber) => ({
+        partNumber,
+        url: `http://localhost:9000/sh1/${partNumber}`,
+      })),
+    };
+    const remote = setup();
+    remote.api.create.mockResolvedValueOnce({
+      share: share({ status: 'uploading', watchUrl: null, sharedAt: null }),
+      upload: localParts,
+    });
+    expect(await remote.manager.share(REQUEST)).toMatchObject({
+      status: 'failed',
+      error: 'failed',
+    });
+    expect(remote.fetch).not.toHaveBeenCalled();
+
+    const local = setup({ allowLoopbackUploads: true });
+    local.api.create.mockResolvedValueOnce({
+      share: share({ status: 'uploading', watchUrl: null, sharedAt: null }),
+      upload: localParts,
+    });
+    expect((await local.manager.share(REQUEST)).status).toBe('done');
+    expect(local.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'http://director.screenforge.co/s/sh1',
+    'file:///etc/passwd',
+    'smb://host/share',
+    'not a url',
+  ])('keeps no watch link when Director sends %s', async (watchUrl) => {
+    const { manager, api, clipboard, store } = setup();
+    api.complete.mockResolvedValueOnce(share({ watchUrl }));
+    const result = await manager.share(REQUEST);
+    expect(result).toMatchObject({ status: 'done', copied: false, link: { watchUrl: null } });
+    expect(clipboard).not.toHaveBeenCalled();
+    expect((await store.getLinks()).p1?.watchUrl).toBeNull();
+  });
+
+  it('keeps an https watch link on a customer’s own domain', async () => {
+    const { manager, api, clipboard } = setup();
+    api.complete.mockResolvedValueOnce(share({ watchUrl: 'https://help.customer.example/s/sh1' }));
+    expect(await manager.share(REQUEST)).toMatchObject({
+      link: { watchUrl: 'https://help.customer.example/s/sh1' },
+      copied: true,
+    });
+    expect(clipboard).toHaveBeenCalledWith('https://help.customer.example/s/sh1');
+  });
+
   describe('library', () => {
+    it('drops an unsafe watch link already saved, in the library and when copying', async () => {
+      const { manager, api, store, clipboard } = setup();
+      await store.setLink('p1', {
+        shareId: 'sh1',
+        title: 'Demo',
+        watchUrl: 'javascript:alert(1)',
+        expiresAt: '2026-12-06T10:00:00.000Z',
+        status: 'live',
+        sharedAt: null,
+      });
+      expect((await manager.getLibrary()).links.p1?.watchUrl).toBeNull();
+      expect(await manager.copyLink('p1')).toBe(false);
+      expect(clipboard).not.toHaveBeenCalled();
+
+      api.list.mockResolvedValueOnce([share({ watchUrl: 'file:///etc/passwd' })]);
+      expect((await manager.refreshLibrary()).links.p1?.watchUrl).toBeNull();
+    });
+
     it('refreshes links from Director: expired and removed ones show as such', async () => {
       const { manager, api, store } = setup();
       await store.setLink('p1', {

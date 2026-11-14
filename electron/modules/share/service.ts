@@ -3,6 +3,7 @@ import path from 'node:path';
 import { app, BrowserWindow, clipboard } from 'electron';
 import log from '../../lib/logger';
 import { CH } from '../../channels';
+import { directorApiBase, isLoopbackUrl } from '../director/client';
 import { getDirectorAccount, getDirectorClient } from '../director/service';
 import { createShareApi } from './api';
 import { createShareManager, type ShareManager } from './shares';
@@ -59,6 +60,7 @@ export function getShareManager(): ShareManager {
       broadcast(CH.share.STATE_CHANGED, state);
     },
     onLibrary: (library) => broadcast(CH.share.LIBRARY_CHANGED, library),
+    allowLoopbackUploads: isLoopbackUrl(directorApiBase(process.env)),
   });
   return manager;
 }

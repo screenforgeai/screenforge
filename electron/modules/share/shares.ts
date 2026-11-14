@@ -37,6 +37,8 @@ export interface ShareManagerDeps {
   onLibrary: (library: ShareLibrary) => void;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  /** Director runs on this computer, so its storage may too (http on localhost). */
+  allowLoopbackUploads?: boolean;
 }
 
 export function contentTypeFor(filePath: string): ShareContentType | null {
@@ -79,6 +81,21 @@ export function shareErrorCode(err: unknown): ShareErrorCode {
   return 'failed';
 }
 
+/**
+ * A watch link is opened and copied, so only https is kept. The host can't be
+ * pinned: Director builds it from the workspace's site, which may be a custom domain.
+ */
+export function safeWatchUrl(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).protocol === 'https:' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 const isAbort = (err: unknown) => err instanceof Error && err.name === 'AbortError';
 
 const cleanTitle = (title: string) =>
@@ -106,6 +123,10 @@ export function createShareManager(deps: ShareManagerDeps) {
       ? { ...link, status: 'expired' }
       : link;
 
+  /** A saved link as shown: local expiry applied, and no watch link that isn't https. */
+  const fromStore = (link: ProjectShareLink): ProjectShareLink =>
+    withLocalExpiry({ ...link, watchUrl: safeWatchUrl(link.watchUrl) });
+
   const toLink = (share: DirectorShare, title: string, justCompleted = false): ProjectShareLink => {
     const status: ProjectShareLink['status'] =
       share.status === 'expired'
@@ -116,7 +137,7 @@ export function createShareManager(deps: ShareManagerDeps) {
     return withLocalExpiry({
       shareId: share.id,
       title: share.title || title,
-      watchUrl: share.watchUrl,
+      watchUrl: safeWatchUrl(share.watchUrl),
       expiresAt: share.expiresAt,
       status,
       sharedAt: share.sharedAt,
@@ -136,7 +157,7 @@ export function createShareManager(deps: ShareManagerDeps) {
     }
     return {
       links: Object.fromEntries(
-        Object.entries(links).map(([projectId, link]) => [projectId, withLocalExpiry(link)]),
+        Object.entries(links).map(([projectId, link]) => [projectId, fromStore(link)]),
       ),
       pending,
     };
@@ -276,6 +297,7 @@ export function createShareManager(deps: ShareManagerDeps) {
           fetch: deps.fetch,
           signal,
           sleep: deps.sleep,
+          allowLoopback: deps.allowLoopbackUploads,
           onProgress: (bytes) => emitProgress(baseBytes + bytes, baseBytes + bytes >= file.size),
         });
       } finally {
@@ -408,10 +430,11 @@ export function createShareManager(deps: ShareManagerDeps) {
 
     async copyLink(projectId: string): Promise<boolean> {
       const link = (await deps.store.getLinks())[projectId];
-      if (!link?.watchUrl) {
+      const watchUrl = safeWatchUrl(link?.watchUrl);
+      if (!watchUrl) {
         return false;
       }
-      deps.writeClipboard(link.watchUrl);
+      deps.writeClipboard(watchUrl);
       return true;
     },
   };

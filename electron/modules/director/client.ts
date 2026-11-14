@@ -7,6 +7,18 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+/** True for an http(s) URL on this computer (localhost, 127.0.0.1, [::1]). */
+export function isLoopbackUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') && LOOPBACK_HOSTS.has(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function directorApiBase(env: Record<string, string | undefined>): string {
   const override = env.SCREENFORGE_DIRECTOR_API_URL?.trim();
   const base = (override || DEFAULT_DIRECTOR_API_URL).replace(/\/+$/, '');
