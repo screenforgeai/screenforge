@@ -30,15 +30,21 @@ afterEach(() => {
 describe('DirectorAccountPanel', () => {
   it('explains what signing in adds, and that it is optional', async () => {
     showing({ status: 'signed-out' });
-    expect(await screen.findByText(/share videos as links/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /sign in with director/i }));
+    // The text names Screenforge Director; the button stays short.
+    expect(
+      await screen.findByText(/sign in to a screenforge director workspace to share videos/i),
+    ).toBeInTheDocument();
+    const signIn = screen.getByRole('button', { name: 'Sign in' });
+    // The Director mark sits in the button, decorative so the name stays "Sign in".
+    expect(signIn.querySelector('svg[data-director-mark][aria-hidden="true"]')).not.toBeNull();
+    fireEvent.click(signIn);
     expect(api.signInToDirector).toHaveBeenCalled();
   });
 
   it('logs, rather than leaves unhandled, a sign-in or cancel the main process rejects', async () => {
     api.signInToDirector.mockRejectedValueOnce(new Error('no handler'));
     showing({ status: 'signed-out' });
-    fireEvent.click(await screen.findByRole('button', { name: /sign in with director/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
     await waitFor(() =>
       expect(api.writeDiagnosticLog).toHaveBeenCalledWith('settings.director.sign-in-failed', {
         message: 'no handler',
@@ -113,7 +119,7 @@ describe('DirectorAccountPanel', () => {
   it.each([
     ['expired', /link expired/i],
     ['failed', /couldn.t sign in/i],
-    ['disconnected', /disconnected from director/i],
+    ['disconnected', /disconnected from screenforge director/i],
   ] as const)('explains a %s sign-in', async (error, text) => {
     showing({ status: 'signed-out', error });
     expect(await screen.findByText(text)).toBeInTheDocument();

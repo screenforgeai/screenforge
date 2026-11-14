@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDirectorAccount } from 'src/hooks/useDirectorAccount';
 import { Button, Spinner } from '../../../lib/ui';
+import { DirectorMark } from '../../Director/DirectorMark';
 
 // The main process handles its own sign-in errors; only a failed IPC call lands here.
 const logFailure = (scope: string) => (error: unknown) => {
@@ -116,12 +117,14 @@ export const DirectorAccountPanel = () => {
       <div>
         <Button
           size="sm"
+          className="gap-1.5"
           onClick={() =>
             void window.screenforge
               .signInToDirector()
               .catch(logFailure('settings.director.sign-in-failed'))
           }
         >
+          <DirectorMark size={13} />
           {t('director_signIn')}
         </Button>
       </div>

@@ -5,6 +5,7 @@ import { identifyUser, trackEvent } from 'src/lib/analytics';
 import { SUPPORTED_LANGUAGES, type UserProfile } from 'src/lib/userProfile';
 import { IconGlobe, IconLink, IconUserAccount, IconX } from 'src/lib/icons';
 import type { SettingsSection } from 'src/lib/settingsNavigation';
+import { DirectorInfoTip } from '../../Director/DirectorInfoTip';
 import { DirectorAccountPanel } from './DirectorAccountPanel';
 import i18n from '../../../i18n';
 import {
@@ -145,7 +146,7 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="flex h-[460px] w-[560px] max-w-none overflow-hidden rounded-lg border-sf-border bg-sf-bg p-0 gap-0 shadow-none"
+        className="flex h-[460px] w-[560px] max-w-[calc(100%-2rem)] sm:max-w-[560px] overflow-hidden rounded-lg border-sf-border bg-sf-bg p-0 gap-0 shadow-none"
       >
         <Tabs
           value={activeSection}
@@ -183,9 +184,12 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
             <DialogHeader className="gap-0 border-b border-sf-border/70 px-5 py-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <DialogTitle className="text-lg font-semibold tracking-tight text-sf-primary">
-                    {title}
-                  </DialogTitle>
+                  <div className="flex items-center gap-1.5">
+                    <DialogTitle className="text-lg font-semibold tracking-tight text-sf-primary">
+                      {title}
+                    </DialogTitle>
+                    {activeSection === 'director' ? <DirectorInfoTip /> : null}
+                  </div>
                   <DialogDescription className="mt-1 text-sm text-sf-secondary">
                     {description}
                   </DialogDescription>

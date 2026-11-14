@@ -30,5 +30,7 @@
   "captureFrame": "フレームをキャプチャ",
   "screenshotSaved": "スクリーンショットを「ピクチャ」に保存しました",
   "showInFinder": "Finderで表示",
-  "screenshotFailed": "スクリーンショットの保存に失敗しました"
+  "screenshotFailed": "スクリーンショットの保存に失敗しました",
+  "directorInfo": "Screenforge Director は私たちのクラウドアプリです。共有リンクとワークスペースのブランドキットをホストし、製品デモを代わりに録画することもできます。プロジェクトはこのコンピュータに残ります。",
+  "directorInfoLabel": "Screenforge Director とは？"
 }
