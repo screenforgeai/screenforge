@@ -30,5 +30,7 @@
   "captureFrame": "프레임 캡처",
   "screenshotSaved": "스크린샷이 사진에 저장되었습니다",
   "showInFinder": "Finder에서 보기",
-  "screenshotFailed": "스크린샷 저장에 실패했습니다"
+  "screenshotFailed": "스크린샷 저장에 실패했습니다",
+  "directorInfo": "Screenforge Director는 Screenforge의 클라우드 앱입니다. 공유 링크와 워크스페이스의 브랜드 키트를 호스팅하고, 제품 데모를 대신 녹화할 수도 있습니다. 프로젝트는 이 컴퓨터에 그대로 남습니다.",
+  "directorInfoLabel": "Screenforge Director란?"
 }
