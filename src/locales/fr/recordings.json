@@ -91,5 +91,6 @@
   "link_uploading": "Envoi : {{percent}} %",
   "link_paused": "Envoi en pause",
   "link_resume": "Reprendre",
-  "link_discard": "Abandonner"
+  "link_discard": "Abandonner",
+  "link_discardFailed": "Impossible d’abandonner l’envoi. Réessayez."
 }

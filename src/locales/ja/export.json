@@ -62,5 +62,8 @@
   "share_error_interrupted": "アップロードが中断されました。再開すると、止まったところから続きます。",
   "share_error_busy": "別の動画をアップロード中です。完了してからもう一度お試しください。",
   "share_error_not-found": "このアップロードは Screenforge Director に残っていません。もう一度お試しください。",
-  "share_error_failed": "動画を共有できませんでした。もう一度お試しください。"
+  "share_error_failed": "動画を共有できませんでした。もう一度お試しください。",
+  "share_linkExpired": "リンクの期限切れ",
+  "share_linkRemoved": "リンクは削除されました",
+  "share_copyFailed": "リンクをコピーできませんでした。"
 }

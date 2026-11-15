@@ -91,5 +91,6 @@
   "link_uploading": "Uploading {{percent}}%",
   "link_paused": "Upload paused",
   "link_resume": "Resume",
-  "link_discard": "Discard"
+  "link_discard": "Discard",
+  "link_discardFailed": "Couldn't discard the upload. Try again."
 }

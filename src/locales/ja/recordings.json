@@ -91,5 +91,6 @@
   "link_uploading": "アップロード中 {{percent}}%",
   "link_paused": "アップロード一時停止",
   "link_resume": "再開",
-  "link_discard": "破棄"
+  "link_discard": "破棄",
+  "link_discardFailed": "アップロードを破棄できませんでした。もう一度お試しください。"
 }

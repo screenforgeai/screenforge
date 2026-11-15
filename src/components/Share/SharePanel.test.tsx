@@ -4,6 +4,9 @@ import type { DirectorAccountState, ShareJobState } from 'src/types';
 import { SharePanel } from './SharePanel';
 
 const openSettings = vi.fn();
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('sonner', () => ({ toast }));
+
 vi.mock('src/lib/settingsNavigation', () => ({
   openSettings: (section: string) => openSettings(section),
 }));
@@ -144,6 +147,60 @@ describe('SharePanel', () => {
       }),
     );
     expect(screen.getByText(/never expires/i)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['expired', 'Link expired'],
+    ['removed', 'Link removed'],
+  ] as const)(
+    'says a %s link is no longer up, never that it lasts forever',
+    async (status, text) => {
+      renderPanel();
+      await screen.findByRole('button', { name: /share link/i });
+      act(() =>
+        pushState({
+          status: 'done',
+          filePath: FILE,
+          projectId: 'p1',
+          copied: false,
+          link: {
+            shareId: 's1',
+            title: 'Demo',
+            watchUrl: null,
+            expiresAt: null,
+            status,
+            sharedAt: null,
+          },
+        }),
+      );
+      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(screen.queryByText(/never expires/i)).not.toBeInTheDocument();
+    },
+  );
+
+  it('says so when the link could not be copied', async () => {
+    api.copyShareLink.mockResolvedValueOnce(false);
+    renderPanel();
+    await screen.findByRole('button', { name: /share link/i });
+    act(() =>
+      pushState({
+        status: 'done',
+        filePath: FILE,
+        projectId: 'p1',
+        copied: false,
+        link: {
+          shareId: 's1',
+          title: 'Demo',
+          watchUrl: 'https://director.screenforge.co/s/s1',
+          expiresAt: null,
+          status: 'live',
+          sharedAt: null,
+        },
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /copy link/i }));
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't copy the link."));
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('explains the free-plan limits Director enforces', async () => {

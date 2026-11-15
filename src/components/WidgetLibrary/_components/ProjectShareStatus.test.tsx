@@ -119,4 +119,50 @@ describe('ProjectShareStatus', () => {
     fireEvent.click(screen.getByRole('button', { name: /discard/i }));
     expect(api.discardProjectShare).toHaveBeenCalledWith('p1');
   });
+
+  it('says why Resume failed', async () => {
+    api.resumeProjectShare.mockResolvedValueOnce({
+      status: 'failed',
+      filePath: '',
+      projectId: 'p1',
+      error: 'signed-out',
+      resumable: false,
+    });
+    render(
+      <ProjectShareStatus
+        projectId="p1"
+        pending={{ fileName: 'demo.mp4', sizeBytes: 10 }}
+        job={IDLE}
+        onRemove={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /resume/i }));
+    await vi.waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Screenforge Director signed this app out. Sign in again to share.',
+      ),
+    );
+  });
+
+  it.each([
+    [
+      'refused',
+      () => api.discardProjectShare.mockResolvedValueOnce({ ok: false, error: 'signed-out' }),
+    ],
+    ['broken', () => api.discardProjectShare.mockRejectedValueOnce(new Error('no handler'))],
+  ])('says so when Discard is %s', async (_case, arrange) => {
+    arrange();
+    render(
+      <ProjectShareStatus
+        projectId="p1"
+        pending={{ fileName: 'demo.mp4', sizeBytes: 10 }}
+        job={IDLE}
+        onRemove={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /discard/i }));
+    await vi.waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Couldn't discard the upload. Try again."),
+    );
+  });
 });

@@ -91,5 +91,6 @@
   "link_uploading": "Wird hochgeladen: {{percent}} %",
   "link_paused": "Upload pausiert",
   "link_resume": "Fortsetzen",
-  "link_discard": "Verwerfen"
+  "link_discard": "Verwerfen",
+  "link_discardFailed": "Upload konnte nicht verworfen werden. Versuche es erneut."
 }

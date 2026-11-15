@@ -45,6 +45,12 @@ const ExpiryText = ({ link }: { link: ProjectShareLink }) => {
   if (expiry.kind === 'expires') {
     return <>{t('share_expires', { date: formatShareDate(expiry.at, i18n.language) })}</>;
   }
+  if (expiry.kind === 'expired') {
+    return <>{t('share_linkExpired')}</>;
+  }
+  if (expiry.kind === 'removed') {
+    return <>{t('share_linkRemoved')}</>;
+  }
   return <>{t('share_neverExpires')}</>;
 };
 
@@ -112,6 +118,8 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
         );
     if (copied) {
       toast.success(t('share_copyDone'));
+    } else {
+      toast.error(t('share_copyFailed'));
     }
   };
 

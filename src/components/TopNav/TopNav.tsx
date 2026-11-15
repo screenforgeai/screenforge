@@ -433,7 +433,11 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
         onOpenFFmpegSetup={onOpenFFmpegSetup}
       />
 
-      <ShareBackgroundToasts quiet={exportOpen} />
+      <ShareBackgroundToasts
+        shownFilePath={
+          exportOpen && exportState.status === 'success' ? exportState.outputPath : null
+        }
+      />
 
       <KofiModal
         open={milestoneKofiOpen}

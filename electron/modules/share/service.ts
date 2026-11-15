@@ -61,7 +61,13 @@ export function getShareManager(): ShareManager {
       const handle = await fs.open(filePath, 'r');
       // Checked on the open handle, so the path can't be swapped for another
       // file between the checks and the read.
-      const stats = await handle.stat();
+      let stats: Awaited<ReturnType<typeof handle.stat>>;
+      try {
+        stats = await handle.stat();
+      } catch (err) {
+        await handle.close().catch(() => undefined);
+        throw err;
+      }
       const opened = { size: stats.size, mtimeMs: stats.mtimeMs, dev: stats.dev, ino: stats.ino };
       const known = exportedFiles.known(filePath);
       if (

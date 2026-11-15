@@ -62,5 +62,8 @@
   "share_error_interrupted": "L’envoi a été interrompu. Reprenez-le pour continuer là où il s’est arrêté.",
   "share_error_busy": "Une autre vidéo est encore en cours d’envoi. Réessayez quand elle sera terminée.",
   "share_error_not-found": "Screenforge Director n’a plus cet envoi. Réessayez.",
-  "share_error_failed": "Impossible de partager la vidéo. Réessayez."
+  "share_error_failed": "Impossible de partager la vidéo. Réessayez.",
+  "share_linkExpired": "Lien expiré",
+  "share_linkRemoved": "Lien supprimé",
+  "share_copyFailed": "Impossible de copier le lien."
 }

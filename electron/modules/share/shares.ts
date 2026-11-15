@@ -107,6 +107,27 @@ export function safeWatchUrl(value: string | null | undefined): string | null {
 
 const isAbort = (err: unknown) => err instanceof Error && err.name === 'AbortError';
 
+/**
+ * A failure that says nothing about the upload itself (network, sign-in, a
+ * busy or broken Director, or parts it hasn't got yet): what's uploaded is
+ * kept, to resume.
+ */
+const isTransient = (err: unknown): boolean => {
+  if (err instanceof PartUploadError) {
+    return true;
+  }
+  if (!(err instanceof DirectorApiError)) {
+    return false;
+  }
+  return (
+    err.status === 0 ||
+    err.status === 401 ||
+    err.status === 429 ||
+    err.status >= 500 ||
+    err.code === 'SHARE_UPLOAD_INCOMPLETE'
+  );
+};
+
 const cleanTitle = (title: string) =>
   title.trim().slice(0, MAX_TITLE_LENGTH) || 'Screenforge recording';
 
@@ -385,6 +406,8 @@ export function createShareManager(deps: ShareManagerDeps) {
       setState({ status: 'finishing', filePath, projectId });
       const parts = [...alreadyUploaded, ...sent].sort((a, b) => a.partNumber - b.partNumber);
       const completed = await deps.api.complete(shareId, parts);
+      // Cancelled while Director was finishing: take the share down instead.
+      signal.throwIfAborted();
       const link = toLink(completed, title, true);
       // The link is saved before the upload record goes, so a failure here
       // never leaves a live share the app has no record of.
@@ -414,11 +437,11 @@ export function createShareManager(deps: ShareManagerDeps) {
         return state;
       }
       const code = shareErrorCode(err);
-      const resumable = recorded && (code === 'interrupted' || code === 'signed-out');
+      const resumable = recorded && isTransient(err);
       if (shareId && recorded && !resumable) {
         await forgetUpload({ shareId });
       }
-      return fail(code, resumable);
+      return fail(resumable && code === 'failed' ? 'interrupted' : code, resumable);
     } finally {
       active = null;
       await publishLibrary().catch(() => undefined);
@@ -433,14 +456,26 @@ export function createShareManager(deps: ShareManagerDeps) {
       active?.abort();
     },
 
+    /**
+     * The file was exported again: a finished (or failed) share of it now
+     * describes the old file, so the panel offers to share the new one.
+     */
+    clearFor(filePath: string): void {
+      if (!active && state.status !== 'idle' && state.filePath === filePath) {
+        setState({ status: 'idle' });
+      }
+    },
+
     /** True when sharing this file again would pick up an interrupted upload. */
     async canResume(filePath: string): Promise<boolean> {
       return matchesFile(await deps.store.findUpload({ filePath }));
     },
 
     async resumeProject(projectId: string): Promise<ShareJobState> {
-      const upload = await deps.store.findUpload({ projectId });
-      if (!upload || !actionableNow(upload)) {
+      const upload = (await deps.store.getUploads()).find(
+        (u) => u.projectId === projectId && actionableNow(u),
+      );
+      if (!upload) {
         return { status: 'failed', filePath: '', projectId, error: 'not-found', resumable: false };
       }
       return share({
@@ -452,8 +487,9 @@ export function createShareManager(deps: ShareManagerDeps) {
     },
 
     async discardPending(projectId: string): Promise<ShareActionResult> {
-      const upload = await deps.store.findUpload({ projectId });
-      if (upload && !actionableNow(upload)) {
+      const uploads = (await deps.store.getUploads()).filter((u) => u.projectId === projectId);
+      const upload = uploads.find((u) => actionableNow(u));
+      if (!upload && uploads.length > 0) {
         return { ok: false, error: 'signed-out' };
       }
       if (upload) {
@@ -469,6 +505,9 @@ export function createShareManager(deps: ShareManagerDeps) {
     async refreshLibrary(): Promise<ShareLibrary> {
       try {
         await retryDeletions();
+        // A share that finishes while the list is on its way isn't in it:
+        // only links already saved before asking can be marked removed.
+        const known = new Set(Object.values(await deps.store.getLinks()).map((l) => l.shareId));
         const shares = await deps.api.list();
         const byId = new Map(shares.map((s) => [s.id, s]));
         await deps.store.updateLinks((links) =>
@@ -479,6 +518,9 @@ export function createShareManager(deps: ShareManagerDeps) {
                 return [projectId, link];
               }
               const current = byId.get(link.shareId);
+              if (!current && !known.has(link.shareId)) {
+                return [projectId, link];
+              }
               return [
                 projectId,
                 current ? toLink(current, link.title) : { ...link, status: 'removed' as const },
@@ -519,7 +561,10 @@ export function createShareManager(deps: ShareManagerDeps) {
 
     async copyLink(projectId: string): Promise<boolean> {
       const link = (await deps.store.getLinks())[projectId];
-      const watchUrl = safeWatchUrl(link?.watchUrl);
+      if (!link || !ownedNow(link)) {
+        return false;
+      }
+      const watchUrl = safeWatchUrl(link.watchUrl);
       if (!watchUrl) {
         return false;
       }

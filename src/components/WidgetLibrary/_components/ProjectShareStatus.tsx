@@ -51,6 +51,27 @@ export const ProjectShareStatus = ({
   onRemove,
 }: ProjectShareStatusProps) => {
   const { t, i18n } = useTranslation('recordings');
+  const { t: tExport } = useTranslation('export');
+
+  const resume = () =>
+    window.screenforge
+      .resumeProjectShare(projectId)
+      .then((result) => {
+        if (result.status === 'failed') {
+          toast.error(tExport(`share_error_${result.error}`));
+        }
+      })
+      .catch(() => toast.error(tExport('share_error_failed')));
+
+  const discard = () =>
+    window.screenforge
+      .discardProjectShare(projectId)
+      .then((result) => {
+        if (!result.ok) {
+          toast.error(t('link_discardFailed'));
+        }
+      })
+      .catch(() => toast.error(t('link_discardFailed')));
 
   const row = (children: ReactNode) => (
     <div className="flex min-h-9 items-center gap-2 border-t border-sf-border bg-[#181818] px-2.5 py-1.5 text-xs">
@@ -81,16 +102,10 @@ export const ProjectShareStatus = ({
     return row(
       <>
         <span className="mr-auto truncate text-sf-secondary">{t('link_paused')}</span>
-        <ActionButton
-          label={t('link_resume')}
-          onClick={() => void window.screenforge.resumeProjectShare(projectId)}
-        >
+        <ActionButton label={t('link_resume')} onClick={() => void resume()}>
           {t('link_resume')}
         </ActionButton>
-        <ActionButton
-          label={t('link_discard')}
-          onClick={() => void window.screenforge.discardProjectShare(projectId)}
-        >
+        <ActionButton label={t('link_discard')} onClick={() => void discard()}>
           {t('link_discard')}
         </ActionButton>
       </>,

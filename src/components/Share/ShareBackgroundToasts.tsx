@@ -12,9 +12,15 @@ const ACTIVE: ReadonlySet<ShareJobState['status']> = new Set([
 
 /**
  * Says how a share upload ended when nothing on screen shows it: the
- * export window was closed mid-upload, or it was resumed from Recordings.
+ * export window was closed mid-upload, it shows another export, or the
+ * upload was resumed from Recordings. `shownFilePath` is the export the
+ * open window's share panel shows, if any.
  */
-export const ShareBackgroundToasts = ({ quiet }: { quiet: boolean }): null => {
+export const ShareBackgroundToasts = ({
+  shownFilePath,
+}: {
+  shownFilePath: string | null;
+}): null => {
   const { t } = useTranslation('export');
   const job = useShareJob();
   const previous = useRef<ShareJobState['status']>(job.status);
@@ -22,7 +28,8 @@ export const ShareBackgroundToasts = ({ quiet }: { quiet: boolean }): null => {
   useEffect(() => {
     const wasActive = ACTIVE.has(previous.current);
     previous.current = job.status;
-    if (quiet || !wasActive) {
+    const shown = job.status !== 'idle' && job.filePath === shownFilePath;
+    if (shown || !wasActive) {
       return;
     }
     if (job.status === 'done') {
@@ -32,7 +39,7 @@ export const ShareBackgroundToasts = ({ quiet }: { quiet: boolean }): null => {
     } else if (job.status === 'failed') {
       toast.error(t(`share_error_${job.error}`));
     }
-  }, [job, quiet, t]);
+  }, [job, shownFilePath, t]);
 
   return null;
 };

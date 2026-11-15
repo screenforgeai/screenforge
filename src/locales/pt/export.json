@@ -62,5 +62,8 @@
   "share_error_interrupted": "O envio foi interrompido. Retome para continuar de onde parou.",
   "share_error_busy": "Outro vídeo ainda está sendo enviado. Tente novamente quando ele terminar.",
   "share_error_not-found": "O Screenforge Director não tem mais este envio. Tente novamente.",
-  "share_error_failed": "Não foi possível compartilhar o vídeo. Tente novamente."
+  "share_error_failed": "Não foi possível compartilhar o vídeo. Tente novamente.",
+  "share_linkExpired": "Link expirado",
+  "share_linkRemoved": "Link removido",
+  "share_copyFailed": "Não foi possível copiar o link."
 }

@@ -12,7 +12,7 @@ const memoryFs = (): ShareStoreFs => {
     readFile: async (p) => {
       const v = files.get(p);
       if (v === undefined) {
-        throw new Error('ENOENT');
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       }
       return v;
     },
@@ -499,6 +499,91 @@ describe('share manager', () => {
     expect(clipboard).toHaveBeenCalledWith('https://help.customer.example/s/sh1');
   });
 
+  describe('finishing', () => {
+    it('keeps the uploaded parts when finishing fails for a moment', async () => {
+      const { manager, api, store } = setup();
+      api.complete.mockRejectedValueOnce(new DirectorApiError(503, 'HTTP_503', 'down'));
+
+      const result = await manager.share(REQUEST);
+
+      expect(result).toMatchObject({ status: 'failed', error: 'interrupted', resumable: true });
+      expect(api.remove).not.toHaveBeenCalled();
+      expect(await store.getUploads()).toEqual([expect.objectContaining({ shareId: 'sh1' })]);
+      expect(await store.getDeletions()).toEqual([]);
+    });
+
+    it('keeps them when Director says parts are still missing, to upload them on resume', async () => {
+      const { manager, api, store } = setup();
+      api.complete.mockRejectedValueOnce(
+        new DirectorApiError(400, 'SHARE_UPLOAD_INCOMPLETE', 'missing parts'),
+      );
+
+      expect(await manager.share(REQUEST)).toMatchObject({ resumable: true });
+      expect(await store.getUploads()).toHaveLength(1);
+    });
+
+    it('lets the upload go when Director refuses the finished file', async () => {
+      const { manager, api, store } = setup();
+      api.complete.mockRejectedValueOnce(
+        new DirectorApiError(422, 'SHARE_NOT_A_VIDEO', 'not a video'),
+      );
+
+      expect(await manager.share(REQUEST)).toMatchObject({ status: 'failed', resumable: false });
+      expect(await store.getUploads()).toEqual([]);
+    });
+
+    it('takes the share down when it was cancelled while finishing', async () => {
+      const { manager, api, store, clipboard } = setup();
+      api.complete.mockImplementationOnce(async () => {
+        manager.cancel();
+        return share();
+      });
+
+      expect(await manager.share(REQUEST)).toEqual({ status: 'idle' });
+      expect(api.remove).toHaveBeenCalledWith('sh1');
+      expect(await store.getLinks()).toEqual({});
+      expect(clipboard).not.toHaveBeenCalled();
+    });
+  });
+
+  it('a refresh that started before a share finished leaves the new link alone', async () => {
+    const { manager, api, store } = setup();
+    const saved = {
+      shareId: 'old',
+      title: 'Old',
+      watchUrl: 'https://director.screenforge.co/s/old',
+      expiresAt: null,
+      status: 'live' as const,
+      sharedAt: '2026-11-01T10:00:00.000Z',
+      account: 'w1:u1',
+    };
+    await store.setLink('p0', saved);
+    api.list.mockImplementationOnce(async () => {
+      // The share finishes while Director's list is on its way.
+      await store.setLink('p2', { ...saved, shareId: 'new', title: 'New' });
+      return [];
+    });
+
+    await manager.refreshLibrary();
+
+    const links = await store.getLinks();
+    expect(links.p0.status).toBe('removed');
+    expect(links.p2.status).toBe('live');
+  });
+
+  it('re-exporting a shared file clears the finished share, so it can be shared again', async () => {
+    const { manager, states } = setup();
+    await manager.share(REQUEST);
+    expect(manager.getState().status).toBe('done');
+
+    manager.clearFor('/exports/other.mp4');
+    expect(manager.getState().status).toBe('done');
+
+    manager.clearFor('/exports/demo.mp4');
+    expect(manager.getState()).toEqual({ status: 'idle' });
+    expect(states.at(-1)).toEqual({ status: 'idle' });
+  });
+
   describe('remote cleanup', () => {
     const cancelledShare = async (removeFails: boolean) => {
       const fetch = vi.fn(
@@ -597,6 +682,56 @@ describe('share manager', () => {
 
       switchAccount('w1:u1');
       expect((await manager.getLibrary()).links.p1).toMatchObject({ status: 'live' });
+    });
+
+    it('doesn’t copy another account’s link', async () => {
+      const { manager, clipboard, switchAccount } = setup();
+      await manager.share(REQUEST);
+      clipboard.mockClear();
+
+      switchAccount('w2:u2');
+      expect(await manager.copyLink('p1')).toBe(false);
+      expect(clipboard).not.toHaveBeenCalled();
+
+      switchAccount(null);
+      expect(await manager.copyLink('p1')).toBe(true);
+    });
+
+    it('resumes and discards the signed-in account’s upload for a project, past another account’s', async () => {
+      const { manager, api, store } = setup();
+      const base = {
+        sizeBytes: 25,
+        mtimeMs: 1000,
+        projectId: 'p1',
+        title: 'Demo',
+        durationS: 30,
+        contentType: 'video/mp4' as const,
+      };
+      await store.putUpload({
+        ...base,
+        shareId: 'theirs',
+        filePath: '/exports/a.mp4',
+        account: 'w2:u2',
+      });
+      await store.putUpload({
+        ...base,
+        shareId: 'mine',
+        filePath: '/exports/demo.mp4',
+        account: 'w1:u1',
+      });
+
+      expect((await manager.resumeProject('p1')).status).toBe('done');
+      expect(api.resume).toHaveBeenCalledWith('mine');
+
+      await store.putUpload({
+        ...base,
+        shareId: 'mine2',
+        filePath: '/exports/demo.mp4',
+        account: 'w1:u1',
+      });
+      expect(await manager.discardPending('p1')).toEqual({ ok: true });
+      expect(api.remove).toHaveBeenCalledWith('mine2');
+      expect(api.remove).not.toHaveBeenCalledWith('theirs');
     });
 
     it('never asks Director to remove another account’s link', async () => {

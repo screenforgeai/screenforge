@@ -62,5 +62,8 @@
   "share_error_interrupted": "La subida se interrumpió. Reanúdala para continuar donde se detuvo.",
   "share_error_busy": "Todavía se está subiendo otro vídeo. Inténtalo de nuevo cuando termine.",
   "share_error_not-found": "Screenforge Director ya no tiene esta subida. Inténtalo de nuevo.",
-  "share_error_failed": "No se pudo compartir el vídeo. Inténtalo de nuevo."
+  "share_error_failed": "No se pudo compartir el vídeo. Inténtalo de nuevo.",
+  "share_linkExpired": "Enlace caducado",
+  "share_linkRemoved": "Enlace eliminado",
+  "share_copyFailed": "No se pudo copiar el enlace."
 }

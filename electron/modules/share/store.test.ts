@@ -56,10 +56,72 @@ const link = (over: Partial<ProjectShareLink> = {}): ProjectShareLink => ({
 });
 
 describe('share store', () => {
-  it('starts empty when nothing was saved, or the file is unreadable', async () => {
+  it('starts empty when nothing was saved', async () => {
     expect(await createShareStore({ filePath: FILE, fs: memoryFs().fs }).getLinks()).toEqual({});
-    const broken = createShareStore({ filePath: FILE, fs: memoryFs({ [FILE]: '{nope' }).fs });
+  });
+
+  it('sets a corrupt file aside, rather than overwriting it, and starts empty', async () => {
+    const { fs, files } = memoryFs({ [FILE]: '{nope' });
+    const broken = createShareStore({ filePath: FILE, fs });
     expect(await broken.getUploads()).toEqual([]);
+    expect([...files.entries()]).toEqual([[`${FILE}.corrupt`, '{nope']]);
+  });
+
+  it('never replaces a file it could not read with an empty one', async () => {
+    const { fs, files } = memoryFs({ [FILE]: JSON.stringify({ links: { p1: link() } }) });
+    const readFile = fs.readFile;
+    let failures = 1;
+    fs.readFile = async (p, encoding) => {
+      if (failures-- > 0) {
+        throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' });
+      }
+      return readFile(p, encoding);
+    };
+    const store = createShareStore({ filePath: FILE, fs });
+
+    await expect(store.getLinks()).rejects.toThrow('EBUSY');
+    await expect(store.putUpload(upload())).resolves.toBeUndefined();
+
+    const saved = JSON.parse(files.get(FILE) ?? '');
+    expect(saved.links.p1).toMatchObject({ shareId: 's1' });
+    expect(saved.uploads).toEqual([upload()]);
+  });
+
+  it('loads the file once for reads that start together, so none overwrites a later change', async () => {
+    const { fs, files } = memoryFs({ [FILE]: JSON.stringify({ links: {} }) });
+    let reads = 0;
+    const readFile = fs.readFile;
+    fs.readFile = async (p, encoding) => {
+      reads++;
+      return readFile(p, encoding);
+    };
+    const store = createShareStore({ filePath: FILE, fs });
+
+    const [links, uploads] = await Promise.all([
+      store.getLinks(),
+      store.getUploads(),
+      store.putUpload(upload()),
+    ]);
+
+    expect(reads).toBe(1);
+    expect(links).toEqual({});
+    expect(uploads).toEqual([]);
+    expect(await store.getUploads()).toEqual([upload()]);
+    expect(JSON.parse(files.get(FILE) ?? '').uploads).toEqual([upload()]);
+  });
+
+  it('answers reads and writes in the order they were asked', async () => {
+    const { fs } = memoryFs();
+    const store = createShareStore({ filePath: FILE, fs });
+    const order: string[] = [];
+
+    await Promise.all([
+      store.getUploads().then(() => order.push('read 1')),
+      store.putUpload(upload()).then(() => order.push('write')),
+      store.getUploads().then((u) => order.push(`read 2 (${u.length})`)),
+    ]);
+
+    expect(order).toEqual(['read 1', 'write', 'read 2 (1)']);
   });
 
   it('remembers an in-progress upload, found by file or project, until removed', async () => {

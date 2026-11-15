@@ -91,5 +91,6 @@
   "link_uploading": "업로드 중 {{percent}}%",
   "link_paused": "업로드 일시 중지됨",
   "link_resume": "재개",
-  "link_discard": "삭제"
+  "link_discard": "삭제",
+  "link_discardFailed": "업로드를 삭제하지 못했습니다. 다시 시도하세요."
 }

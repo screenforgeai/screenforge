@@ -49,7 +49,7 @@ afterEach(() => {
 
 describe('ShareBackgroundToasts', () => {
   it('says the link was copied when an upload finishes out of sight', () => {
-    render(<ShareBackgroundToasts quiet={false} />);
+    render(<ShareBackgroundToasts shownFilePath={null} />);
     act(() => push(uploading));
     act(() => push(done));
     expect(toast.success).toHaveBeenCalledWith('Share link copied', {
@@ -58,7 +58,7 @@ describe('ShareBackgroundToasts', () => {
   });
 
   it('explains a failure that happens out of sight', () => {
-    render(<ShareBackgroundToasts quiet={false} />);
+    render(<ShareBackgroundToasts shownFilePath={null} />);
     act(() => push(uploading));
     act(() =>
       push({
@@ -72,11 +72,18 @@ describe('ShareBackgroundToasts', () => {
   });
 
   it('stays quiet while the export window shows the share itself, and for old results', () => {
-    const { rerender } = render(<ShareBackgroundToasts quiet={true} />);
+    const { rerender } = render(<ShareBackgroundToasts shownFilePath="/e/demo.mp4" />);
     act(() => push(uploading));
     act(() => push(done));
-    rerender(<ShareBackgroundToasts quiet={false} />);
+    rerender(<ShareBackgroundToasts shownFilePath={null} />);
     act(() => push(done));
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('still reports a share the export window is not showing', () => {
+    render(<ShareBackgroundToasts shownFilePath="/e/other.mp4" />);
+    act(() => push(uploading));
+    act(() => push(done));
+    expect(toast.success).toHaveBeenCalledTimes(1);
   });
 });

@@ -26,6 +26,7 @@ import {
   writeEncodedChunks,
 } from './service';
 import { exportedFiles } from '../share/exports';
+import { getShareManager } from '../share/service';
 
 /** Notes the file an export wrote, so it (and only such files) can be shared. */
 async function rememberExport(outputPath: string): Promise<void> {
@@ -62,6 +63,8 @@ export function registerExportChannels(preloadPath: string): void {
         sender.send(CH.export.PROGRESS, progress);
       });
       await rememberExport(result.outputPath);
+      // A share of the file this export replaced is now out of date.
+      getShareManager().clearFor(result.outputPath);
       return result;
     },
   );

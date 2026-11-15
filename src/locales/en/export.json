@@ -62,5 +62,8 @@
   "share_error_interrupted": "The upload was interrupted. Resume to continue where it stopped.",
   "share_error_busy": "Another video is still uploading. Try again when it's done.",
   "share_error_not-found": "Screenforge Director no longer has this upload. Try again.",
-  "share_error_failed": "Couldn't share the video. Try again."
+  "share_error_failed": "Couldn't share the video. Try again.",
+  "share_linkExpired": "Link expired",
+  "share_linkRemoved": "Link removed",
+  "share_copyFailed": "Couldn't copy the link."
 }

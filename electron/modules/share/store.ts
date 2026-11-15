@@ -29,23 +29,47 @@ const empty = (): ShareData => ({ uploads: [], links: {}, deletions: [] });
  */
 export function createShareStore({ filePath, fs }: { filePath: string; fs: ShareStoreFs }) {
   let data: ShareData | null = null;
+  let loading: Promise<ShareData> | null = null;
   let queue: Promise<unknown> = Promise.resolve();
 
-  const load = async (): Promise<ShareData> => {
+  /**
+   * Loads the file once, however many callers ask at the same time. Only a
+   * missing file starts empty: a corrupt one is set aside (never overwritten),
+   * and any other read error is passed on, so a later write can't replace
+   * saved links, uploads and pending deletions with nothing.
+   */
+  const load = (): Promise<ShareData> => {
     if (data) {
-      return data;
+      return Promise.resolve(data);
     }
-    try {
-      const parsed = JSON.parse(await fs.readFile(filePath, 'utf8')) as Partial<ShareData>;
-      data = {
-        uploads: Array.isArray(parsed.uploads) ? parsed.uploads : [],
-        links: parsed.links && typeof parsed.links === 'object' ? parsed.links : {},
-        deletions: Array.isArray(parsed.deletions) ? parsed.deletions : [],
-      };
-    } catch {
-      data = empty();
-    }
-    return data;
+    loading ??= (async () => {
+      let raw: string | null = null;
+      try {
+        raw = await fs.readFile(filePath, 'utf8');
+      } catch (err) {
+        if ((err as { code?: string }).code !== 'ENOENT') {
+          throw err;
+        }
+      }
+      let loaded = empty();
+      if (raw !== null) {
+        try {
+          const parsed = JSON.parse(raw) as Partial<ShareData>;
+          loaded = {
+            uploads: Array.isArray(parsed.uploads) ? parsed.uploads : [],
+            links: parsed.links && typeof parsed.links === 'object' ? parsed.links : {},
+            deletions: Array.isArray(parsed.deletions) ? parsed.deletions : [],
+          };
+        } catch {
+          await fs.rename(filePath, `${filePath}.corrupt`);
+        }
+      }
+      data = loaded;
+      return loaded;
+    })().finally(() => {
+      loading = null;
+    });
+    return loading;
   };
 
   /** Runs changes one at a time, so two never overwrite each other. */
@@ -62,9 +86,11 @@ export function createShareStore({ filePath, fs }: { filePath: string; fs: Share
     return next;
   };
 
-  const read = async () => {
-    await queue;
-    return load();
+  /** Reads wait their turn behind earlier writes and reads, so answers come in order. */
+  const read = (): Promise<ShareData> => {
+    const next = queue.then(load);
+    queue = next.catch(() => undefined);
+    return next;
   };
 
   return {

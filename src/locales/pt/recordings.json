@@ -91,5 +91,6 @@
   "link_uploading": "Enviando {{percent}}%",
   "link_paused": "Envio pausado",
   "link_resume": "Retomar",
-  "link_discard": "Descartar"
+  "link_discard": "Descartar",
+  "link_discardFailed": "Não foi possível descartar o envio. Tente novamente."
 }
