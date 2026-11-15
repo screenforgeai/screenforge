@@ -14,20 +14,30 @@ const cacheFile = () => path.join(app.getPath('userData'), 'feature-flags.json')
 function flags(): FeatureFlagStore {
   store ??= createFeatureFlags({
     isPackaged: app.isPackaged,
-    override: process.env.SCREENFORGE_FEATURE_DIRECTOR_SHARING?.trim(),
+    overrides: {
+      directorSharing: process.env.SCREENFORGE_FEATURE_DIRECTOR_SHARING?.trim(),
+      chunkedExport: process.env.SCREENFORGE_FEATURE_CHUNKED_EXPORT?.trim(),
+    },
     evaluate: evaluateFeatureFlag,
     async readCache() {
       try {
-        const parsed = JSON.parse(await fs.readFile(cacheFile(), 'utf8')) as {
-          directorSharing?: unknown;
-        };
-        return typeof parsed.directorSharing === 'boolean' ? parsed.directorSharing : null;
+        const parsed = JSON.parse(await fs.readFile(cacheFile(), 'utf8')) as Record<
+          string,
+          unknown
+        >;
+        const cached: Partial<FeatureFlags> = {};
+        for (const name of ['directorSharing', 'chunkedExport'] as const) {
+          if (typeof parsed[name] === 'boolean') {
+            cached[name] = parsed[name] as boolean;
+          }
+        }
+        return cached;
       } catch {
         return null;
       }
     },
-    async writeCache(directorSharing) {
-      await fs.writeFile(cacheFile(), JSON.stringify({ directorSharing }), 'utf8');
+    async writeCache(flags) {
+      await fs.writeFile(cacheFile(), JSON.stringify(flags), 'utf8');
     },
     onChange(next: FeatureFlags) {
       log.info('[features] flags', next);

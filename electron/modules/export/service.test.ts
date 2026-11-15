@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CaptureWindowParams, ExportSettings } from '../../../src/types';
+import { CH } from '../../channels';
 
 const electronMock = vi.hoisted(() => ({
   app: {
@@ -246,6 +247,92 @@ describe('export service', () => {
       ).rejects.toThrow(
         "This recording's camera video is missing or damaged. Turn off the camera to export without it.",
       );
+    });
+
+    describe('a prerender whose window is still loading', () => {
+      // A hidden window that never finishes loading on its own; the test sends
+      // its CAPTURE_READY by hand.
+      function fakeWindow() {
+        const webContents = { send: vi.fn(), once: vi.fn(), getOSProcessId: vi.fn(() => 1) };
+        const onClosed: (() => void)[] = [];
+        let destroyed = false;
+        const win = {
+          webContents,
+          on: vi.fn((event: string, cb: () => void) => {
+            if (event === 'closed') {
+              onClosed.push(cb);
+            }
+          }),
+          loadFile: vi.fn(() => new Promise(() => undefined)),
+          loadURL: vi.fn(() => new Promise(() => undefined)),
+          isDestroyed: () => destroyed,
+          destroy: vi.fn(() => {
+            destroyed = true;
+            onClosed.forEach((cb) => cb());
+          }),
+        };
+        electronMock.BrowserWindow.mockImplementation(function () {
+          return win;
+        });
+        return win;
+      }
+
+      async function startPrerender(isStopped: () => boolean) {
+        vi.stubGlobal('MAIN_WINDOW_VITE_NAME', 'main_window');
+        const filePath = await writeSource('screen.mp4', 'video');
+        const { runCaptureInWindow } = await import('./service');
+        const capture = runCaptureInWindow(
+          captureParams(filePath),
+          '/p.js',
+          'prerender',
+          isStopped,
+        );
+        capture.catch(() => undefined);
+        await vi.waitFor(() =>
+          expect(electronMock.ipcMain.once).toHaveBeenCalledWith(
+            CH.export.CAPTURE_READY,
+            expect.any(Function),
+          ),
+        );
+        const onReady = electronMock.ipcMain.once.mock.calls.find(
+          (call) => call[0] === CH.export.CAPTURE_READY,
+        )?.[1] as (event: { sender: unknown }) => void;
+        return { capture, onReady };
+      }
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
+      });
+
+      it('never starts rendering when it was stopped before the worker was ready', async () => {
+        const win = fakeWindow();
+        let stopped = false;
+        const { capture, onReady } = await startPrerender(() => stopped);
+
+        // The stop's abort reached the worker before it listened for one.
+        stopped = true;
+        onReady({ sender: win.webContents });
+
+        await expect(capture).rejects.toThrow('Prerender stopped before it started');
+        expect(win.webContents.send).not.toHaveBeenCalledWith(
+          CH.export.CAPTURE_PARAMS,
+          expect.anything(),
+        );
+        expect(win.destroy).toHaveBeenCalled();
+      });
+
+      it('sends the capture parameters when it was not stopped', async () => {
+        const win = fakeWindow();
+        const { onReady } = await startPrerender(() => false);
+
+        onReady({ sender: win.webContents });
+
+        expect(win.webContents.send).toHaveBeenCalledWith(
+          CH.export.CAPTURE_PARAMS,
+          expect.anything(),
+        );
+        win.destroy();
+      });
     });
 
     it('ignores a broken camera video when the camera is turned off', async () => {

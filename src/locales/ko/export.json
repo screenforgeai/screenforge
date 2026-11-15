@@ -64,5 +64,7 @@
   "share_linkExpired": "링크 만료됨",
   "share_linkRemoved": "링크 삭제됨",
   "share_copyFailed": "링크를 복사하지 못했습니다.",
-  "share_waiting": "브라우저에서 승인하세요"
+  "share_waiting": "브라우저에서 승인하세요",
+  "prerendered": "{{percent}}% 미리 렌더링됨",
+  "prerenderedAll": "바로 내보낼 수 있음"
 }

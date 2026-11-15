@@ -24,5 +24,9 @@
   "support": "Screenforge 후원",
   "settingsLabel": "설정",
   "personalAccount": "개인 계정",
-  "logOut": "로그아웃"
+  "logOut": "로그아웃",
+  "prerenderPreparing": "미리 렌더링 중 {{percent}}%",
+  "prerenderPartial": "{{percent}}% 미리 렌더링됨",
+  "prerenderReady": "내보내기 준비 완료",
+  "prerenderHint": "편집하는 동안 백그라운드에서 내보내기를 렌더링하므로 몇 초 만에 내보내기가 끝납니다."
 }

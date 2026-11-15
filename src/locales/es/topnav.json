@@ -24,5 +24,9 @@
   "support": "Apoyar Screenforge",
   "settingsLabel": "Configuración",
   "personalAccount": "Cuenta personal",
-  "logOut": "Cerrar sesión"
+  "logOut": "Cerrar sesión",
+  "prerenderPreparing": "Prerrenderizando {{percent}} %",
+  "prerenderPartial": "{{percent}} % prerrenderizado",
+  "prerenderReady": "Exportación lista",
+  "prerenderHint": "Screenforge renderiza tu exportación en segundo plano mientras editas, para que exportar tarde solo unos segundos."
 }

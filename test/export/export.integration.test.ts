@@ -15,7 +15,8 @@ const processTree = require('../../shared/process-tree.js');
 
 const ROOT = path.resolve(__dirname, '../..');
 const MANIFEST_DIR = path.join(ROOT, 'test/fixtures/export/manifests');
-const EXPORT_HARNESS_TIMEOUT_MS = 180_000;
+// Software WebGL (GPU-less CI) renders several times slower.
+const EXPORT_HARNESS_TIMEOUT_MS = process.env.SCREENFORGE_SOFTWARE_GL === '1' ? 600_000 : 180_000;
 let ffmpegPath = 'ffmpeg';
 
 interface ProcessResult {
@@ -423,7 +424,10 @@ describe.sequential('export integration', () => {
       );
     }
 
-    if (manifest.expected.maxElapsedMs != null) {
+    // Speed budgets assume a GPU; with software WebGL (GPU-less CI) only the
+    // result is checked.
+    const softwareGl = process.env.SCREENFORGE_SOFTWARE_GL === '1';
+    if (manifest.expected.maxElapsedMs != null && !softwareGl) {
       expect(result.elapsedMs).toBeLessThanOrEqual(manifest.expected.maxElapsedMs);
     }
 

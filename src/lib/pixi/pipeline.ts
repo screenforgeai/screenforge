@@ -29,6 +29,13 @@ export function analyzePixiEffects(
   return analyzedData;
 }
 
+const updaterEffectIds = new WeakMap<PixiEffectUpdater, string>();
+
+/** The id of the effect an updater from setupPixiPipeline belongs to. */
+export function getPixiUpdaterEffectId(updater: PixiEffectUpdater): string | null {
+  return updaterEffectIds.get(updater) ?? null;
+}
+
 export function runPixiEffectOnLoad(analyzedData: Map<string, unknown>): void {
   for (const effect of pixiEffectRegistry) {
     effect.onLoad?.(analyzedData.get(effect.id));
@@ -52,6 +59,7 @@ export async function setupPixiPipeline(
     try {
       const result = await effect.setup?.(data, analyzedData, scene);
       if (result) {
+        updaterEffectIds.set(result, effect.id);
         updaters.push(result);
       }
     } catch (err) {

@@ -1,15 +1,21 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { createFeatureFlags, DIRECTOR_SHARING_FLAG, type FeatureFlagsDeps } from './flags';
+import type { FeatureFlags } from '../../../src/types';
+import {
+  CHUNKED_EXPORT_FLAG,
+  createFeatureFlags,
+  DIRECTOR_SHARING_FLAG,
+  type FeatureFlagsDeps,
+} from './flags';
 
 const setup = (over: Partial<FeatureFlagsDeps> = {}) => {
-  let cached: boolean | null = null;
+  let cached: Partial<FeatureFlags> | null = null;
   const deps: FeatureFlagsDeps = {
     isPackaged: true,
-    override: undefined,
+    overrides: {},
     evaluate: vi.fn(async () => true),
     readCache: vi.fn(async () => cached),
-    writeCache: vi.fn(async (value: boolean) => {
+    writeCache: vi.fn(async (value: Partial<FeatureFlags>) => {
       cached = value;
     }),
     onChange: vi.fn(),
@@ -18,40 +24,62 @@ const setup = (over: Partial<FeatureFlagsDeps> = {}) => {
   return { flags: createFeatureFlags(deps), deps };
 };
 
+const ON = { directorSharing: true, chunkedExport: true };
+const OFF = { directorSharing: false, chunkedExport: false };
+
 describe('feature flags', () => {
-  it('asks PostHog for the director-sharing flag', async () => {
+  it('asks PostHog for each flag', async () => {
     const { flags, deps } = setup();
     await flags.refresh();
-    expect(deps.evaluate).toHaveBeenCalledWith(DIRECTOR_SHARING_FLAG);
     expect(DIRECTOR_SHARING_FLAG).toBe('director-sharing');
-    expect(flags.get()).toEqual({ directorSharing: true });
+    expect(CHUNKED_EXPORT_FLAG).toBe('chunked-export');
+    expect(deps.evaluate).toHaveBeenCalledWith(DIRECTOR_SHARING_FLAG);
+    expect(deps.evaluate).toHaveBeenCalledWith(CHUNKED_EXPORT_FLAG);
+    expect(flags.get()).toEqual(ON);
+  });
+
+  it('answers each flag on its own', async () => {
+    const { flags } = setup({
+      evaluate: vi.fn(async (flag: string) => flag === CHUNKED_EXPORT_FLAG),
+    });
+    await flags.refresh();
+    expect(flags.get()).toEqual({ directorSharing: false, chunkedExport: true });
   });
 
   it('is off until PostHog says otherwise', () => {
-    expect(setup().flags.get()).toEqual({ directorSharing: false });
+    expect(setup().flags.get()).toEqual(OFF);
   });
 
   it('is off when PostHog has no answer (no client, opted out, offline)', async () => {
     const { flags } = setup({ evaluate: vi.fn(async () => null) });
     await flags.refresh();
-    expect(flags.get().directorSharing).toBe(false);
+    expect(flags.get()).toEqual(OFF);
   });
 
-  it('starts from the last answer, so the app does not flicker at launch', async () => {
+  it('starts from the last answers, so the app does not flicker at launch', async () => {
     const { flags, deps } = setup({
-      readCache: vi.fn(async () => true),
+      readCache: vi.fn(async () => ON),
       evaluate: vi.fn(async () => new Promise<boolean | null>(() => undefined)),
     });
     await flags.load();
-    expect(flags.get().directorSharing).toBe(true);
-    expect(deps.onChange).toHaveBeenCalledWith({ directorSharing: true });
+    expect(flags.get()).toEqual(ON);
+    expect(deps.onChange).toHaveBeenCalledWith(ON);
   });
 
-  it('remembers a fresh answer and announces a change', async () => {
+  it('reads a cache written before chunked export existed', async () => {
+    const { flags } = setup({
+      readCache: vi.fn(async () => ({ directorSharing: true })),
+      evaluate: vi.fn(async () => new Promise<boolean | null>(() => undefined)),
+    });
+    await flags.load();
+    expect(flags.get()).toEqual({ directorSharing: true, chunkedExport: false });
+  });
+
+  it('remembers fresh answers and announces a change', async () => {
     const { flags, deps } = setup({ evaluate: vi.fn(async () => true) });
     await flags.refresh();
-    expect(deps.writeCache).toHaveBeenCalledWith(true);
-    expect(deps.onChange).toHaveBeenCalledWith({ directorSharing: true });
+    expect(deps.writeCache).toHaveBeenCalledWith(ON);
+    expect(deps.onChange).toHaveBeenCalledWith(ON);
 
     (deps.onChange as ReturnType<typeof vi.fn>).mockClear();
     await flags.refresh();
@@ -64,34 +92,41 @@ describe('feature flags', () => {
     await flags.refresh();
     answer = null;
     await flags.refresh();
-    expect(flags.get().directorSharing).toBe(false);
+    expect(flags.get()).toEqual(OFF);
   });
 
   it('is on in development builds, without asking PostHog', async () => {
     const { flags, deps } = setup({ isPackaged: false });
     await flags.load();
     await flags.refresh();
-    expect(flags.get().directorSharing).toBe(true);
+    expect(flags.get()).toEqual(ON);
     expect(deps.evaluate).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['1', true],
-    ['0', false],
-  ] as const)(
-    'can be forced with SCREENFORGE_FEATURE_DIRECTOR_SHARING=%s',
-    async (override, on) => {
-      const { flags, deps } = setup({ override, evaluate: vi.fn(async () => !on) });
-      await flags.load();
-      await flags.refresh();
-      expect(flags.get().directorSharing).toBe(on);
-      expect(deps.evaluate).not.toHaveBeenCalled();
-    },
-  );
+    ['directorSharing', '1', true],
+    ['directorSharing', '0', false],
+    ['chunkedExport', '1', true],
+    ['chunkedExport', '0', false],
+  ] as const)('can force %s with an override of %s', async (name, override, on) => {
+    const { flags, deps } = setup({
+      overrides: { [name]: override },
+      evaluate: vi.fn(async () => !on),
+    });
+    await flags.load();
+    await flags.refresh();
+    expect(flags.get()[name]).toBe(on);
+    // The forced flag is never asked; the other one still is.
+    const asked = (deps.evaluate as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+    const forcedKey = name === 'chunkedExport' ? CHUNKED_EXPORT_FLAG : DIRECTOR_SHARING_FLAG;
+    expect(asked).not.toContain(forcedKey);
+    expect(asked).toHaveLength(1);
+  });
 
   it('lets the newest refresh win, even when an older one answers last', async () => {
     const answers: ((value: boolean | null) => void)[] = [];
     const { flags, deps } = setup({
+      overrides: { chunkedExport: '0' },
       evaluate: vi.fn(
         () =>
           new Promise<boolean | null>((resolve) => {
@@ -107,18 +142,18 @@ describe('feature flags', () => {
     answers[0](true);
     await older;
 
-    expect(flags.get().directorSharing).toBe(false);
-    expect(deps.writeCache).toHaveBeenLastCalledWith(false);
-    expect(deps.writeCache).not.toHaveBeenCalledWith(true);
+    expect(flags.get()).toEqual(OFF);
+    expect(deps.writeCache).toHaveBeenLastCalledWith({ directorSharing: false });
+    expect(deps.writeCache).not.toHaveBeenCalledWith({ directorSharing: true });
   });
 
-  it('writes the cache in order, so the file ends with the latest answer', async () => {
-    const writes: boolean[] = [];
+  it('writes the cache in order, so the file ends with the latest answers', async () => {
+    const writes: Partial<FeatureFlags>[] = [];
     const gate: { release?: () => void } = {};
     let answer = true;
     const { flags, deps } = setup({
       evaluate: vi.fn(async () => answer),
-      writeCache: vi.fn(async (value: boolean) => {
+      writeCache: vi.fn(async (value: Partial<FeatureFlags>) => {
         if (!gate.release) {
           await new Promise<void>((resolve) => {
             gate.release = resolve;
@@ -129,7 +164,7 @@ describe('feature flags', () => {
     });
 
     const first = flags.refresh();
-    // The first answer is being written when a newer one arrives.
+    // The first answers are being written when newer ones arrive.
     await vi.waitFor(() => expect(deps.writeCache).toHaveBeenCalledTimes(1));
     answer = false;
     const second = flags.refresh();
@@ -137,11 +172,29 @@ describe('feature flags', () => {
     gate.release?.();
     await Promise.all([first, second]);
 
-    expect(writes).toEqual([true, false]);
-    expect(flags.get().directorSharing).toBe(false);
+    expect(writes).toEqual([ON, OFF]);
+    expect(flags.get()).toEqual(OFF);
   });
 
-  it('keeps its answer when PostHog errors', async () => {
+  it('never saves a forced flag as if PostHog had answered it', async () => {
+    const { flags, deps } = setup({
+      overrides: { chunkedExport: '1' },
+      evaluate: vi.fn(async () => false),
+    });
+    await flags.refresh();
+    expect(flags.get()).toEqual({ directorSharing: false, chunkedExport: true });
+    expect(deps.writeCache).toHaveBeenCalledWith({ directorSharing: false });
+
+    // A later launch without the override starts from PostHog's last answer only.
+    const later = setup({
+      readCache: vi.fn(async () => ({ directorSharing: false })),
+      evaluate: vi.fn(async () => new Promise<boolean | null>(() => undefined)),
+    });
+    await later.flags.load();
+    expect(later.flags.get().chunkedExport).toBe(false);
+  });
+
+  it('keeps its answers when PostHog errors', async () => {
     let fail = false;
     const { flags } = setup({
       evaluate: vi.fn(async () => {
@@ -154,6 +207,6 @@ describe('feature flags', () => {
     await flags.refresh();
     fail = true;
     await expect(flags.refresh()).resolves.toBeUndefined();
-    expect(flags.get().directorSharing).toBe(true);
+    expect(flags.get()).toEqual(ON);
   });
 });

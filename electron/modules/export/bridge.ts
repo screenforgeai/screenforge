@@ -8,8 +8,11 @@ import {
 import type {
   CaptureWindowParams,
   CaptureWindowResult,
+  ExportChunkSpec,
   ExportFormat,
+  ExportPrerenderStatus,
   ExportProgress,
+  ExportRunSpec,
   ExportRuntimeStats,
   ExportRequest,
   ExportResult,
@@ -50,4 +53,24 @@ export const exportBridge = {
   notifyCaptureReady: createSendBridge<[]>(CH.export.CAPTURE_READY),
   onCaptureParams: createSubscription<CaptureWindowParams>(CH.export.CAPTURE_PARAMS),
   onCaptureAbort: createVoidSubscription(CH.export.CAPTURE_ABORT),
+  // ── Chunked export ────────────────────────────────────────────────────────
+  lookupExportChunks: createInvokeBridge<[string, ExportChunkSpec[]], boolean[]>(
+    CH.export.CHUNK_LOOKUP,
+  ),
+  startChunkRun: createInvokeBridge<
+    [string, number, ExportRunSpec, SerializedDecoderConfig | null],
+    void
+  >(CH.export.CHUNK_RUN_START),
+  writeChunkRun: createInvokeBridge<[string, number, SerializedChunk[]], void>(
+    CH.export.CHUNK_RUN_WRITE,
+  ),
+  endChunkRun: createInvokeBridge<[string, number], void>(CH.export.CHUNK_RUN_END),
+  startExportPrerender: createInvokeBridge<[CaptureWindowParams], boolean>(
+    CH.export.PRERENDER_START,
+  ),
+  stopExportPrerender: createInvokeBridge<[], void>(CH.export.PRERENDER_STOP),
+  reportPrerenderStatus: createSendBridge<[ExportPrerenderStatus]>(CH.export.PRERENDER_STATUS),
+  onPrerenderStatus: createSubscription<ExportPrerenderStatus>(CH.export.PRERENDER_STATUS),
+  canPrerenderOnPower: createInvokeBridge<[], boolean>(CH.export.PRERENDER_POWER),
+  onPrerenderPowerChanged: createSubscription<boolean>(CH.export.PRERENDER_POWER_CHANGED),
 };

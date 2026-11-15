@@ -64,5 +64,7 @@
   "share_linkExpired": "Link expired",
   "share_linkRemoved": "Link removed",
   "share_copyFailed": "Couldn't copy the link.",
-  "share_waiting": "Approve in your browser"
+  "share_waiting": "Approve in your browser",
+  "prerendered": "{{percent}}% prerendered",
+  "prerenderedAll": "Ready to export"
 }

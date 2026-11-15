@@ -2,21 +2,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { captureException, trackEvent } from '../lib/analytics';
 import { readableErrorMessage } from '../lib/ipcError';
 import type {
-  CaptureStoreSnapshot,
   CaptureWindowParams,
+  ExportResult,
   ExportRuntimeStats,
   ExportSettings,
 } from '../types';
 import { useStore } from '../store';
-import { createCaptureStoreSnapshot } from '../lib/export/captureSnapshot';
-import { getCustomWallpaperUrl } from '../lib/effects/frame/wallpapers';
-import { normalizeExportFpsForFormat } from '../lib/export/gif';
-import { computeRequestedExportSize, computeTimelineDuration } from '../lib/export/planning';
-import {
-  estimateEncodedVideoBytes,
-  isRandomAccessMuxFormat,
-  resolveSupportedExportTarget,
-} from '../lib/export/support';
+import { prepareExportCapture } from '../lib/export/captureParams';
+
+/**
+ * With the chunked-export flag on, exports render through the chunk cache:
+ * only chunks that changed since the last export (or background prerender)
+ * are rendered, then joined. Any failure in that path falls back to a plain
+ * single-pass export. Unknown flags read as off.
+ */
+async function isChunkedExportOn(): Promise<boolean> {
+  try {
+    return (await window.screenforge.getFeatureFlags()).chunkedExport === true;
+  } catch {
+    return false;
+  }
+}
 
 export type ExportStatus = 'idle' | 'rendering' | 'encoding' | 'success' | 'error' | 'cancelled';
 
@@ -46,19 +52,6 @@ function smoothMetric(prev: number | null, next?: number): number | undefined {
     return next;
   }
   return prev * 0.7 + next * 0.3;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1_000_000_000) {
-    return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-  }
-  if (bytes >= 1_000_000) {
-    return `${Math.round(bytes / 1_000_000)} MB`;
-  }
-  if (bytes >= 1_000) {
-    return `${Math.round(bytes / 1_000)} KB`;
-  }
-  return `${Math.round(bytes)} B`;
 }
 
 export function useVideoExport() {
@@ -175,37 +168,7 @@ export function useVideoExport() {
   }, [state.status]);
 
   const runExport = useCallback(async (outputPath: string, settings: ExportSettings) => {
-    const {
-      recordingResult,
-      mediaSegments,
-      frame,
-      cursorClickSound,
-      cursorClickSoundVolume,
-      cursorEnabled,
-      zoomClips,
-      textClips,
-      camera,
-      keyboard,
-      captions,
-      cursorStyle,
-      cursorSize,
-      cursorClickEffect,
-      cursorHalflife,
-      cursorMotionBlur,
-      cursorMaxTilt,
-      cursorHideWhenIdle,
-      cursorIdleHideSeconds,
-      cursorEffect,
-      cursorClickShrink,
-      cursorColor,
-      cursorLabel,
-      musicClips,
-      cameraClips,
-      maskClips,
-      motionClips,
-      hiddenLayers,
-    } = useStore.getState();
-    if (!recordingResult) {
+    if (!useStore.getState().recordingResult) {
       throw new Error('No recording loaded');
     }
 
@@ -223,64 +186,9 @@ export function useVideoExport() {
     };
 
     try {
-      const sourceInfo = await window.screenforge.probeExportSource(recordingResult.filePath);
+      const prepared = await prepareExportCapture(settings, assertNotCancelled);
       assertNotCancelled();
-      const effectiveFps = normalizeExportFpsForFormat(settings.format, settings.fps);
-      const sourceFps =
-        sourceInfo.fps != null && sourceInfo.fps > 0 ? sourceInfo.fps : effectiveFps;
-
-      // Compute output dimensions by fitting the source canvas (which has the
-      // frame geometry's actual aspect ratio, e.g. 16:10 from a MacBook display)
-      // into the selected resolution's bounding box while preserving aspect ratio.
-      // Fixed 16:9 targets would squish non-16:9 recordings.
-      const srcW = sourceInfo.width ?? 1280;
-      const srcH = sourceInfo.height ?? 800;
-      const { width: requestedTargetWidth, height: requestedTargetHeight } =
-        computeRequestedExportSize(frame, srcW, srcH, settings.resolution);
-      const duration = computeTimelineDuration(recordingResult.duration, mediaSegments);
-
-      const warnings: string[] = [];
-      if (settings.format === 'gif' && effectiveFps !== settings.fps) {
-        warnings.push(
-          `GIF exports are normalized to ${effectiveFps} FPS for smoother playback across apps.`,
-        );
-      }
-
-      const supportedTarget = await resolveSupportedExportTarget({
-        format: settings.format,
-        quality: settings.quality,
-        resolution: settings.resolution,
-        width: requestedTargetWidth,
-        height: requestedTargetHeight,
-        fps: effectiveFps,
-      });
-
-      if (!supportedTarget) {
-        throw new Error(
-          `This system cannot encode ${settings.format.toUpperCase()} exports at ${requestedTargetWidth}x${requestedTargetHeight} @ ${effectiveFps} FPS. Try a lower resolution or frame rate.`,
-        );
-      }
-
-      if (supportedTarget.capped) {
-        warnings.push(
-          `Your system cannot encode ${requestedTargetWidth}x${requestedTargetHeight} for this export profile. Screenforge will cap the export to ${supportedTarget.width}x${supportedTarget.height}.`,
-        );
-      }
-
-      if (isRandomAccessMuxFormat(settings.format)) {
-        const estimatedVideoBytes = estimateEncodedVideoBytes(
-          settings.quality,
-          settings.resolution,
-          duration,
-        );
-        if (estimatedVideoBytes >= 400_000_000) {
-          warnings.push(
-            `This ${settings.format.toUpperCase()} export may buffer about ${formatBytes(
-              estimatedVideoBytes,
-            )} of encoded video in memory before finalization. Longer high-resolution exports can use a lot of memory or fail.`,
-          );
-        }
-      }
+      const { effectiveFps, duration, warnings } = prepared;
 
       trackEvent('export_started', {
         format: settings.format,
@@ -300,105 +208,95 @@ export function useVideoExport() {
         warnings,
       });
 
-      const workspace = await window.screenforge.createExportWorkspace(jobId);
-      workspaceId = workspace.workspaceId;
-      assertNotCancelled();
+      // Renders (or reuses) the video, writes audio, and muxes the output.
+      const renderAndMux = async (
+        chunking: CaptureWindowParams['chunking'],
+      ): Promise<ExportResult> => {
+        const workspace = await window.screenforge.createExportWorkspace(jobId);
+        workspaceId = workspace.workspaceId;
+        assertNotCancelled();
 
-      // Snapshot the relevant Zustand store fields so the hidden capture window
-      // can reconstruct the same rendering state without importing renderer modules.
-      const captionsOverride =
-        settings.burnCaptions && captions.segments.length > 0
-          ? { ...captions, captionsEnabled: true }
-          : undefined;
-      const storeSnapshot: CaptureStoreSnapshot = createCaptureStoreSnapshot(
-        {
-          frame,
-          zoomClips,
-          textClips,
-          camera,
-          keyboard,
-          cursorEnabled,
-          cursorStyle,
-          cursorSize,
-          cursorClickEffect,
-          cursorHalflife,
-          cursorMotionBlur,
-          cursorMaxTilt,
-          cursorHideWhenIdle,
-          cursorIdleHideSeconds,
-          cursorEffect,
-          cursorClickShrink,
-          cursorColor,
-          cursorLabel,
-          cameraClips,
-          maskClips,
-          // A hidden Motion lane exports without motion, matching the preview.
-          motionClips: hiddenLayers.motion ? [] : motionClips,
-        },
-        captionsOverride,
-      );
+        const captureParams: CaptureWindowParams = {
+          ...prepared.params,
+          workspaceId: workspaceId as string,
+          jobId,
+          chunking,
+        };
 
-      const captureParams: CaptureWindowParams = {
-        workspaceId: workspaceId as string,
-        jobId,
-        recording: recordingResult,
-        mediaSegments,
-        frame,
-        storeSnapshot,
-        duration,
-        fps: effectiveFps,
-        sourceFps,
-        targetWidth: supportedTarget.width,
-        targetHeight: supportedTarget.height,
-        format: settings.format,
-        quality: settings.quality,
-        resolution: settings.resolution,
-        includeAudio: settings.includeAudio,
-        cursor: {
-          clickSound: cursorClickSound,
-          clickSoundVolume: cursorClickSoundVolume,
-        },
-        customWallpaperDataUrl: getCustomWallpaperUrl(),
-        musicClips: musicClips,
+        // Run captureTimeline() in a hidden BrowserWindow off the UI thread.
+        // Progress is forwarded to the main window via onCaptureProgress subscription above.
+        const captureResult = await window.screenforge.runCapture(captureParams);
+        assertNotCancelled();
+
+        // GIF has no audio track — skip writing audio even if includeAudio was set.
+        if (
+          workspaceId &&
+          settings.includeAudio &&
+          settings.format !== 'gif' &&
+          captureResult.audioWavBuffer
+        ) {
+          await window.screenforge.writeExportAudio(workspaceId, captureResult.audioWavBuffer);
+          assertNotCancelled();
+        }
+
+        setState((prev) => ({
+          ...prev,
+          status: 'encoding',
+          progress: 0.02,
+          error: null,
+          outputPath: null,
+        }));
+
+        if (!workspaceId) {
+          throw new Error('Export workspace was not created');
+        }
+
+        // startExport calls finalizeMuxer (or joins the cached chunks) on the main process side
+        const exportResult = await window.screenforge.startExport({
+          jobId,
+          workspaceId,
+          effectiveFps,
+          outputPath,
+          settings,
+          ...(captureResult.chunkKeys ? { chunkKeys: captureResult.chunkKeys } : {}),
+        });
+        assertNotCancelled();
+        if (captureResult.chunkStats) {
+          trackEvent('export_chunks', {
+            total: captureResult.chunkStats.total,
+            rendered: captureResult.chunkStats.rendered,
+          });
+        }
+        return exportResult;
       };
 
-      // Run captureTimeline() in a hidden BrowserWindow off the UI thread.
-      // Progress is forwarded to the main window via onCaptureProgress subscription above.
-      const captureResult = await window.screenforge.runCapture(captureParams);
-      assertNotCancelled();
-
-      // GIF has no audio track — skip writing audio even if includeAudio was set.
-      if (
-        workspaceId &&
-        settings.includeAudio &&
-        settings.format !== 'gif' &&
-        captureResult.audioWavBuffer
-      ) {
-        await window.screenforge.writeExportAudio(workspaceId, captureResult.audioWavBuffer);
+      const chunked = await isChunkedExportOn();
+      let result: ExportResult;
+      try {
+        result = await renderAndMux(chunked ? 'export' : null);
+      } catch (chunkedError) {
+        const chunkedMessage = readableErrorMessage(chunkedError, 'Export failed');
+        if (
+          !chunked ||
+          cancelledJobIdsRef.current.has(jobId) ||
+          chunkedMessage.toLowerCase().includes('cancel') ||
+          chunkedMessage.includes('closed unexpectedly')
+        ) {
+          throw chunkedError;
+        }
+        // The chunked path failed: export the plain way instead.
+        captureException(chunkedError, {
+          error_type: 'export_chunked_failed',
+          message: chunkedMessage,
+        });
+        if (workspaceId) {
+          await window.screenforge.cleanupExportWorkspace(workspaceId).catch(() => undefined);
+          workspaceId = null;
+        }
         assertNotCancelled();
+        setState((prev) => ({ ...prev, status: 'rendering', progress: 0 }));
+        result = await renderAndMux(null);
       }
-
-      setState((prev) => ({
-        ...prev,
-        status: 'encoding',
-        progress: 0.02,
-        error: null,
-        outputPath: null,
-      }));
-
-      if (!workspaceId) {
-        throw new Error('Export workspace was not created');
-      }
-
-      // startExport now calls finalizeMuxer internally on the main process side
-      const result = await window.screenforge.startExport({
-        jobId,
-        workspaceId,
-        effectiveFps,
-        outputPath,
-        settings,
-      });
-      assertNotCancelled();
 
       activeJobIdRef.current = null;
       setState((prev) => ({

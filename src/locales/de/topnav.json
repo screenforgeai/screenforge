@@ -24,5 +24,9 @@
   "support": "Screenforge unterstützen",
   "settingsLabel": "Einstellungen",
   "personalAccount": "Persönliches Konto",
-  "logOut": "Abmelden"
+  "logOut": "Abmelden",
+  "prerenderPreparing": "Vorrendern {{percent}} %",
+  "prerenderPartial": "{{percent}} % vorgerendert",
+  "prerenderReady": "Export bereit",
+  "prerenderHint": "Screenforge rendert deinen Export im Hintergrund, während du bearbeitest, damit der Export in Sekunden fertig ist."
 }
