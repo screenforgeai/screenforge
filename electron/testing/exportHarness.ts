@@ -11,10 +11,12 @@ import {
   createExportWorkspace,
   probeExportSource,
   runCaptureInWindow,
+  runExportPrerender,
   startExport,
   writeExportAudio,
 } from '../modules/export/service';
 import type { ExportHarnessResult } from './exportHarnessManifest';
+import { runPrerenderProbe } from './prerenderProbe';
 import { readResolvedExportFixtureManifest } from './exportHarnessManifest';
 
 async function writeHarnessResult(resultPath: string, result: ExportHarnessResult): Promise<void> {
@@ -83,6 +85,8 @@ export async function runExportHarness(
       motionClips: manifest.motionClips ?? [],
     });
 
+    // SCREENFORGE_EXPORT_CHUNKED=1 runs the export through the chunk cache.
+    const chunked = process.env.SCREENFORGE_EXPORT_CHUNKED === '1';
     const captureParams: CaptureWindowParams = {
       workspaceId,
       jobId: `export-test-${manifest.id}`,
@@ -103,7 +107,41 @@ export async function runExportHarness(
         clickSound: manifest.cursor.clickSound,
         clickSoundVolume: manifest.cursor.clickSoundVolume,
       },
+      chunking: chunked ? 'export' : null,
     };
+
+    // SCREENFORGE_PRERENDER_PROBE=1 measures editor smoothness during a
+    // pre-render instead of exporting.
+    if (
+      process.env.SCREENFORGE_PRERENDER_PROBE === '1' &&
+      process.env.SCREENFORGE_EXPORT_CACHE_DIR
+    ) {
+      const duties = (process.env.SCREENFORGE_PRERENDER_PROBE_DUTIES ?? '1,0.5,0.33')
+        .split(',')
+        .map(Number)
+        .filter((d) => d > 0 && d <= 1);
+      const probe = await runPrerenderProbe(
+        captureParams,
+        preloadPath,
+        process.env.SCREENFORGE_EXPORT_CACHE_DIR,
+        duties,
+        8000,
+      );
+      await writeHarnessResult(resultPath, {
+        success: true,
+        manifestId: manifest.id,
+        probe,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return 0;
+    }
+
+    // SCREENFORGE_EXPORT_PRERENDER=1 fills the chunk cache with a background
+    // pre-render first, as the editor does while idle.
+    let prerendered: boolean | undefined;
+    if (chunked && process.env.SCREENFORGE_EXPORT_PRERENDER === '1') {
+      prerendered = await runExportPrerender(captureParams, preloadPath);
+    }
 
     const captureResult = await runCaptureInWindow(captureParams, preloadPath);
     console.info(`[export-harness] capture finished for ${manifest.id}`);
@@ -124,6 +162,7 @@ export async function runExportHarness(
       effectiveFps,
       outputPath,
       settings: manifest.export,
+      ...(captureResult.chunkKeys ? { chunkKeys: captureResult.chunkKeys } : {}),
     };
 
     const exportResult = await startExport(request);
@@ -137,6 +176,8 @@ export async function runExportHarness(
       captureFrameCount: captureResult.frameCount,
       effectiveFps,
       capturePerf: captureResult.perfStats,
+      chunkStats: captureResult.chunkStats,
+      prerendered,
       duration,
       targetWidth: targetSize.width,
       targetHeight: targetSize.height,

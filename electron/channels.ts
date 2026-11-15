@@ -72,6 +72,22 @@ export const CH = {
     CAPTURE_ERROR: 'export:capture-error',
     // Main process → hidden window: abort the in-flight capture
     CAPTURE_ABORT: 'export:capture-abort',
+    // ── Chunked export ────────────────────────────────────────────────────
+    // Hidden window → main process: which chunks are already cached
+    CHUNK_LOOKUP: 'export:chunk-lookup',
+    // Hidden window → main process: a run of chunks opens / writes / ends
+    CHUNK_RUN_START: 'export:chunk-run-start',
+    CHUNK_RUN_WRITE: 'export:chunk-run-write',
+    CHUNK_RUN_END: 'export:chunk-run-end',
+    // Editor window → main process: fill the cache in the background / stop
+    PRERENDER_START: 'export:prerender-start',
+    PRERENDER_STOP: 'export:prerender-stop',
+    // Hidden window → main process → editor window: pre-render progress
+    PRERENDER_STATUS: 'export:prerender-status',
+    // Editor window → main process: does the power (mains, or battery ≥ 30%) allow a pre-render?
+    PRERENDER_POWER: 'export:prerender-power',
+    // Main process → editor window: that answer changed
+    PRERENDER_POWER_CHANGED: 'export:prerender-power-changed',
   },
   preload: {
     PROGRESS: 'preload:progress',

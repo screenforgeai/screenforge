@@ -24,5 +24,9 @@
   "support": "Support Screenforge",
   "settingsLabel": "Settings",
   "personalAccount": "Personal account",
-  "logOut": "Log out"
+  "logOut": "Log out",
+  "prerenderPreparing": "Prerendering {{percent}}%",
+  "prerenderPartial": "{{percent}}% prerendered",
+  "prerenderReady": "Export ready",
+  "prerenderHint": "Screenforge prerenders your export in the background while you edit, so exporting takes only seconds."
 }

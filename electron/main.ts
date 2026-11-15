@@ -42,6 +42,8 @@ import {
   isExportBusy,
   onExportActivityChanged,
   setMainWindowForCapture,
+  setPrerenderBlocker,
+  stopExportPrerender,
 } from './modules/export/service';
 import { runExportHarness } from './testing/exportHarness';
 import { isAllowedRendererPermission } from '../src/lib/electronPermissions';
@@ -614,6 +616,13 @@ app.on('ready', async () => {
     getToolbarLayout: () => toolbarLayout,
   });
   onRecordingActivityChanged(() => notifyUpdaterActivityChanged());
+  // A background export pre-render never runs alongside a recording.
+  setPrerenderBlocker(() => isRecordingBusy());
+  onRecordingActivityChanged(() => {
+    if (isRecordingBusy()) {
+      stopExportPrerender();
+    }
+  });
   onRecordingActivityChanged(() => {
     if (isRecordingBusy()) {
       setAppTrayRecordingState(true, () => {

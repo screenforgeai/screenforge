@@ -1,11 +1,15 @@
 import fs from 'node:fs/promises';
+import { ipcMain } from 'electron';
 import { CH } from '../../channels';
 import { handleChannel, handleChannelWithSender } from '../../lib/ipc-main';
 import type {
   CaptureWindowParams,
   CaptureWindowResult,
+  ExportChunkSpec,
   ExportFormat,
+  ExportPrerenderStatus,
   ExportRequest,
+  ExportRunSpec,
   SerializedChunk,
   SerializedDecoderConfig,
 } from '../../../src/types/index';
@@ -24,6 +28,15 @@ import {
   writeExportAudio,
   initMuxer,
   writeEncodedChunks,
+  lookupExportChunks,
+  startChunkRun,
+  writeChunkRun,
+  endChunkRun,
+  runExportPrerender,
+  stopExportPrerender,
+  forwardPrerenderStatus,
+  powerAllowsExportPrerender,
+  watchPrerenderPower,
 } from './service';
 import { exportedFiles } from '../share/exports';
 import { getShareManager } from '../share/service';
@@ -104,4 +117,35 @@ export function registerExportChannels(preloadPath: string): void {
     CH.export.RUN_CAPTURE,
     (_sender, params) => runCaptureInWindow(params, preloadPath),
   );
+
+  // ── Chunked export ────────────────────────────────────────────────────────
+  handleChannel<[string, ExportChunkSpec[]], boolean[]>(
+    CH.export.CHUNK_LOOKUP,
+    (workspaceId, chunks) => lookupExportChunks(workspaceId, chunks),
+  );
+  handleChannel<[string, number, ExportRunSpec, SerializedDecoderConfig | null], void>(
+    CH.export.CHUNK_RUN_START,
+    (workspaceId, runIndex, run, decoderConfig) =>
+      startChunkRun(workspaceId, runIndex, run, decoderConfig),
+  );
+  handleChannel<[string, number, SerializedChunk[]], void>(
+    CH.export.CHUNK_RUN_WRITE,
+    (workspaceId, runIndex, chunks) => writeChunkRun(workspaceId, runIndex, chunks),
+  );
+  handleChannel<[string, number], void>(CH.export.CHUNK_RUN_END, (workspaceId, runIndex) =>
+    endChunkRun(workspaceId, runIndex),
+  );
+  handleChannel<[CaptureWindowParams], boolean>(CH.export.PRERENDER_START, (params) =>
+    runExportPrerender(params, preloadPath),
+  );
+  handleChannel<[], void>(CH.export.PRERENDER_STOP, () => stopExportPrerender());
+  // Only the prerender hook asks, and only with the chunked-export flag on, so
+  // the power watch never starts while the flag is off.
+  handleChannel<[], boolean>(CH.export.PRERENDER_POWER, () => {
+    watchPrerenderPower();
+    return powerAllowsExportPrerender();
+  });
+  ipcMain.on(CH.export.PRERENDER_STATUS, (_event, status: ExportPrerenderStatus) => {
+    forwardPrerenderStatus(status);
+  });
 }

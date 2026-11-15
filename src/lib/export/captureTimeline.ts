@@ -16,7 +16,13 @@ import type { FrameSettings } from '../effects/frame';
 import { findSegmentAtTime, sortMediaSegments } from '../helpers/segments';
 import type { RenderSource } from '../effects/types';
 import { createExportPixiApp } from '../pixi/createPixiApp';
-import { analyzePixiEffects, setupPixiPipeline, tickPixiPipeline } from '../pixi/pipeline';
+import {
+  analyzePixiEffects,
+  getPixiUpdaterEffectId,
+  setupPixiPipeline,
+  tickPixiPipeline,
+} from '../pixi/pipeline';
+import { warmupFrameCount, type ExportRun } from './chunkPlan';
 import { useStore } from '../../store';
 import { renderTimelineAudio } from './audioTimeline';
 import { VideoEncoderWrapper } from './videoEncoder';
@@ -44,6 +50,9 @@ const CAPTURE_MAX_PENDING_ENCODER_FRAMES = 6;
 const CAPTURE_FRAME_PROGRESS_MAX = 0.96;
 const CAPTURE_FLUSH_PROGRESS = 0.98;
 const CAPTURE_DONE_PROGRESS = 0.99;
+// Effects whose output depends on earlier frames (springs, click animations,
+// motion blur). Only these are simulated before a chunk that starts mid-way.
+const WARMUP_EFFECT_IDS = new Set(['cursor', 'zoom']);
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -74,12 +83,45 @@ export interface CaptureTimelineOptions {
    * Implementer should call initMuxer IPC here.
    */
   onInitMuxer: (decoderConfig: SerializedDecoderConfig | null) => Promise<void>;
+  /**
+   * Chunked export. Called once the timeline is known. Returns the
+   * chunk-aligned frame runs to render — each in its own encoder session,
+   * with timestamps relative to the run start — or null for a single pass.
+   */
+  planRuns?: (info: CapturePlanInfo) => Promise<ExportRun[] | null>;
+  /** A run's encoder produced its decoder config; open the run's muxer. */
+  onRunStart?: (
+    runIndex: number,
+    run: ExportRun,
+    decoderConfig: SerializedDecoderConfig | null,
+  ) => Promise<void>;
+  onRunChunks?: (runIndex: number, chunks: SerializedChunk[]) => Promise<void>;
+  /** A run's encoder has flushed every frame. */
+  onRunEnd?: (runIndex: number, run: ExportRun) => Promise<void>;
+  /** Skip rendering audio (background pre-rendering has no use for it). */
+  skipAudio?: boolean;
+  /**
+   * Share of wall time spent rendering (0–1]. Below 1 the capture pauses
+   * after each burst of frames, so a background pre-render leaves the GPU
+   * and CPU to the editor. Exports leave it at 1.
+   */
+  dutyCycle?: number;
+}
+
+export interface CapturePlanInfo {
+  totalFrames: number;
+  fps: number;
+  playableSegments: MediaSegment[];
+  /** Analysed effect data, remapped to the timeline as the renderer uses it. */
+  analyzedData: Map<string, unknown>;
 }
 
 export interface CaptureTimelineResult {
   frameCount: number;
   audioWavBuffer?: ArrayBuffer;
   perfStats: ExportCapturePerfStats;
+  /** Set for a chunked capture: the runs that were rendered. */
+  runs?: ExportRun[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -390,6 +432,11 @@ export async function captureTimeline(
       }
     };
 
+    const runs = opts.planRuns
+      ? await opts.planRuns({ totalFrames, fps, playableSegments, analyzedData })
+      : null;
+    assertNotAborted();
+
     const cursorAnalysis = analyzedData.get('cursor') as CursorData | undefined;
     const cursorClickEvents = cursorAnalysis?.clickEvents ?? [];
     const cursorPressEvents = cursorAnalysis?.pressEvents ?? [];
@@ -398,7 +445,7 @@ export async function captureTimeline(
       recording,
       orderedSegments: playableSegments,
       duration: totalDuration,
-      includeAudio,
+      includeAudio: includeAudio && !opts.skipAudio,
       cursor,
       clickEvents: cursorClickEvents,
       pressEvents: cursorPressEvents,
@@ -468,6 +515,12 @@ export async function captureTimeline(
     // stalls for 1+ seconds. The GPU pipeline benefit is preserved: PBO_SUB_BATCH
     // frames' worth of rendering + readback commands execute in one Metal scheduling
     // window (~26ms total) rather than PBO_SUB_BATCH × 26ms sequentially.
+    // Encoded timestamps are relative to the start of the current run (0 for
+    // a single-pass export), so every run's file starts at time zero.
+    let timestampOffsetSeconds = 0;
+    const toTimestampMicros = (outputTime: number): number =>
+      Math.round((outputTime - timestampOffsetSeconds) * 1_000_000);
+
     const drainAndEncodePending = async (): Promise<void> => {
       if (pendingPbos.length === 0) {
         return;
@@ -525,7 +578,7 @@ export async function captureTimeline(
           cpuBuf,
           targetWidth,
           targetHeight,
-          Math.round(outputTime * 1_000_000),
+          toTimestampMicros(outputTime),
           isKeyFrame,
         );
         await encoder.waitForEncoderCapacity(CAPTURE_MAX_PENDING_ENCODER_FRAMES);
@@ -541,39 +594,72 @@ export async function captureTimeline(
     // into the rVFC capture loop (onError fires outside the Promise scope).
     let encoderError: Error | null = null;
 
-    const { wrapper: encoder, decoderConfig } = await VideoEncoderWrapper.create({
-      format,
-      quality,
-      resolution,
-      width: targetWidth,
-      height: targetHeight,
-      fps,
-      onChunkBatch: async (chunks) => {
-        assertNotAborted();
-        await onChunk(chunks);
-        assertNotAborted();
-      },
-      onDecoderConfig: async (config) => {
-        assertNotAborted();
-        await onInitMuxer(config);
-        assertNotAborted();
-      },
-      onError: (err) => {
-        encoderError = err;
-      },
-    });
+    const createEncoder = async (handlers: {
+      onChunks: (chunks: SerializedChunk[]) => Promise<void>;
+      onConfig: (config: SerializedDecoderConfig | null) => Promise<void>;
+    }): Promise<VideoEncoderWrapper> => {
+      const { wrapper, decoderConfig } = await VideoEncoderWrapper.create({
+        format,
+        quality,
+        resolution,
+        width: targetWidth,
+        height: targetHeight,
+        fps,
+        onChunkBatch: async (chunks) => {
+          assertNotAborted();
+          await handlers.onChunks(chunks);
+          assertNotAborted();
+        },
+        onDecoderConfig: async (config) => {
+          assertNotAborted();
+          await handlers.onConfig(config);
+          assertNotAborted();
+        },
+        onError: (err) => {
+          encoderError = err;
+        },
+      });
 
-    // If decoderConfig came from isConfigSupported pre-flight, initMuxer now
-    if (decoderConfig !== null) {
-      assertNotAborted();
-      await onInitMuxer(decoderConfig);
-      assertNotAborted();
-      encoder.markMuxerReady();
+      // If decoderConfig came from isConfigSupported pre-flight, initMuxer now
+      if (decoderConfig !== null) {
+        assertNotAborted();
+        await handlers.onConfig(decoderConfig);
+        assertNotAborted();
+        wrapper.markMuxerReady();
+      }
+      // If null: initMuxer will be called lazily via onDecoderConfig on first keyframe
+      return wrapper;
+    };
+
+    // A chunked capture opens one encoder per run, inside the loop below.
+    let encoder!: VideoEncoderWrapper;
+    if (runs === null) {
+      encoder = await createEncoder({ onChunks: onChunk, onConfig: onInitMuxer });
     }
-    // If null: initMuxer will be called lazily via onDecoderConfig on first keyframe
 
     // ── Frame capture loop ────────────────────────────────────────────────
     let currentOutputFrame = 0;
+    let loopEndFrame = totalFrames;
+    const dutyCycle = Math.min(1, Math.max(0.05, opts.dutyCycle ?? 1));
+    let busySince = performance.now();
+    // Yields to the event loop; under a duty cycle, also rests for long enough
+    // that rendering takes only `dutyCycle` of the time since the last rest.
+    const yieldAndRest = async (): Promise<void> => {
+      yieldedFrameCount += 1;
+      const restMs =
+        dutyCycle < 1 ? ((performance.now() - busySince) * (1 - dutyCycle)) / dutyCycle : 0;
+      await new Promise<void>((resolve) => setTimeout(resolve, restMs));
+      busySince = performance.now();
+    };
+    const framesToRender = runs
+      ? runs.reduce((sum, run) => sum + (run.endFrame - run.startFrame), 0)
+      : totalFrames;
+    let renderedInEarlierRuns = 0;
+    let currentRunStartFrame = 0;
+    const reportFrameProgress = (): void => {
+      const done = renderedInEarlierRuns + currentOutputFrame - currentRunStartFrame;
+      onProgress?.((done / Math.max(1, framesToRender)) * CAPTURE_FRAME_PROGRESS_MAX);
+    };
     const waitForWriterIfNeeded = async (): Promise<void> => {
       if (
         currentOutputFrame === 0 ||
@@ -588,13 +674,14 @@ export async function captureTimeline(
       assertNotAborted();
     };
 
-    try {
-      while (currentOutputFrame < totalFrames) {
+    const renderUntil = async (endFrame: number): Promise<void> => {
+      loopEndFrame = endFrame;
+      while (currentOutputFrame < loopEndFrame) {
         assertNotAborted();
 
         const batch = buildCaptureFrameBatch(
           playableSegments,
-          totalFrames,
+          loopEndFrame,
           fps,
           currentOutputFrame,
           sourceDuration,
@@ -618,7 +705,7 @@ export async function captureTimeline(
             const encodeStartedAt = performance.now();
             encoder.encodeFrame(
               blackCanvas,
-              Math.round(outputTime * 1_000_000),
+              toTimestampMicros(outputTime),
               isCaptureKeyFrame(frameIndex, fps),
             );
             await encoder.waitForEncoderCapacity(CAPTURE_MAX_PENDING_ENCODER_FRAMES);
@@ -629,12 +716,11 @@ export async function captureTimeline(
 
             currentOutputFrame += 1;
             blackFrameCount += 1;
-            onProgress?.((currentOutputFrame / totalFrames) * CAPTURE_FRAME_PROGRESS_MAX);
+            reportFrameProgress();
             await waitForWriterIfNeeded();
 
             if (currentOutputFrame % CAPTURE_YIELD_INTERVAL_FRAMES === 0) {
-              yieldedFrameCount += 1;
-              await new Promise<void>((resolve) => setTimeout(resolve, 0));
+              await yieldAndRest();
             }
           }
 
@@ -679,7 +765,7 @@ export async function captureTimeline(
                 const encodeStart = performance.now();
                 encoder.encodeFrame(
                   blackCanvas,
-                  Math.round(remTime * 1_000_000),
+                  toTimestampMicros(remTime),
                   isCaptureKeyFrame(remIdx, fps),
                 );
                 await encoder.waitForEncoderCapacity(CAPTURE_MAX_PENDING_ENCODER_FRAMES);
@@ -696,7 +782,7 @@ export async function captureTimeline(
               const encodeStart = performance.now();
               encoder.encodeFrame(
                 blackCanvas,
-                Math.round(outputTime * 1_000_000),
+                toTimestampMicros(outputTime),
                 isCaptureKeyFrame(frameIndex, fps),
               );
               await encoder.waitForEncoderCapacity(CAPTURE_MAX_PENDING_ENCODER_FRAMES);
@@ -728,12 +814,11 @@ export async function captureTimeline(
             if (cameraRenderSource) {
               cameraFrameCount += 1;
             }
-            onProgress?.((currentOutputFrame / totalFrames) * CAPTURE_FRAME_PROGRESS_MAX);
+            reportFrameProgress();
             await waitForWriterIfNeeded();
 
             if (currentOutputFrame % CAPTURE_YIELD_INTERVAL_FRAMES === 0) {
-              yieldedFrameCount += 1;
-              await new Promise<void>((resolve) => setTimeout(resolve, 0));
+              await yieldAndRest();
             }
           }
         } finally {
@@ -748,7 +833,36 @@ export async function captureTimeline(
           await frameIterator.return?.();
         }
       }
+    };
 
+    // Simulates the stateful effects over [fromFrame, toFrame) without drawing,
+    // exactly as a single pass would tick them, so a chunk that starts mid-way
+    // begins in the same state.
+    const warmableUpdaters = updaters.filter((updater) =>
+      WARMUP_EFFECT_IDS.has(getPixiUpdaterEffectId(updater) ?? ''),
+    );
+    const warmUp = (fromFrame: number, toFrame: number): void => {
+      let frame = fromFrame;
+      while (frame < toFrame) {
+        const batch = buildCaptureFrameBatch(playableSegments, toFrame, fps, frame, sourceDuration);
+        if (batch.frameIndices.length === 0) {
+          break;
+        }
+        if (batch.mode === 'video') {
+          batch.frameIndices.forEach((frameIndex, index) => {
+            const outputTime = batch.outputTimes[index] ?? frameIndex / fps;
+            tickPixiPipeline(warmableUpdaters, batch.sourceTimes[index] ?? outputTime, fixedDt, {
+              videoSource: null,
+              cameraSource: null,
+              outputTime,
+            });
+          });
+        }
+        frame = batch.frameIndices[batch.frameIndices.length - 1] + 1;
+      }
+    };
+
+    const finishEncoder = async (): Promise<void> => {
       // Drain pending sequential IPC writes before the hardware-encoder flush.
       // The batchWriteQueue can have 1-2 writes queued when the frame loop ends.
       // Draining here (while still in "Capturing & encoding…") ensures that
@@ -768,12 +882,44 @@ export async function captureTimeline(
       if (encoderError) {
         throw encoderError;
       }
+    };
+
+    try {
+      if (runs === null) {
+        await renderUntil(totalFrames);
+        await finishEncoder();
+      } else {
+        for (const [runIndex, run] of runs.entries()) {
+          assertNotAborted();
+          if (run.startFrame > 0) {
+            warmUp(Math.max(0, run.startFrame - warmupFrameCount(fps)), run.startFrame);
+          }
+          timestampOffsetSeconds = run.startFrame / fps;
+          const onRunChunks = opts.onRunChunks;
+          const onRunStart = opts.onRunStart;
+          if (!onRunChunks || !onRunStart) {
+            throw new Error('Chunked capture needs onRunStart and onRunChunks');
+          }
+          encoder = await createEncoder({
+            onChunks: (chunks) => onRunChunks(runIndex, chunks),
+            onConfig: (config) => onRunStart(runIndex, run, config),
+          });
+          currentOutputFrame = run.startFrame;
+          currentRunStartFrame = run.startFrame;
+          await renderUntil(run.endFrame);
+          await finishEncoder();
+          renderedInEarlierRuns += run.endFrame - run.startFrame;
+          currentRunStartFrame = currentOutputFrame;
+          await opts.onRunEnd?.(runIndex, run);
+          assertNotAborted();
+        }
+      }
     } catch (error) {
-      encoder.close();
+      (encoder as VideoEncoderWrapper | undefined)?.close();
       throw error;
     }
 
-    const frameCount = currentOutputFrame;
+    const frameCount = runs ? renderedInEarlierRuns : currentOutputFrame;
 
     // ── Audio ──────────────────────────────────────────────────────────────
     const audioWavBuffer = await audioPromise;
@@ -797,7 +943,7 @@ export async function captureTimeline(
       cameraFrameCount,
     };
 
-    return { frameCount, audioWavBuffer, perfStats };
+    return { frameCount, audioWavBuffer, perfStats, ...(runs ? { runs } : {}) };
   } finally {
     cleanup();
   }

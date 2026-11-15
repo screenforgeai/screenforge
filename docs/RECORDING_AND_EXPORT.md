@@ -92,6 +92,17 @@ The export runs in a hidden Electron `BrowserWindow` so the UI stays responsive.
 
 ---
 
+### Chunked export and pre-rendering
+
+The timeline is cut into 2-second chunks. Each export renders only the chunks that changed since the last export, stores them, and joins all chunks without re-encoding. While you edit, the app pre-renders missing chunks in the background with the last-used export settings, throttled to half speed and at low priority, so Export usually only has to join them. It pauses during playback and scrubbing, restarts about a second after an edit, and runs on mains power or on battery with at least 30% left (`electron/modules/export/power.ts`). The top bar shows its progress next to Export.
+
+- **Keys.** A chunk is reused only when everything that can affect its pixels is unchanged: the export settings, every style setting, and any timed item (clips, segments, cursor and keyboard events) within 5 s before to 3 s after the chunk, in both timeline and source time (`src/lib/export/chunkKeys.ts`).
+- **Warm-up.** Cursor and zoom springs carry state between frames, so a chunk that starts mid-timeline first simulates the 3 s before it without drawing (`captureTimeline.ts`, `CHUNK_WARMUP_SECONDS`).
+- **Cache.** Chunks live under `<userData>/export-cache/<recording>/`, capped at 4 GB with least-recently-used eviction (`electron/modules/export/chunkCache.ts`). A chunk enters the cache only when it has every frame and starts on a keyframe.
+- **Joining.** Chunks from encoders with different output parameters are never mixed, and the joined file is checked frame by frame for count and timing before use.
+- **Fallback.** If anything in the chunked path fails, the export runs again as a plain single-pass export (`useVideoExport.ts`).
+- **Tests.** `SCREENFORGE_EXPORT_CHUNKED=1` runs the export harness through the chunk cache, and `SCREENFORGE_EXPORT_CACHE_DIR` points it at its own cache. `test/export/chunked.integration.test.ts` checks a chunked export against a single pass, an unchanged re-export, and a re-export after an edit.
+
 ## How the Two Stages Connect
 
 ```

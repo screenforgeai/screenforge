@@ -1,8 +1,11 @@
+import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell } from 'electron';
+import { powerAllowsPrerender, readBatteryLevel } from './power';
+import { getFeatureFlags } from '../features/service';
 import type {
   CaptureWindowParams,
   CaptureWindowResult,
@@ -13,6 +16,9 @@ import type {
   ExportRuntimeStats,
   ExportSourceInfo,
   ExportWorkspace,
+  ExportChunkSpec,
+  ExportPrerenderStatus,
+  ExportRunSpec,
   SerializedChunk,
   SerializedDecoderConfig,
 } from '../../../src/types/index';
@@ -23,6 +29,20 @@ import { getFFmpegPath } from '../ffmpeg/index';
 import log from '../../lib/logger';
 import { trackMemorySnapshot } from '../../lib/telemetry';
 import { createExportVideoMuxer, type ExportVideoMuxer } from './videoMuxer';
+import {
+  ChunkCache,
+  ChunkCacheError,
+  ChunkRunWriter,
+  buildConcatArgs,
+  buildConcatList,
+  checkFrameTimes,
+  parseFrameTimes,
+  chunkContainerFor,
+  chunkNamespaceFor,
+  streamSignatureFor,
+  type ChunkContainer,
+} from './chunkCache';
+import { runFFmpeg } from '../ffmpeg/runner';
 
 interface ActiveExport {
   jobId: string;
@@ -34,6 +54,16 @@ interface ActiveExport {
   cancel: () => Promise<void>;
 }
 
+interface WorkspaceChunking {
+  namespace: string;
+  container: ChunkContainer;
+  fps: number;
+  scratchDir: string | null;
+  runs: Map<number, { writer: ChunkRunWriter; signature: string }>;
+  /** Keys this capture uses; never evicted while it runs. */
+  usedKeys: Set<string>;
+}
+
 interface WorkspaceState {
   workspaceId: string;
   jobId: string;
@@ -41,6 +71,7 @@ interface WorkspaceState {
   createdAt: number;
   audioPath?: string;
   activeMuxer?: ExportVideoMuxer;
+  chunking?: WorkspaceChunking;
 }
 
 let activeExport: ActiveExport | null = null;
@@ -53,6 +84,17 @@ const exportActivityListeners = new Set<() => void>();
 let mainWindowWebContents: Electron.WebContents | null = null;
 /** Active hidden capture window (at most one at a time). */
 let captureWindow: BrowserWindow | null = null;
+/** Background pre-renders share the capture window but never block anything. */
+let captureWindowKind: 'export' | 'prerender' | null = null;
+
+let chunkCache: ChunkCache | null = null;
+function getChunkCache(): ChunkCache {
+  // The export harness points tests at their own, initially empty cache.
+  chunkCache ??= new ChunkCache(
+    process.env.SCREENFORGE_EXPORT_CACHE_DIR || path.join(app.getPath('userData'), 'export-cache'),
+  );
+  return chunkCache;
+}
 
 function emitExportActivityChanged(): void {
   for (const listener of exportActivityListeners) {
@@ -68,7 +110,7 @@ export function onExportActivityChanged(listener: () => void): () => void {
 }
 
 export function isExportBusy(): boolean {
-  return captureWindow !== null || activeExport !== null;
+  return (captureWindow !== null && captureWindowKind === 'export') || activeExport !== null;
 }
 
 export function setMainWindowForCapture(wc: Electron.WebContents): void {
@@ -185,10 +227,16 @@ async function assertCaptureSourcesUsable(params: CaptureWindowParams): Promise<
 export async function runCaptureInWindow(
   params: CaptureWindowParams,
   preloadPath: string,
+  kind: 'export' | 'prerender' = 'export',
 ): Promise<CaptureWindowResult> {
   await assertCaptureSourcesUsable(params);
+  if (kind === 'prerender' && captureWindow && captureWindowKind === 'export') {
+    throw new Error('An export is running');
+  }
+  await prepareChunking(params);
 
-  // Destroy any previous capture window (shouldn't happen, but be defensive)
+  // A real export replaces a background pre-render (its partial chunks are
+  // discarded); otherwise this is only defensive.
   captureWindow?.destroy();
 
   const win = new BrowserWindow({
@@ -205,7 +253,21 @@ export async function runCaptureInWindow(
     },
   });
   captureWindow = win;
+  captureWindowKind = kind;
   emitExportActivityChanged();
+  if (kind === 'prerender') {
+    // The background pre-render gives way to everything else on the machine.
+    win.webContents.once('did-finish-load', () => {
+      try {
+        os.setPriority(
+          win.webContents.getOSProcessId(),
+          os.constants.priority.PRIORITY_BELOW_NORMAL,
+        );
+      } catch (error) {
+        log.info(`[export:prerender] could not lower priority: ${String(error)}`);
+      }
+    });
+  }
 
   return new Promise<CaptureWindowResult>((resolve, reject) => {
     // ── Forward progress from hidden window to main window ─────────────
@@ -213,7 +275,9 @@ export async function runCaptureInWindow(
       if (_event.sender !== win.webContents) {
         return;
       }
-      mainWindowWebContents?.send(CH.export.CAPTURE_PROGRESS, value);
+      if (kind === 'export') {
+        mainWindowWebContents?.send(CH.export.CAPTURE_PROGRESS, value);
+      }
     };
 
     // ── Send params once the hidden window signals it is ready ─────────
@@ -255,7 +319,10 @@ export async function runCaptureInWindow(
       if (!win.isDestroyed()) {
         win.destroy();
       }
-      captureWindow = null;
+      if (captureWindow === win) {
+        captureWindow = null;
+        captureWindowKind = null;
+      }
       emitExportActivityChanged();
     };
 
@@ -482,10 +549,14 @@ export async function startExport(
   );
 
   try {
-    // Finalize the muxer to get the encoded video path.
+    // Finalize the muxer (or join the cached chunks) to get the encoded video path.
     const t0 = performance.now();
-    const tempVideoPath = await finalizeMuxer(request.workspaceId, active);
-    log.info(`[export:service] finalizeMuxer durationMs=${Math.round(performance.now() - t0)}`);
+    const tempVideoPath = request.chunkKeys
+      ? await joinChunksForExport(workspace, request.chunkKeys, active)
+      : await finalizeMuxer(request.workspaceId, active);
+    log.info(
+      `[export:service] ${request.chunkKeys ? `joinChunks chunks=${request.chunkKeys.length}` : 'finalizeMuxer'} durationMs=${Math.round(performance.now() - t0)}`,
+    );
     assertExportNotCancelled(active);
     onProgress?.({ jobId, phase: 'encoding', time: 0, percent: 0.16 });
 
@@ -710,7 +781,312 @@ export async function cleanupExportWorkspace(workspaceId: string): Promise<void>
 
   workspaces.delete(workspaceId);
   await workspace.activeMuxer?.cancel().catch(() => undefined);
+  if (workspace.chunking) {
+    for (const { writer } of workspace.chunking.runs.values()) {
+      await writer.cancel();
+    }
+    if (workspace.chunking.scratchDir) {
+      await fs
+        .rm(workspace.chunking.scratchDir, { recursive: true, force: true })
+        .catch(() => undefined);
+    }
+  }
   await fs.rm(workspace.rootPath, { recursive: true, force: true }).catch(() => undefined);
+}
+
+// ── Chunked export ─────────────────────────────────────────────────────────
+
+async function fileIdentity(
+  filePath: string | null | undefined,
+): Promise<{ size: number | null; mtimeMs: number | null }> {
+  if (!filePath) {
+    return { size: null, mtimeMs: null };
+  }
+  try {
+    const stat = await fs.stat(filePath);
+    return { size: stat.size, mtimeMs: stat.mtimeMs };
+  } catch {
+    return { size: null, mtimeMs: null };
+  }
+}
+
+async function prepareChunking(params: CaptureWindowParams): Promise<void> {
+  const workspace = workspaces.get(params.workspaceId);
+  if (!workspace || !params.chunking) {
+    return;
+  }
+  const recording = await fileIdentity(params.recording.filePath);
+  const camera = await fileIdentity(params.recording.cameraPath);
+  workspace.chunking = {
+    namespace: chunkNamespaceFor({
+      recordingPath: params.recording.filePath,
+      recordingSize: recording.size,
+      recordingMtimeMs: recording.mtimeMs,
+      cameraPath: params.recording.cameraPath ?? null,
+      cameraSize: camera.size,
+      cameraMtimeMs: camera.mtimeMs,
+      appVersion: app.getVersion(),
+    }),
+    container: chunkContainerFor(params.format),
+    fps: params.fps,
+    scratchDir: null,
+    runs: new Map(),
+    usedKeys: new Set(),
+  };
+}
+
+function getChunking(workspaceId: string): WorkspaceChunking {
+  const chunking = workspaces.get(workspaceId)?.chunking;
+  if (!chunking) {
+    throw new Error('Export workspace is not set up for chunked export');
+  }
+  return chunking;
+}
+
+/** Which of these chunks are already cached. */
+export async function lookupExportChunks(
+  workspaceId: string,
+  chunks: ExportChunkSpec[],
+): Promise<boolean[]> {
+  const chunking = getChunking(workspaceId);
+  for (const chunk of chunks) {
+    chunking.usedKeys.add(chunk.key);
+  }
+  return getChunkCache().lookup(chunking.namespace, chunks, chunking.container, chunking.fps);
+}
+
+export async function startChunkRun(
+  workspaceId: string,
+  runIndex: number,
+  run: ExportRunSpec,
+  decoderConfig: SerializedDecoderConfig | null,
+): Promise<void> {
+  const chunking = getChunking(workspaceId);
+  if (chunking.runs.has(runIndex)) {
+    throw new Error(`Chunk run ${runIndex} already started`);
+  }
+  chunking.scratchDir ??= await getChunkCache().createScratchDir(chunking.namespace);
+  const signature = streamSignatureFor(decoderConfig, chunking.fps);
+  const cache = getChunkCache();
+  chunking.runs.set(runIndex, {
+    writer: new ChunkRunWriter({
+      dir: chunking.scratchDir,
+      container: chunking.container,
+      fps: chunking.fps,
+      decoderConfig,
+      run,
+      onChunkComplete: (chunk) =>
+        cache.put(chunking.namespace, chunk, chunking.container, chunking.fps, signature),
+    }),
+    signature,
+  });
+}
+
+export async function writeChunkRun(
+  workspaceId: string,
+  runIndex: number,
+  chunks: SerializedChunk[],
+): Promise<void> {
+  const run = getChunking(workspaceId).runs.get(runIndex);
+  if (!run) {
+    throw new Error(`Chunk run ${runIndex} was not started`);
+  }
+  await run.writer.write(chunks);
+}
+
+/** Verifies a finished run's chunks and moves them into the cache. */
+export async function endChunkRun(workspaceId: string, runIndex: number): Promise<void> {
+  const chunking = getChunking(workspaceId);
+  const run = chunking.runs.get(runIndex);
+  if (!run) {
+    throw new Error(`Chunk run ${runIndex} was not started`);
+  }
+  chunking.runs.delete(runIndex);
+  await run.writer.finish();
+  await getChunkCache()
+    .evict(chunking.usedKeys)
+    .catch((error) => {
+      log.warn(`[export:chunks] eviction failed: ${String(error)}`);
+    });
+}
+
+/** Every video frame's time, read without decoding. */
+async function readFrameTimes(filePath: string): Promise<number[]> {
+  const bin = await getFFmpegPath();
+  return new Promise((resolve) => {
+    const args = [
+      '-v',
+      'error',
+      '-i',
+      filePath,
+      '-map',
+      '0:v:0',
+      '-c',
+      'copy',
+      '-f',
+      'framemd5',
+      '-',
+    ];
+    const proc = spawn(bin, args);
+    let stdout = '';
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+    proc.on('error', () => resolve([]));
+    proc.on('close', () => resolve(parseFrameTimes(stdout)));
+  });
+}
+
+async function joinChunksForExport(
+  workspace: WorkspaceState,
+  keys: string[],
+  active: ActiveExport,
+): Promise<string> {
+  const chunking = workspace.chunking;
+  if (!chunking) {
+    throw new ChunkCacheError('Export workspace is not set up for chunked export');
+  }
+  const { files, frames, chunkFrames, fps } = await getChunkCache().resolveForJoin(
+    chunking.namespace,
+    keys,
+    chunking.container,
+  );
+  const listPath = path.join(workspace.rootPath, 'chunks.txt');
+  await fs.writeFile(
+    listPath,
+    buildConcatList(files.map((file, i) => ({ file, durationSeconds: chunkFrames[i] / fps }))),
+  );
+  const outputPath = path.join(workspace.rootPath, `video.${chunking.container}`);
+  const job = runFFmpeg(buildConcatArgs(listPath, outputPath), outputPath);
+  active.job = job;
+  await job.promise;
+  active.job = undefined;
+  assertExportNotCancelled(active);
+  const problem = checkFrameTimes(await readFrameTimes(outputPath), frames, fps);
+  if (problem) {
+    throw new ChunkCacheError(`Joined video ${problem}`);
+  }
+  return outputPath;
+}
+
+// ── Background pre-render ──────────────────────────────────────────────────
+
+let prerenderStatusListener: ((status: ExportPrerenderStatus) => void) | null = null;
+
+export function forwardPrerenderStatus(status: ExportPrerenderStatus): void {
+  prerenderStatusListener?.(status);
+  mainWindowWebContents?.send(CH.export.PRERENDER_STATUS, status);
+}
+
+export function setPrerenderStatusListener(
+  listener: ((status: ExportPrerenderStatus) => void) | null,
+): void {
+  prerenderStatusListener = listener;
+}
+
+/**
+ * Renders the chunks missing for these params into the cache, without audio
+ * or an output file. Returns false when it did not run to completion
+ * (an export is running, it was stopped, or it failed).
+ */
+// ── Power ──────────────────────────────────────────────────────────────────
+
+const BATTERY_LEVEL_TTL_MS = 60_000;
+let cachedBatteryLevel: { level: number | null; readAt: number } | null = null;
+
+/** Mains power, or a battery with at least 30% left (unknown level counts). */
+export async function powerAllowsExportPrerender(): Promise<boolean> {
+  const onBattery = powerMonitor.isOnBatteryPower();
+  if (!onBattery) {
+    return true;
+  }
+  if (!cachedBatteryLevel || Date.now() - cachedBatteryLevel.readAt > BATTERY_LEVEL_TTL_MS) {
+    cachedBatteryLevel = { level: await readBatteryLevel(), readAt: Date.now() };
+  }
+  return powerAllowsPrerender({ onBattery, level: cachedBatteryLevel.level });
+}
+
+let powerWatchStarted = false;
+
+/**
+ * Tells the editor when the power starts or stops allowing pre-renders
+ * (plugged in or out, battery crossing 30%), and stops a running pre-render
+ * when it no longer does.
+ */
+export function watchPrerenderPower(): void {
+  if (powerWatchStarted) {
+    return;
+  }
+  powerWatchStarted = true;
+  let lastAllowed: boolean | null = null;
+  const check = async () => {
+    // Switched off mid-session: stop reading the battery.
+    if (!getFeatureFlags().chunkedExport) {
+      return;
+    }
+    const allowed = await powerAllowsExportPrerender().catch(() => true);
+    if (!allowed) {
+      stopExportPrerender();
+    }
+    if (allowed !== lastAllowed) {
+      lastAllowed = allowed;
+      mainWindowWebContents?.send(CH.export.PRERENDER_POWER_CHANGED, allowed);
+    }
+  };
+  const onPlugChange = () => {
+    cachedBatteryLevel = null;
+    void check();
+  };
+  powerMonitor.on('on-ac', onPlugChange);
+  powerMonitor.on('on-battery', onPlugChange);
+  // The level only matters on battery, and only reads the OS once a minute.
+  setInterval(() => {
+    if (getFeatureFlags().chunkedExport && powerMonitor.isOnBatteryPower()) {
+      void check();
+    }
+  }, BATTERY_LEVEL_TTL_MS).unref?.();
+}
+
+let prerenderBlocked: () => boolean = () => false;
+
+/** Something else (a recording) that a pre-render must never compete with. */
+export function setPrerenderBlocker(isBlocked: () => boolean): void {
+  prerenderBlocked = isBlocked;
+}
+
+export async function runExportPrerender(
+  params: CaptureWindowParams,
+  preloadPath: string,
+): Promise<boolean> {
+  if (activeExport || (captureWindow && captureWindowKind === 'export') || prerenderBlocked()) {
+    return false;
+  }
+  if (!getFeatureFlags().chunkedExport || !(await powerAllowsExportPrerender())) {
+    return false;
+  }
+  const workspace = await createExportWorkspace(`prerender-${Date.now()}`);
+  try {
+    await runCaptureInWindow(
+      { ...params, workspaceId: workspace.workspaceId, chunking: 'prerender', includeAudio: false },
+      preloadPath,
+      'prerender',
+    );
+    return true;
+  } catch (error) {
+    log.info(
+      `[export:prerender] stopped: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return false;
+  } finally {
+    await cleanupExportWorkspace(workspace.workspaceId);
+  }
+}
+
+/** Stops a background pre-render; chunks it already finished stay cached. */
+export function stopExportPrerender(): void {
+  if (captureWindowKind === 'prerender') {
+    abortCaptureWindow();
+  }
 }
 
 function parseProbe(stderr: string): ExportSourceInfo {

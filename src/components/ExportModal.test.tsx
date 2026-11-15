@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExportModal from './ExportModal';
+import { prerenderSettingsKey, usePrerenderStore } from '../hooks/useExportPrerender';
 
 // ---------------------------------------------------------------------------
 // Store mock — provide a fixed 60-second duration so size estimates work.
@@ -406,5 +407,63 @@ describe('ExportModal — after a successful export', () => {
     renderDone('/Users/test/output.gif');
     const panel = JSON.parse(screen.getByTestId('share-panel').textContent ?? '{}');
     expect(panel.format).toBe('gif');
+  });
+});
+
+describe('ExportModal — pre-render readiness', () => {
+  const defaultKey = prerenderSettingsKey({
+    format: 'mp4',
+    resolution: '1080p',
+    fps: 60,
+    quality: 'high',
+  });
+
+  beforeEach(() => {
+    flags.value = { directorSharing: true, chunkedExport: true };
+  });
+
+  afterEach(() => {
+    usePrerenderStore.setState({ stateVersion: 0, settingsKey: null, status: null });
+  });
+
+  it('shows how much of the export is pre-rendered, without re-rendering endlessly', () => {
+    usePrerenderStore.setState({
+      stateVersion: 2,
+      settingsKey: defaultKey,
+      status: { phase: 'rendering', total: 10, cached: 7, stateVersion: 2 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).toHaveTextContent('70% prerendered');
+  });
+
+  it('says the export is ready when every chunk is pre-rendered', () => {
+    usePrerenderStore.setState({
+      stateVersion: 1,
+      settingsKey: defaultKey,
+      status: { phase: 'done', total: 10, cached: 10, stateVersion: 1 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).toHaveTextContent('Ready to export');
+  });
+
+  it('says nothing once the project changed since the pre-render', () => {
+    usePrerenderStore.setState({
+      stateVersion: 3,
+      settingsKey: defaultKey,
+      status: { phase: 'done', total: 10, cached: 10, stateVersion: 2 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).not.toHaveTextContent(/prerendered|Ready/);
+  });
+
+  it('says nothing while the chunked-export flag is off', () => {
+    flags.value = { directorSharing: true, chunkedExport: false };
+    usePrerenderStore.setState({
+      stateVersion: 1,
+      settingsKey: defaultKey,
+      status: { phase: 'done', total: 10, cached: 10, stateVersion: 1 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).not.toHaveTextContent(/prerendered|Ready/);
   });
 });

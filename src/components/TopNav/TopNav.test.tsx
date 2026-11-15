@@ -26,6 +26,10 @@ vi.mock('../../hooks/useUpdaterState', () => ({
   useUpdaterState: () => updaterState,
 }));
 
+vi.mock('../../hooks/useExportPrerender', () => ({ useExportPrerender: vi.fn() }));
+vi.mock('./_components/PrerenderIndicator', () => ({
+  PrerenderIndicator: () => <span>prerender indicator</span>,
+}));
 vi.mock('../../hooks/useVideoExport', () => ({
   useVideoExport: () => ({
     state: { status: 'idle', progress: 0, error: null, warnings: [] },
@@ -111,6 +115,37 @@ afterEach(() => {
   updaterState = null;
   flags.value = { directorSharing: false };
   vi.clearAllMocks();
+});
+
+describe('TopNav prerender indicator', () => {
+  beforeEach(() => {
+    flags.value = { directorSharing: false, chunkedExport: true };
+  });
+
+  it('shows only one loader at a time: autosave first', () => {
+    isSaving = true;
+    const { unmount } = render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.queryByText('prerender indicator')).not.toBeInTheDocument();
+    unmount();
+
+    isSaving = false;
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.getByText('prerender indicator')).toBeInTheDocument();
+  });
+
+  it('is not shown while the chunked-export flag is off', () => {
+    isSaving = false;
+    flags.value = { directorSharing: false, chunkedExport: false };
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.queryByText('prerender indicator')).not.toBeInTheDocument();
+  });
+
+  it('is not shown without a recording', () => {
+    isSaving = false;
+    recordingResult = null;
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.queryByText('prerender indicator')).not.toBeInTheDocument();
+  });
 });
 
 describe('TopNav updater activity', () => {
