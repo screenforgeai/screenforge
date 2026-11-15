@@ -93,7 +93,7 @@ export function prerenderSettingsKey(settings: {
  * (the project changed since the last pre-render, or it used other settings).
  */
 export function selectPrerenderReadiness(
-  state: PrerenderState,
+  state: Pick<PrerenderState, 'status' | 'stateVersion' | 'settingsKey'>,
   settingsKey: string,
 ): { total: number; cached: number } | null {
   const { status } = state;
@@ -139,19 +139,20 @@ export function useExportPrerender(enabled: boolean): void {
       if (disposed || state.isExporting || !state.recordingResult) {
         return;
       }
-      try {
-        if (!(await window.screenforge.canPrerenderOnPower())) {
-          usePrerenderStore.setState({ blocked: true });
-          return;
-        }
-      } catch {
-        return;
-      }
-      const stored = loadStoredExportSettings();
-      const settings = buildExportSettings(stored, state.captions);
-      const stateVersion = usePrerenderStore.getState().stateVersion;
+      // Reserved before the first wait, so a second start cannot slip in.
       running = true;
       try {
+        try {
+          if (!(await window.screenforge.canPrerenderOnPower())) {
+            usePrerenderStore.setState({ blocked: true });
+            return;
+          }
+        } catch {
+          return;
+        }
+        const stored = loadStoredExportSettings();
+        const settings = buildExportSettings(stored, state.captions);
+        const stateVersion = usePrerenderStore.getState().stateVersion;
         const prepared = await prepareExportCapture(settings);
         if (paused) {
           return;

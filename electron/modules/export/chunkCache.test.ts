@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +10,7 @@ import {
   ChunkCache,
   ChunkCacheError,
   ChunkRunWriter,
+  assertChunkKey,
   buildConcatArgs,
   buildConcatList,
   checkFrameTimes,
@@ -173,6 +175,26 @@ describe('helpers', () => {
   });
 });
 
+describe('assertChunkKey', () => {
+  it('accepts a 128-bit hex key', () => {
+    expect(() => assertChunkKey('0123456789abcdef0123456789abcdef')).not.toThrow();
+  });
+
+  it.each([
+    ['a path', '../../etc/passwd'],
+    ['a short key', 'abc'],
+    ['upper case', '0123456789ABCDEF0123456789ABCDEF'],
+    ['not a string', 42],
+  ])('refuses %s', (_label, key) => {
+    expect(() => assertChunkKey(key)).toThrow(ChunkCacheError);
+  });
+
+  it('keeps cache paths inside the cache', () => {
+    const cache = new ChunkCache(os.tmpdir());
+    expect(() => cache.chunkPath('ns', '../escape', 'mp4')).toThrow('Invalid chunk key');
+  });
+});
+
 describe('ChunkRunWriter', () => {
   it('splits a run into one file per chunk with zero-based timestamps', async () => {
     const made: FakeMuxer[] = [];
@@ -262,6 +284,9 @@ describe('ChunkRunWriter', () => {
 });
 
 describe('ChunkCache', () => {
+  // Real keys are 128-bit hex; name them for readability.
+  const K = (name: string) => createHash('md5').update(name).digest('hex');
+
   async function storeChunk(
     cache: ChunkCache,
     ns: string,
@@ -277,46 +302,52 @@ describe('ChunkCache', () => {
 
   it('reports only complete, matching chunks as cached', async () => {
     const cache = new ChunkCache(dir);
-    await storeChunk(cache, 'ns', 'k1', 60);
+    await storeChunk(cache, 'ns', K('k1'), 60);
     const chunks = [
-      { key: 'k1', startFrame: 0, endFrame: 60 },
-      { key: 'k2', startFrame: 60, endFrame: 120 },
+      { key: K('k1'), startFrame: 0, endFrame: 60 },
+      { key: K('k2'), startFrame: 60, endFrame: 120 },
     ];
     expect(await cache.lookup('ns', chunks, 'mp4', FPS)).toEqual([true, false]);
     expect(await cache.lookup('ns', chunks, 'webm', FPS)).toEqual([false, false]);
     expect(await cache.lookup('ns', chunks, 'mp4', 60)).toEqual([false, false]);
     expect(await cache.lookup('other', chunks, 'mp4', FPS)).toEqual([false, false]);
     // A chunk whose file vanished is not cached.
-    await fs.rm(cache.chunkPath('ns', 'k1', 'mp4'));
+    await fs.rm(cache.chunkPath('ns', K('k1'), 'mp4'));
     expect(await cache.lookup('ns', chunks, 'mp4', FPS)).toEqual([false, false]);
   });
 
   it('resolves chunks for joining and refuses mixed encoder output', async () => {
     const cache = new ChunkCache(dir);
-    await storeChunk(cache, 'ns', 'a', 60, 'sig1');
-    await storeChunk(cache, 'ns', 'b', 30, 'sig1');
-    await storeChunk(cache, 'ns', 'c', 60, 'sig2');
-    const joined = await cache.resolveForJoin('ns', ['a', 'b'], 'mp4');
+    await storeChunk(cache, 'ns', K('a'), 60, 'sig1');
+    await storeChunk(cache, 'ns', K('b'), 30, 'sig1');
+    await storeChunk(cache, 'ns', K('c'), 60, 'sig2');
+    const joined = await cache.resolveForJoin('ns', [K('a'), K('b')], 'mp4');
     expect(joined.frames).toBe(90);
     expect(joined.files).toEqual([
-      cache.chunkPath('ns', 'a', 'mp4'),
-      cache.chunkPath('ns', 'b', 'mp4'),
+      cache.chunkPath('ns', K('a'), 'mp4'),
+      cache.chunkPath('ns', K('b'), 'mp4'),
     ]);
-    await expect(cache.resolveForJoin('ns', ['a', 'c'], 'mp4')).rejects.toThrow(
+    await expect(cache.resolveForJoin('ns', [K('a'), K('c')], 'mp4')).rejects.toThrow(
       'different encoder',
     );
-    await expect(cache.resolveForJoin('ns', ['a', 'missing'], 'mp4')).rejects.toThrow('missing');
+    await expect(cache.resolveForJoin('ns', [K('a'), K('missing')], 'mp4')).rejects.toThrow(
+      'is missing',
+    );
   });
 
   it('evicts least-recently-used chunks over the cap and keeps protected ones', async () => {
     const cache = new ChunkCache(dir, 2500);
-    for (const [i, key] of ['old', 'mid', 'new'].entries()) {
+    for (const [i, key] of [K('old'), K('mid'), K('new')].entries()) {
       await storeChunk(cache, 'ns', key, 60);
       const when = new Date(Date.now() - (3 - i) * 60_000);
       await fs.utimes(cache.chunkPath('ns', key, 'mp4'), when, when);
     }
-    await cache.evict(new Set(['old']));
-    const chunks = ['old', 'mid', 'new'].map((key) => ({ key, startFrame: 0, endFrame: 60 }));
+    await cache.evict(new Set([K('old')]));
+    const chunks = [K('old'), K('mid'), K('new')].map((key) => ({
+      key,
+      startFrame: 0,
+      endFrame: 60,
+    }));
     expect(await cache.lookup('ns', chunks, 'mp4', FPS)).toEqual([true, false, true]);
   });
 });

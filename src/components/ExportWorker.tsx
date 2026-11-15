@@ -69,7 +69,8 @@ const ExportWorker = () => {
         cached = confirmedCached,
       ) => {
         if (isPrerender) {
-          reportedCached = Math.max(reportedCached, cached);
+          // A failed run may have stopped short of a chunk the estimate counted.
+          reportedCached = phase === 'failed' ? cached : Math.max(reportedCached, cached);
           window.screenforge.reportPrerenderStatus({
             phase,
             total,

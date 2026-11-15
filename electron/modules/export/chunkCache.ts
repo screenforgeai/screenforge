@@ -11,7 +11,9 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import type {
+  ExportChunkSpec,
   ExportFormat,
+  ExportRunSpec,
   SerializedChunk,
   SerializedDecoderConfig,
 } from '../../../src/types/index';
@@ -30,16 +32,21 @@ export function chunkContainerFor(format: ExportFormat): ChunkContainer {
   return format === 'mov' ? 'mov' : 'mp4';
 }
 
-export interface ChunkSpec {
-  key: string;
-  startFrame: number;
-  endFrame: number;
-}
+/** The IPC contracts, so the cache and its callers stay in step. */
+export type ChunkSpec = ExportChunkSpec;
+export type RunSpec = ExportRunSpec;
 
-export interface RunSpec {
-  startFrame: number;
-  endFrame: number;
-  chunks: ChunkSpec[];
+/** Content keys are 128-bit hex hashes (see chunkKeys.ts). */
+const CHUNK_KEY_PATTERN = /^[0-9a-f]{32}$/;
+
+/**
+ * Keys arrive over IPC and name files, so anything that is not a content key
+ * (e.g. "../x") is refused before it reaches the filesystem.
+ */
+export function assertChunkKey(key: unknown): asserts key is string {
+  if (typeof key !== 'string' || !CHUNK_KEY_PATTERN.test(key)) {
+    throw new ChunkCacheError('Invalid chunk key');
+  }
 }
 
 export interface ChunkMeta {
@@ -241,10 +248,12 @@ export class ChunkCache {
   }
 
   chunkPath(namespace: string, key: string, container: ChunkContainer): string {
+    assertChunkKey(key);
     return path.join(this.namespaceDir(namespace), `${key}.${container}`);
   }
 
   private metaPath(namespace: string, key: string): string {
+    assertChunkKey(key);
     return path.join(this.namespaceDir(namespace), `${key}.json`);
   }
 

@@ -18,7 +18,7 @@ vi.mock('sonner', () => ({
   }),
 }));
 
-const flags = vi.hoisted(() => ({ value: { directorSharing: false } }));
+const flags = vi.hoisted(() => ({ value: { directorSharing: false, chunkedExport: false } }));
 vi.mock('../../hooks/useFeatureFlags', () => ({ useFeatureFlags: () => flags.value }));
 let pushShareState: (state: ShareJobState) => void = () => undefined;
 
@@ -113,7 +113,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   updaterState = null;
-  flags.value = { directorSharing: false };
+  flags.value = { directorSharing: false, chunkedExport: false };
   vi.clearAllMocks();
 });
 
@@ -237,7 +237,7 @@ describe('TopNav share upload notice', () => {
   };
 
   it('says the upload carries on when the export window closes', async () => {
-    flags.value = { directorSharing: true };
+    flags.value = { directorSharing: true, chunkedExport: false };
     await closeExportDuringUpload();
     expect(toast).toHaveBeenCalledWith("Still uploading. The link is copied when it's done.");
   });

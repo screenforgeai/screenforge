@@ -1,8 +1,9 @@
 name: Export (all platforms)
 
 # Real exports through the app on Linux, macOS and Windows: the chunked-export
-# end-to-end test, then the export suite once as a plain single-pass export
-# and once through the chunk cache.
+# end-to-end test, then the export suite (without the chunked test, which
+# already ran) once as a plain single-pass export and once through the chunk
+# cache.
 
 on:
   workflow_dispatch:
@@ -57,6 +58,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Fetch Electron now, so the first test does not spend its time limit
+      # downloading it.
+      - name: Install Electron binary
+        shell: bash
+        run: node node_modules/electron/install.js
+
+      # Ubuntu runners block the unprivileged namespaces Chromium's sandbox
+      # prefers, so it needs its setuid helper, which must be root-owned.
+      - name: Set up Chromium sandbox (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+
       - name: Install display and shell (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb zsh
@@ -91,7 +106,7 @@ jobs:
         env:
           SCREENFORGE_EXPORT_CHUNKED: '0'
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a pnpm test:export; else pnpm test:export; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a pnpm test:export test/export/export.integration.test.ts; else pnpm test:export test/export/export.integration.test.ts; fi
 
       - name: Export suite, through the chunk cache
         if: runner.os != 'Windows'
@@ -100,4 +115,4 @@ jobs:
           SCREENFORGE_EXPORT_CHUNKED: '1'
           SCREENFORGE_EXPORT_CACHE_DIR: ${{ runner.temp }}/export-cache-suite
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a pnpm test:export; else pnpm test:export; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a pnpm test:export test/export/export.integration.test.ts; else pnpm test:export test/export/export.integration.test.ts; fi

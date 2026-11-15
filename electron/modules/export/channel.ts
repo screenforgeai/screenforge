@@ -34,7 +34,7 @@ import {
   endChunkRun,
   runExportPrerender,
   stopExportPrerender,
-  forwardPrerenderStatus,
+  getMainWindowForCapture,
   powerAllowsExportPrerender,
   watchPrerenderPower,
 } from './service';
@@ -142,10 +142,13 @@ export function registerExportChannels(preloadPath: string): void {
   // Only the prerender hook asks, and only with the chunked-export flag on, so
   // the power watch never starts while the flag is off.
   handleChannel<[], boolean>(CH.export.PRERENDER_POWER, () => {
-    watchPrerenderPower();
+    watchPrerenderPower((allowed) => {
+      getMainWindowForCapture()?.send(CH.export.PRERENDER_POWER_CHANGED, allowed);
+    });
     return powerAllowsExportPrerender();
   });
+  // From the hidden window, on to the editor.
   ipcMain.on(CH.export.PRERENDER_STATUS, (_event, status: ExportPrerenderStatus) => {
-    forwardPrerenderStatus(status);
+    getMainWindowForCapture()?.send(CH.export.PRERENDER_STATUS, status);
   });
 }

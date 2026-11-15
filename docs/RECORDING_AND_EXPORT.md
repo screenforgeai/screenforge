@@ -83,6 +83,7 @@ Final output file
 ### Where quality settings live
 
 When you pick "High Quality / 1080p", these values are used:
+
 - **Resolution**: output canvas is sized to 1920×1080
 - **Bitrate**: 80 Mbps (for 1080p high quality)
 - **Codec**: H.264 for mp4/mov, VP9 for webm
@@ -93,6 +94,8 @@ The export runs in a hidden Electron `BrowserWindow` so the UI stays responsive.
 ---
 
 ### Chunked export and pre-rendering
+
+All of this runs only while the `chunked-export` feature flag is on (PostHog; on in development builds, forced with `SCREENFORGE_FEATURE_CHUNKED_EXPORT=1` or `0`). With the flag off, Export renders the whole video in one pass exactly as before: nothing is pre-rendered, nothing is cached, and the top bar and export dialog show no progress.
 
 The timeline is cut into 2-second chunks. Each export renders only the chunks that changed since the last export, stores them, and joins all chunks without re-encoding. While you edit, the app pre-renders missing chunks in the background with the last-used export settings, throttled to half speed and at low priority, so Export usually only has to join them. It pauses during playback and scrubbing, restarts about a second after an edit, and runs on mains power or on battery with at least 30% left (`electron/modules/export/power.ts`). The top bar shows its progress next to Export.
 
@@ -121,17 +124,17 @@ The `.mp4` from recording is never modified after recording stops (except for th
 
 ## Common Terms
 
-| Term | What it means |
-|------|---------------|
-| **HEVC / H.265** | A video compression format. Better quality than H.264 at the same file size. Used during recording on modern macOS. |
-| **H.264 / AVC** | An older but widely supported compression format. Used for exports by default. |
-| **WebCodecs** | A browser API for encoding/decoding video frames in JavaScript. Screenforge uses it for the export re-encoding step. |
-| **Muxing** | Combining a video stream and an audio stream into a single container file (e.g., `.mp4`). Like putting picture and sound together into one file. |
-| **Bitrate** | How many bits per second are used to represent the video. Higher = larger file but better quality. |
-| **latencyMode** | Tells the encoder whether to prioritize speed (`realtime`) or quality (`quality`). |
+| Term                  | What it means                                                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HEVC / H.265**      | A video compression format. Better quality than H.264 at the same file size. Used during recording on modern macOS.                                |
+| **H.264 / AVC**       | An older but widely supported compression format. Used for exports by default.                                                                     |
+| **WebCodecs**         | A browser API for encoding/decoding video frames in JavaScript. Screenforge uses it for the export re-encoding step.                               |
+| **Muxing**            | Combining a video stream and an audio stream into a single container file (e.g., `.mp4`). Like putting picture and sound together into one file.   |
+| **Bitrate**           | How many bits per second are used to represent the video. Higher = larger file but better quality.                                                 |
+| **latencyMode**       | Tells the encoder whether to prioritize speed (`realtime`) or quality (`quality`).                                                                 |
 | **CRF / bitrateMode** | How the encoder allocates bits across frames — constant (same bits every frame) or variable (more bits for complex frames, fewer for static ones). |
-| **ScreenCaptureKit** | Apple's modern screen capture framework (macOS 13+). Faster and higher quality than older methods. |
-| **mediabunny** | A JS library that wraps WebCodecs for easier video muxing/demuxing. Screenforge uses it to both decode source frames and write the encoded output. |
+| **ScreenCaptureKit**  | Apple's modern screen capture framework (macOS 13+). Faster and higher quality than older methods.                                                 |
+| **mediabunny**        | A JS library that wraps WebCodecs for easier video muxing/demuxing. Screenforge uses it to both decode source frames and write the encoded output. |
 
 ---
 

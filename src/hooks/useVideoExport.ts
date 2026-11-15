@@ -293,6 +293,7 @@ export function useVideoExport() {
           await window.screenforge.cleanupExportWorkspace(workspaceId).catch(() => undefined);
           workspaceId = null;
         }
+        assertNotCancelled();
         setState((prev) => ({ ...prev, status: 'rendering', progress: 0 }));
         result = await renderAndMux(null);
       }

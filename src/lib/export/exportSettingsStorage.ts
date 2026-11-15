@@ -24,6 +24,14 @@ export const EXPORT_QUALITY_PRESET: Record<
   high: { audioBitrateKbps: 320 },
 };
 
+const FORMATS: readonly ExportSettings['format'][] = ['mp4', 'mov', 'webm', 'gif'];
+const RESOLUTIONS: readonly ExportSettings['resolution'][] = ['720p', '1080p', '4k'];
+const QUALITIES: readonly ExportSettings['quality'][] = ['fast', 'balanced', 'high'];
+
+function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
 /** The export dialog's last-used settings, or the defaults. */
 export function loadStoredExportSettings(): StoredExportSettings {
   try {
@@ -31,13 +39,20 @@ export function loadStoredExportSettings(): StoredExportSettings {
     if (!raw) {
       return DEFAULT_EXPORT_SETTINGS;
     }
-    const parsed = JSON.parse(raw) as Partial<ExportSettings>;
-    const format = parsed.format ?? DEFAULT_EXPORT_SETTINGS.format;
+    const parsed = JSON.parse(raw) as Record<string, unknown> | null;
+    if (!parsed || typeof parsed !== 'object') {
+      return DEFAULT_EXPORT_SETTINGS;
+    }
+    // A value this version does not know falls back to its default.
+    const format = pick(parsed.format, FORMATS, DEFAULT_EXPORT_SETTINGS.format);
     return {
       format,
-      resolution: parsed.resolution ?? DEFAULT_EXPORT_SETTINGS.resolution,
-      fps: normalizeExportFpsForFormat(format, parsed.fps ?? DEFAULT_EXPORT_SETTINGS.fps),
-      quality: parsed.quality ?? DEFAULT_EXPORT_SETTINGS.quality,
+      resolution: pick(parsed.resolution, RESOLUTIONS, DEFAULT_EXPORT_SETTINGS.resolution),
+      fps: normalizeExportFpsForFormat(
+        format,
+        typeof parsed.fps === 'number' ? parsed.fps : DEFAULT_EXPORT_SETTINGS.fps,
+      ),
+      quality: pick(parsed.quality, QUALITIES, DEFAULT_EXPORT_SETTINGS.quality),
     };
   } catch {
     return DEFAULT_EXPORT_SETTINGS;

@@ -56,6 +56,8 @@ export interface ProbePhase {
   longFramePercent: number;
   /** Seconds of video the pre-render finished during the phase. */
   prerenderedSeconds?: number;
+  /** Why the phase does not count: the pre-render was not running throughout. */
+  skipped?: string;
 }
 
 function summarize(label: string, intervals: number[], refreshMs: number): ProbePhase {
@@ -110,19 +112,33 @@ export async function runPrerenderProbe(
 
   for (const dutyCycle of dutyCycles) {
     await fs.rm(cacheDir, { recursive: true, force: true });
-    const running = runExportPrerender({ ...params, dutyCycle }, preloadPath);
+    let settled = false;
+    const running = runExportPrerender({ ...params, dutyCycle }, preloadPath).finally(() => {
+      settled = true;
+    });
     // Let the hidden window load and start rendering before measuring.
     await delay(3000);
+    const endedBeforeMeasuring = settled;
     const chunksAtStart = await countCachedChunks(cacheDir);
     await take();
     await delay(phaseMs);
     const intervals = await take();
+    const endedWhileMeasuring = settled;
     const chunks = (await countCachedChunks(cacheDir)) - chunksAtStart;
     stopExportPrerender();
-    await running;
+    const ran = await running;
+    // A refused or finished pre-render measured the editor alone, not alongside it.
+    const skipped = !ran
+      ? 'pre-render did not run'
+      : endedBeforeMeasuring
+        ? 'pre-render finished before measuring'
+        : endedWhileMeasuring
+          ? 'pre-render finished while measuring'
+          : undefined;
     phases.push({
       ...summarize(`with pre-render at ${Math.round(dutyCycle * 100)}%`, intervals, refreshMs),
       prerenderedSeconds: chunks * 2,
+      ...(skipped ? { skipped } : {}),
     });
   }
 

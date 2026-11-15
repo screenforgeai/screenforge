@@ -164,9 +164,14 @@ async function exportThroughApp(
   const resultPath = path.join(dir, 'result.json');
   await fs.writeFile(manifestPath, JSON.stringify(manifest));
 
-  const { buildHarnessLaunch } = (await import('../../scripts/bench-export-lib.mjs')) as {
-    buildHarnessLaunch: (platform: string) => { command: string; args: string[]; shell: boolean };
-  };
+  const { buildHarnessLaunch, buildTreeKillCommand } =
+    (await import('../../scripts/bench-export-lib.mjs')) as {
+      buildHarnessLaunch: (platform: string) => { command: string; args: string[]; shell: boolean };
+      buildTreeKillCommand: (
+        platform: string,
+        pid: number,
+      ) => { command: string; args: string[] } | null;
+    };
   const launch = buildHarnessLaunch(process.platform);
   const child = spawn(launch.command, launch.args, {
     cwd: ROOT,
@@ -209,7 +214,13 @@ async function exportThroughApp(
     throw new Error(`Export timed out\n${log.slice(-4000)}`);
   } finally {
     if (child.pid) {
-      await processTree.terminateProcessTree(child.pid).catch(() => undefined);
+      // Windows has no ps, so only taskkill /T reaches Electron behind the shell.
+      const kill = buildTreeKillCommand(process.platform, child.pid);
+      if (kill) {
+        await run(kill.command, kill.args).catch(() => undefined);
+      } else {
+        await processTree.terminateProcessTree(child.pid).catch(() => undefined);
+      }
     }
     await Promise.race([closed, delay(5000)]);
   }

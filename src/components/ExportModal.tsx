@@ -580,16 +580,21 @@ const ExportModal = ({
               <p className="text-md text-sf-muted -mt-2">
                 {t('estimatedSize')}{' '}
                 <span className="tabular-nums text-sf-secondary">{estimatedSize}</span>
-                {chunkedExport && prerenderReadiness && prerenderReadiness.cached > 0 && (
-                  <span className="tabular-nums">
-                    {' · '}
-                    {prerenderReadiness.cached >= prerenderReadiness.total
-                      ? t('prerenderedAll')
-                      : t('prerendered', {
-                          percent: Math.floor(
-                            (prerenderReadiness.cached / prerenderReadiness.total) * 100,
-                          ),
-                        })}
+                {/* Stays mounted so screen readers hear the readiness change. */}
+                {chunkedExport && (
+                  <span role="status" aria-live="polite" className="tabular-nums">
+                    {prerenderReadiness && prerenderReadiness.cached > 0 && (
+                      <>
+                        {' · '}
+                        {prerenderReadiness.cached >= prerenderReadiness.total
+                          ? t('prerenderedAll')
+                          : t('prerendered', {
+                              percent: Math.floor(
+                                (prerenderReadiness.cached / prerenderReadiness.total) * 100,
+                              ),
+                            })}
+                      </>
+                    )}
                   </span>
                 )}
               </p>

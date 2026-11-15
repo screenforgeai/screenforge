@@ -24,7 +24,8 @@ export interface FeatureFlagsDeps {
   evaluate: (flag: string) => Promise<boolean | null>;
   /** The last answers; a flag missing from the file has none. */
   readCache: () => Promise<Partial<FeatureFlags> | null>;
-  writeCache: (flags: FeatureFlags) => Promise<void>;
+  /** Only flags PostHog answered; forced (overridden) flags are never saved. */
+  writeCache: (flags: Partial<FeatureFlags>) => Promise<void>;
   onChange: (flags: FeatureFlags) => void;
 }
 
@@ -58,7 +59,8 @@ export function createFeatureFlags(deps: FeatureFlagsDeps) {
     }
   };
   const remember = (value: FeatureFlags): Promise<void> => {
-    writes = writes.then(() => deps.writeCache(value)).catch(() => undefined);
+    const answered = Object.fromEntries(asked.map((name) => [name, value[name]]));
+    writes = writes.then(() => deps.writeCache(answered)).catch(() => undefined);
     return writes;
   };
 

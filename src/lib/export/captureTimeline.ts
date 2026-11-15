@@ -633,8 +633,11 @@ export async function captureTimeline(
 
     // A chunked capture opens one encoder per run, inside the loop below.
     let encoder!: VideoEncoderWrapper;
+    // A run's encoder is closed once flushed; closing it twice would throw.
+    let encoderOpen = false;
     if (runs === null) {
       encoder = await createEncoder({ onChunks: onChunk, onConfig: onInitMuxer });
+      encoderOpen = true;
     }
 
     // ── Frame capture loop ────────────────────────────────────────────────
@@ -904,10 +907,13 @@ export async function captureTimeline(
             onChunks: (chunks) => onRunChunks(runIndex, chunks),
             onConfig: (config) => onRunStart(runIndex, run, config),
           });
+          encoderOpen = true;
           currentOutputFrame = run.startFrame;
           currentRunStartFrame = run.startFrame;
           await renderUntil(run.endFrame);
           await finishEncoder();
+          encoderOpen = false;
+          encoder.close();
           renderedInEarlierRuns += run.endFrame - run.startFrame;
           currentRunStartFrame = currentOutputFrame;
           await opts.onRunEnd?.(runIndex, run);
@@ -915,7 +921,9 @@ export async function captureTimeline(
         }
       }
     } catch (error) {
-      (encoder as VideoEncoderWrapper | undefined)?.close();
+      if (encoderOpen) {
+        (encoder as VideoEncoderWrapper | undefined)?.close();
+      }
       throw error;
     }
 

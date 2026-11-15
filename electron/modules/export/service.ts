@@ -17,7 +17,6 @@ import type {
   ExportSourceInfo,
   ExportWorkspace,
   ExportChunkSpec,
-  ExportPrerenderStatus,
   ExportRunSpec,
   SerializedChunk,
   SerializedDecoderConfig,
@@ -33,6 +32,7 @@ import {
   ChunkCache,
   ChunkCacheError,
   ChunkRunWriter,
+  assertChunkKey,
   buildConcatArgs,
   buildConcatList,
   checkFrameTimes,
@@ -115,6 +115,13 @@ export function isExportBusy(): boolean {
 
 export function setMainWindowForCapture(wc: Electron.WebContents): void {
   mainWindowWebContents = wc;
+}
+
+/** The editor window, for the channel layer to deliver prerender updates to. */
+export function getMainWindowForCapture(): Electron.WebContents | null {
+  return mainWindowWebContents && !mainWindowWebContents.isDestroyed()
+    ? mainWindowWebContents
+    : null;
 }
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -228,12 +235,22 @@ export async function runCaptureInWindow(
   params: CaptureWindowParams,
   preloadPath: string,
   kind: 'export' | 'prerender' = 'export',
+  /** Prerender only: true once the prerender this window is for was stopped. */
+  isStopped: () => boolean = () => false,
 ): Promise<CaptureWindowResult> {
   await assertCaptureSourcesUsable(params);
-  if (kind === 'prerender' && captureWindow && captureWindowKind === 'export') {
-    throw new Error('An export is running');
-  }
   await prepareChunking(params);
+  // Checked after the awaits above: an export, a recording or a stop may have
+  // arrived meanwhile, and a prerender must never replace an export's window.
+  if (
+    kind === 'prerender' &&
+    (isStopped() ||
+      activeExport !== null ||
+      (captureWindow !== null && captureWindowKind === 'export') ||
+      prerenderBlocked())
+  ) {
+    throw new Error('Prerender stopped before it started');
+  }
 
   // A real export replaces a background pre-render (its partial chunks are
   // discarded); otherwise this is only defensive.
@@ -850,6 +867,7 @@ export async function lookupExportChunks(
 ): Promise<boolean[]> {
   const chunking = getChunking(workspaceId);
   for (const chunk of chunks) {
+    assertChunkKey(chunk.key);
     chunking.usedKeys.add(chunk.key);
   }
   return getChunkCache().lookup(chunking.namespace, chunks, chunking.container, chunking.fps);
@@ -862,6 +880,9 @@ export async function startChunkRun(
   decoderConfig: SerializedDecoderConfig | null,
 ): Promise<void> {
   const chunking = getChunking(workspaceId);
+  for (const chunk of run.chunks) {
+    assertChunkKey(chunk.key);
+  }
   if (chunking.runs.has(runIndex)) {
     throw new Error(`Chunk run ${runIndex} already started`);
   }
@@ -971,19 +992,6 @@ async function joinChunksForExport(
 
 // ── Background pre-render ──────────────────────────────────────────────────
 
-let prerenderStatusListener: ((status: ExportPrerenderStatus) => void) | null = null;
-
-export function forwardPrerenderStatus(status: ExportPrerenderStatus): void {
-  prerenderStatusListener?.(status);
-  mainWindowWebContents?.send(CH.export.PRERENDER_STATUS, status);
-}
-
-export function setPrerenderStatusListener(
-  listener: ((status: ExportPrerenderStatus) => void) | null,
-): void {
-  prerenderStatusListener = listener;
-}
-
 /**
  * Renders the chunks missing for these params into the cache, without audio
  * or an output file. Returns false when it did not run to completion
@@ -1013,7 +1021,7 @@ let powerWatchStarted = false;
  * (plugged in or out, battery crossing 30%), and stops a running pre-render
  * when it no longer does.
  */
-export function watchPrerenderPower(): void {
+export function watchPrerenderPower(onChange: (allowed: boolean) => void): void {
   if (powerWatchStarted) {
     return;
   }
@@ -1030,7 +1038,7 @@ export function watchPrerenderPower(): void {
     }
     if (allowed !== lastAllowed) {
       lastAllowed = allowed;
-      mainWindowWebContents?.send(CH.export.PRERENDER_POWER_CHANGED, allowed);
+      onChange(allowed);
     }
   };
   const onPlugChange = () => {
@@ -1054,14 +1062,19 @@ export function setPrerenderBlocker(isBlocked: () => boolean): void {
   prerenderBlocked = isBlocked;
 }
 
+// Bumped by every stop, so a prerender still starting up sees it was stopped.
+let prerenderGeneration = 0;
+
 export async function runExportPrerender(
   params: CaptureWindowParams,
   preloadPath: string,
 ): Promise<boolean> {
+  const generation = prerenderGeneration;
+  const isStopped = () => generation !== prerenderGeneration;
   if (activeExport || (captureWindow && captureWindowKind === 'export') || prerenderBlocked()) {
     return false;
   }
-  if (!getFeatureFlags().chunkedExport || !(await powerAllowsExportPrerender())) {
+  if (!getFeatureFlags().chunkedExport || !(await powerAllowsExportPrerender()) || isStopped()) {
     return false;
   }
   const workspace = await createExportWorkspace(`prerender-${Date.now()}`);
@@ -1070,6 +1083,7 @@ export async function runExportPrerender(
       { ...params, workspaceId: workspace.workspaceId, chunking: 'prerender', includeAudio: false },
       preloadPath,
       'prerender',
+      isStopped,
     );
     return true;
   } catch (error) {
@@ -1084,6 +1098,8 @@ export async function runExportPrerender(
 
 /** Stops a background pre-render; chunks it already finished stay cached. */
 export function stopExportPrerender(): void {
+  // Also stops one that is still starting and has no window yet.
+  prerenderGeneration += 1;
   if (captureWindowKind === 'prerender') {
     abortCaptureWindow();
   }

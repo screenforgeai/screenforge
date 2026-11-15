@@ -15,7 +15,7 @@ const setup = (over: Partial<FeatureFlagsDeps> = {}) => {
     overrides: {},
     evaluate: vi.fn(async () => true),
     readCache: vi.fn(async () => cached),
-    writeCache: vi.fn(async (value: FeatureFlags) => {
+    writeCache: vi.fn(async (value: Partial<FeatureFlags>) => {
       cached = value;
     }),
     onChange: vi.fn(),
@@ -143,20 +143,17 @@ describe('feature flags', () => {
     await older;
 
     expect(flags.get()).toEqual(OFF);
-    expect(deps.writeCache).toHaveBeenLastCalledWith(OFF);
-    expect(deps.writeCache).not.toHaveBeenCalledWith({
-      directorSharing: true,
-      chunkedExport: false,
-    });
+    expect(deps.writeCache).toHaveBeenLastCalledWith({ directorSharing: false });
+    expect(deps.writeCache).not.toHaveBeenCalledWith({ directorSharing: true });
   });
 
   it('writes the cache in order, so the file ends with the latest answers', async () => {
-    const writes: FeatureFlags[] = [];
+    const writes: Partial<FeatureFlags>[] = [];
     const gate: { release?: () => void } = {};
     let answer = true;
     const { flags, deps } = setup({
       evaluate: vi.fn(async () => answer),
-      writeCache: vi.fn(async (value: FeatureFlags) => {
+      writeCache: vi.fn(async (value: Partial<FeatureFlags>) => {
         if (!gate.release) {
           await new Promise<void>((resolve) => {
             gate.release = resolve;
@@ -177,6 +174,24 @@ describe('feature flags', () => {
 
     expect(writes).toEqual([ON, OFF]);
     expect(flags.get()).toEqual(OFF);
+  });
+
+  it('never saves a forced flag as if PostHog had answered it', async () => {
+    const { flags, deps } = setup({
+      overrides: { chunkedExport: '1' },
+      evaluate: vi.fn(async () => false),
+    });
+    await flags.refresh();
+    expect(flags.get()).toEqual({ directorSharing: false, chunkedExport: true });
+    expect(deps.writeCache).toHaveBeenCalledWith({ directorSharing: false });
+
+    // A later launch without the override starts from PostHog's last answer only.
+    const later = setup({
+      readCache: vi.fn(async () => ({ directorSharing: false })),
+      evaluate: vi.fn(async () => new Promise<boolean | null>(() => undefined)),
+    });
+    await later.flags.load();
+    expect(later.flags.get().chunkedExport).toBe(false);
   });
 
   it('keeps its answers when PostHog errors', async () => {
