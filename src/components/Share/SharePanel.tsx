@@ -122,7 +122,14 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
   };
 
   // One row: what it is on the left, the one action on the right; a quiet line below only when there's something to say.
-  const shell = (body: React.ReactNode, action?: React.ReactNode) => (
+  // `status` goes in a live region that is always mounted, so screen readers
+  // announce it when it appears; `lead` sits just before it (a spinner).
+  const shell = (
+    body: React.ReactNode,
+    action?: React.ReactNode,
+    status?: React.ReactNode,
+    lead?: React.ReactNode,
+  ) => (
     <section
       aria-label={t('share_title')}
       className="grid gap-2 rounded-lg border border-sf-border bg-sf-panel px-3 py-3"
@@ -133,7 +140,13 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
           {t('share_title')}
           <DirectorInfoTip />
         </div>
-        {action}
+        <div className="flex items-center gap-2">
+          {lead}
+          <span role="status" data-testid="share-status" className="text-sm text-sf-muted">
+            {status}
+          </span>
+          {action}
+        </div>
       </div>
       {body}
     </section>
@@ -156,17 +169,15 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
   if (account.status === 'signing-in') {
     return shell(
       null,
-      <span className="flex items-center gap-2 text-sm text-sf-muted">
-        <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
-        {t('share_waiting')}
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => void window.screenforge.cancelDirectorSignIn().catch(() => undefined)}
-        >
-          {t('share_cancel')}
-        </Button>
-      </span>,
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => void window.screenforge.cancelDirectorSignIn().catch(() => undefined)}
+      >
+        {t('share_cancel')}
+      </Button>,
+      t('share_waiting'),
+      <Spinner className="size-3.5 text-sf-border fill-sf-primary" />,
     );
   }
 
@@ -247,19 +258,18 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
 
   const failed = state.status === 'failed' ? state : null;
   const resume = canResume || (failed?.resumable ?? false);
+  // Signed in by now (signed out returns above): a share Director's sign-out
+  // stopped just resumes, and its "signed out" message no longer applies.
+  const showError = !!failed && failed.error !== 'signed-out';
   const action =
-    failed?.error === 'signed-out' ? (
-      <Button size="sm" variant="secondary" onClick={signIn}>
-        {t('share_signInAgain')}
-      </Button>
-    ) : failed && FINAL_ERRORS.has(failed.error) ? undefined : (
+    failed && FINAL_ERRORS.has(failed.error) ? undefined : (
       <Button size="sm" variant="secondary" className="gap-1.5" onClick={startShare}>
         <IconLink size={13} />
         {resume ? t('share_resume') : failed ? t('share_tryAgain') : t('share_button')}
       </Button>
     );
   return shell(
-    failed ? (
+    failed && showError ? (
       <p role="alert" className="text-sm text-sf-red">
         {t(`share_error_${failed.error}`)}
       </p>
