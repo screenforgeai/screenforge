@@ -734,6 +734,28 @@ describe('share manager', () => {
       expect(api.remove).not.toHaveBeenCalledWith('theirs');
     });
 
+    it('ignores a list that came back after the account changed', async () => {
+      const { manager, api, store, switchAccount } = setup({ account: 'w1:u1' });
+      await store.setLink('p2', {
+        shareId: 'b1',
+        title: 'Theirs',
+        watchUrl: 'https://director.screenforge.co/s/b1',
+        expiresAt: null,
+        status: 'live',
+        sharedAt: null,
+        account: 'w2:u2',
+      });
+      api.list.mockImplementationOnce(async () => {
+        // Signed out of w1 and into w2 while w1's list was on its way.
+        switchAccount('w2:u2');
+        return [];
+      });
+
+      await manager.refreshLibrary();
+
+      expect((await store.getLinks()).p2.status).toBe('live');
+    });
+
     it('never asks Director to remove another account’s link', async () => {
       const { manager, api, switchAccount } = setup();
       await manager.share(REQUEST);

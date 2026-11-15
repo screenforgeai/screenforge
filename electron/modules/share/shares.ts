@@ -508,8 +508,14 @@ export function createShareManager(deps: ShareManagerDeps) {
         // A share that finishes while the list is on its way isn't in it:
         // only links already saved before asking can be marked removed.
         const known = new Set(Object.values(await deps.store.getLinks()).map((l) => l.shareId));
+        const askedAs = deps.currentAccount();
         const shares = await deps.api.list();
         const byId = new Map(shares.map((s) => [s.id, s]));
+        // The account changed while the list was on its way: it describes
+        // the previous account's shares, so it says nothing about these.
+        if (deps.currentAccount() !== askedAs) {
+          throw new Error('The account changed during the refresh.');
+        }
         await deps.store.updateLinks((links) =>
           Object.fromEntries(
             Object.entries(links).map(([projectId, link]) => {
