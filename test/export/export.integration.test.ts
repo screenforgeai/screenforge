@@ -424,7 +424,10 @@ describe.sequential('export integration', () => {
       );
     }
 
-    if (manifest.expected.maxElapsedMs != null) {
+    // Speed budgets assume a GPU; with software WebGL (GPU-less CI) only the
+    // result is checked.
+    const softwareGl = process.env.SCREENFORGE_SOFTWARE_GL === '1';
+    if (manifest.expected.maxElapsedMs != null && !softwareGl) {
       expect(result.elapsedMs).toBeLessThanOrEqual(manifest.expected.maxElapsedMs);
     }
 
