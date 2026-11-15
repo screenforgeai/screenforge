@@ -25,15 +25,22 @@ export function createFeatureFlags(deps: FeatureFlagsDeps) {
   const forced = deps.override === '1' ? true : deps.override === '0' ? false : null;
   const fixed = forced ?? (deps.isPackaged ? null : true);
   let directorSharing = fixed ?? false;
+  // Only the newest refresh may change the flag; an older one that answers
+  // late is dropped (e.g. "Share usage data" turned off while it was asking).
+  let generation = 0;
+  // Cache writes run one at a time, in order, so the file ends with the
+  // latest answer.
+  let writes: Promise<void> = Promise.resolve();
 
-  const set = async (value: boolean, remember: boolean) => {
-    if (remember) {
-      await deps.writeCache(value).catch(() => undefined);
-    }
+  const set = (value: boolean) => {
     if (value !== directorSharing) {
       directorSharing = value;
       deps.onChange({ directorSharing });
     }
+  };
+  const remember = (value: boolean): Promise<void> => {
+    writes = writes.then(() => deps.writeCache(value)).catch(() => undefined);
+    return writes;
   };
 
   return {
@@ -45,9 +52,11 @@ export function createFeatureFlags(deps: FeatureFlagsDeps) {
         deps.onChange({ directorSharing });
         return;
       }
+      const started = generation;
       const cached = await deps.readCache().catch(() => null);
-      if (cached !== null) {
-        await set(cached, false);
+      // A refresh started meanwhile asks PostHog, which knows better than the file.
+      if (cached !== null && started === generation) {
+        set(cached);
       }
     },
 
@@ -56,13 +65,18 @@ export function createFeatureFlags(deps: FeatureFlagsDeps) {
       if (fixed !== null) {
         return;
       }
+      const mine = ++generation;
       let answer: boolean | null;
       try {
         answer = await deps.evaluate(DIRECTOR_SHARING_FLAG);
       } catch {
         return;
       }
-      await set(answer === true, true);
+      if (mine !== generation) {
+        return;
+      }
+      set(answer === true);
+      await remember(answer === true);
     },
   };
 }

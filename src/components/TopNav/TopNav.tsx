@@ -413,9 +413,10 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
             resetExport();
           }
           if (
-            shareJob.status === 'preparing' ||
-            shareJob.status === 'uploading' ||
-            shareJob.status === 'finishing'
+            directorSharing &&
+            (shareJob.status === 'preparing' ||
+              shareJob.status === 'uploading' ||
+              shareJob.status === 'finishing')
           ) {
             toast(tExport('share_backgroundUploading'));
           }

@@ -89,6 +89,58 @@ describe('feature flags', () => {
     },
   );
 
+  it('lets the newest refresh win, even when an older one answers last', async () => {
+    const answers: ((value: boolean | null) => void)[] = [];
+    const { flags, deps } = setup({
+      evaluate: vi.fn(
+        () =>
+          new Promise<boolean | null>((resolve) => {
+            answers.push(resolve);
+          }),
+      ),
+    });
+
+    const older = flags.refresh();
+    const newer = flags.refresh(); // e.g. "Share usage data" was just turned off
+    answers[1](null);
+    await newer;
+    answers[0](true);
+    await older;
+
+    expect(flags.get().directorSharing).toBe(false);
+    expect(deps.writeCache).toHaveBeenLastCalledWith(false);
+    expect(deps.writeCache).not.toHaveBeenCalledWith(true);
+  });
+
+  it('writes the cache in order, so the file ends with the latest answer', async () => {
+    const writes: boolean[] = [];
+    const gate: { release?: () => void } = {};
+    let answer = true;
+    const { flags, deps } = setup({
+      evaluate: vi.fn(async () => answer),
+      writeCache: vi.fn(async (value: boolean) => {
+        if (!gate.release) {
+          await new Promise<void>((resolve) => {
+            gate.release = resolve;
+          });
+        }
+        writes.push(value);
+      }),
+    });
+
+    const first = flags.refresh();
+    // The first answer is being written when a newer one arrives.
+    await vi.waitFor(() => expect(deps.writeCache).toHaveBeenCalledTimes(1));
+    answer = false;
+    const second = flags.refresh();
+    await vi.waitFor(() => expect(flags.get().directorSharing).toBe(false));
+    gate.release?.();
+    await Promise.all([first, second]);
+
+    expect(writes).toEqual([true, false]);
+    expect(flags.get().directorSharing).toBe(false);
+  });
+
   it('keeps its answer when PostHog errors', async () => {
     let fail = false;
     const { flags } = setup({
