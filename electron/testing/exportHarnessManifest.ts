@@ -7,6 +7,7 @@ import type {
   ProjectKeyboardSettings,
   RecordingResult,
   ExportCapturePerfStats,
+  ExportChunkStats,
 } from '../../src/types';
 import type { MediaSegment, ZoomClip } from '../../src/types/timeline';
 import type { MotionClip } from '../../src/lib/animation/motionClips';
@@ -91,6 +92,11 @@ export interface ExportHarnessResult {
     duration: number | null;
   };
   capturePerf?: ExportCapturePerfStats;
+  chunkStats?: ExportChunkStats;
+  /** Set when the harness pre-rendered first: whether it ran to completion. */
+  prerendered?: boolean;
+  /** Set in pre-render probe mode: editor frame timing per phase. */
+  probe?: import('./prerenderProbe').ProbePhase[];
   elapsedMs: number;
   error?: string;
   stallError?: boolean;

@@ -15,6 +15,8 @@ const telemetryMock = vi.hoisted(() => ({
 
 vi.mock('electron', () => ({ app: electronMock.app }));
 vi.mock('../../lib/telemetry', () => telemetryMock);
+const features = vi.hoisted(() => ({ refreshFeatureFlags: vi.fn() }));
+vi.mock('../features/service', () => features);
 
 import { getSettings, getSettingsSync, saveSettings } from './service';
 
@@ -80,6 +82,8 @@ describe('settings service', () => {
     expect(getSettingsSync().telemetryEnabled).toBe(false);
     expect(telemetryMock.setTelemetryEnabled).toHaveBeenCalledTimes(1);
     expect(telemetryMock.setTelemetryEnabled).toHaveBeenCalledWith(false);
+    // Flags come from PostHog only while usage data is shared: ask again.
+    expect(features.refreshFeatureFlags).toHaveBeenCalledTimes(1);
   });
 
   it('keeps lastSeenVersion across unrelated saves and ignores empty values', async () => {

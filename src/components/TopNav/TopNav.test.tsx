@@ -1,7 +1,8 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UpdaterState } from 'src/types';
+import { toast } from 'sonner';
+import type { ShareJobState, UpdaterState } from 'src/types';
 import { TopNav } from './TopNav';
 
 let updaterState: UpdaterState | null = null;
@@ -17,10 +18,18 @@ vi.mock('sonner', () => ({
   }),
 }));
 
+const flags = vi.hoisted(() => ({ value: { directorSharing: false, chunkedExport: false } }));
+vi.mock('../../hooks/useFeatureFlags', () => ({ useFeatureFlags: () => flags.value }));
+let pushShareState: (state: ShareJobState) => void = () => undefined;
+
 vi.mock('../../hooks/useUpdaterState', () => ({
   useUpdaterState: () => updaterState,
 }));
 
+vi.mock('../../hooks/useExportPrerender', () => ({ useExportPrerender: vi.fn() }));
+vi.mock('./_components/PrerenderIndicator', () => ({
+  PrerenderIndicator: () => <span>prerender indicator</span>,
+}));
 vi.mock('../../hooks/useVideoExport', () => ({
   useVideoExport: () => ({
     state: { status: 'idle', progress: 0, error: null, warnings: [] },
@@ -69,7 +78,12 @@ vi.mock('../ProjectPersistenceProvider', () => ({
 }));
 
 vi.mock('../ExportModal', () => ({
-  default: () => null,
+  default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? (
+      <button type="button" onClick={onClose}>
+        close export
+      </button>
+    ) : null,
 }));
 
 beforeEach(() => {
@@ -86,7 +100,10 @@ beforeEach(() => {
       revealExportInFolder: vi.fn().mockResolvedValue(undefined),
       getPresets: vi.fn().mockResolvedValue([]),
       getShareState: vi.fn().mockResolvedValue({ status: 'idle' }),
-      onShareStateChanged: vi.fn(() => vi.fn()),
+      onShareStateChanged: vi.fn((cb: (state: ShareJobState) => void) => {
+        pushShareState = cb;
+        return vi.fn();
+      }),
     },
     writable: true,
     configurable: true,
@@ -96,7 +113,39 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   updaterState = null;
+  flags.value = { directorSharing: false, chunkedExport: false };
   vi.clearAllMocks();
+});
+
+describe('TopNav prerender indicator', () => {
+  beforeEach(() => {
+    flags.value = { directorSharing: false, chunkedExport: true };
+  });
+
+  it('shows only one loader at a time: autosave first', () => {
+    isSaving = true;
+    const { unmount } = render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.queryByText('prerender indicator')).not.toBeInTheDocument();
+    unmount();
+
+    isSaving = false;
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.getByText('prerender indicator')).toBeInTheDocument();
+  });
+
+  it('is not shown while the chunked-export flag is off', () => {
+    isSaving = false;
+    flags.value = { directorSharing: false, chunkedExport: false };
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.queryByText('prerender indicator')).not.toBeInTheDocument();
+  });
+
+  it('is not shown without a recording', () => {
+    isSaving = false;
+    recordingResult = null;
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    expect(screen.queryByText('prerender indicator')).not.toBeInTheDocument();
+  });
 });
 
 describe('TopNav updater activity', () => {
@@ -168,5 +217,33 @@ describe('TopNav updater activity', () => {
     render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /update downloaded/i })).toBeDisabled();
+  });
+});
+
+describe('TopNav share upload notice', () => {
+  const closeExportDuringUpload = async () => {
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    act(() =>
+      pushShareState({
+        status: 'uploading',
+        filePath: '/tmp/out.mp4',
+        projectId: null,
+        uploadedBytes: 1,
+        totalBytes: 2,
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'close export' }));
+  };
+
+  it('says the upload carries on when the export window closes', async () => {
+    flags.value = { directorSharing: true, chunkedExport: false };
+    await closeExportDuringUpload();
+    expect(toast).toHaveBeenCalledWith("Still uploading. The link is copied when it's done.");
+  });
+
+  it('says nothing about uploads while the director-sharing flag is off', async () => {
+    await closeExportDuringUpload();
+    expect(toast).not.toHaveBeenCalledWith("Still uploading. The link is copied when it's done.");
   });
 });

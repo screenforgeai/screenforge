@@ -1,7 +1,8 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExportModal from './ExportModal';
+import { prerenderSettingsKey, usePrerenderStore } from '../hooks/useExportPrerender';
 
 // ---------------------------------------------------------------------------
 // Store mock — provide a fixed 60-second duration so size estimates work.
@@ -20,6 +21,9 @@ vi.mock('../store', () => ({
       captions: { captionsEnabled: false, segments: [] },
     }),
 }));
+
+const flags = vi.hoisted(() => ({ value: { directorSharing: true, chunkedExport: false } }));
+vi.mock('../hooks/useFeatureFlags', () => ({ useFeatureFlags: () => flags.value }));
 
 // The share panel has its own tests; here we only check what it's given.
 vi.mock('./Share/SharePanel', () => ({
@@ -388,9 +392,82 @@ describe('ExportModal — after a successful export', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('offers no sharing while the director-sharing flag is off', () => {
+    flags.value = { directorSharing: false, chunkedExport: false };
+    try {
+      renderDone('/Users/test/output.mp4');
+      expect(screen.getByText(/export completed/i)).toBeInTheDocument();
+      expect(screen.queryByTestId('share-panel')).not.toBeInTheDocument();
+    } finally {
+      flags.value = { directorSharing: true, chunkedExport: false };
+    }
+  });
+
   it('passes the exported format, so GIF and MOV can explain they cannot be shared', () => {
     renderDone('/Users/test/output.gif');
     const panel = JSON.parse(screen.getByTestId('share-panel').textContent ?? '{}');
     expect(panel.format).toBe('gif');
+  });
+});
+
+describe('ExportModal — pre-render readiness', () => {
+  const defaultKey = prerenderSettingsKey({
+    format: 'mp4',
+    resolution: '1080p',
+    fps: 60,
+    quality: 'high',
+  });
+
+  beforeEach(() => {
+    flags.value = { directorSharing: true, chunkedExport: true };
+  });
+
+  afterEach(() => {
+    usePrerenderStore.setState({ stateVersion: 0, settingsKey: null, status: null });
+  });
+
+  it('shows how much of the export is pre-rendered, without re-rendering endlessly', () => {
+    usePrerenderStore.setState({
+      stateVersion: 2,
+      settingsKey: defaultKey,
+      status: { phase: 'rendering', total: 10, cached: 7, stateVersion: 2 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).toHaveTextContent('70% prerendered');
+    const live = within(screen.getByText(/Estimated size:/i)).getByRole('status');
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    expect(live).toHaveTextContent('70% prerendered');
+  });
+
+  it('says the export is ready when every chunk is pre-rendered', () => {
+    usePrerenderStore.setState({
+      stateVersion: 1,
+      settingsKey: defaultKey,
+      status: { phase: 'done', total: 10, cached: 10, stateVersion: 1 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).toHaveTextContent('Ready to export');
+  });
+
+  it('says nothing once the project changed since the pre-render', () => {
+    usePrerenderStore.setState({
+      stateVersion: 3,
+      settingsKey: defaultKey,
+      status: { phase: 'done', total: 10, cached: 10, stateVersion: 2 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).not.toHaveTextContent(/prerendered|Ready/);
+  });
+
+  it('says nothing while the chunked-export flag is off', () => {
+    flags.value = { directorSharing: true, chunkedExport: false };
+    usePrerenderStore.setState({
+      stateVersion: 1,
+      settingsKey: defaultKey,
+      status: { phase: 'done', total: 10, cached: 10, stateVersion: 1 },
+    });
+    renderModal();
+    expect(screen.getByText(/Estimated size:/i)).not.toHaveTextContent(/prerendered|Ready/);
+    expect(within(screen.getByText(/Estimated size:/i)).queryByRole('status')).toBeNull();
   });
 });

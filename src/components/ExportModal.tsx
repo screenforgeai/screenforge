@@ -25,10 +25,22 @@ import {
   normalizeExportFpsForFormat,
 } from '../lib/export/gif';
 import { trackEvent } from '../lib/analytics';
+import {
+  EXPORT_QUALITY_PRESET,
+  EXPORT_SETTINGS_STORAGE_KEY,
+  buildExportSettings,
+  loadStoredExportSettings,
+} from '../lib/export/exportSettingsStorage';
+import {
+  prerenderSettingsKey,
+  selectPrerenderReadiness,
+  usePrerenderStore,
+} from '../hooks/useExportPrerender';
 import { estimateDisplayExportSizeBytes } from '../lib/export/estimate';
 import { stripExt } from '../lib/utils';
 import type { ExportFormat, ExportSettings } from '../types';
 import { SharePanel } from './Share/SharePanel';
+import { useFeatureFlags } from '../hooks/useFeatureFlags';
 
 const KOFI_URL = 'https://ko-fi.com/mohibarshi';
 
@@ -42,34 +54,8 @@ interface ExportModalProps {
   onOpenFFmpegSetup: () => void;
 }
 
-const SETTINGS_STORAGE_KEY = 'screenforge.export.settings.v2';
+const SETTINGS_STORAGE_KEY = EXPORT_SETTINGS_STORAGE_KEY;
 const LAST_EXPORT_DIR_STORAGE_KEY = 'screenforge.export.last-dir.v1';
-
-const DEFAULT_SETTINGS: Pick<ExportSettings, 'format' | 'resolution' | 'fps' | 'quality'> = {
-  format: 'mp4',
-  resolution: '1080p',
-  fps: 60,
-  quality: 'high',
-};
-
-function loadStoredSettings(): Pick<ExportSettings, 'format' | 'resolution' | 'fps' | 'quality'> {
-  try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) {
-      return DEFAULT_SETTINGS;
-    }
-    const parsed = JSON.parse(raw) as Partial<ExportSettings>;
-    const format = parsed.format ?? DEFAULT_SETTINGS.format;
-    return {
-      format,
-      resolution: parsed.resolution ?? DEFAULT_SETTINGS.resolution,
-      fps: normalizeExportFpsForFormat(format, parsed.fps ?? DEFAULT_SETTINGS.fps),
-      quality: parsed.quality ?? DEFAULT_SETTINGS.quality,
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
 
 function dirnameFromFilePath(filePath: string): string | null {
   const slashIdx = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
@@ -86,15 +72,6 @@ function formatFromPath(filePath: string, fallback: ExportFormat): ExportFormat 
   const ext = filePath.slice(filePath.lastIndexOf('.') + 1).toLowerCase();
   return EXPORT_FORMATS.find((format) => format === ext) ?? fallback;
 }
-
-const QUALITY_PRESET: Record<
-  ExportSettings['quality'],
-  Pick<ExportSettings, 'audioBitrateKbps'>
-> = {
-  fast: { audioBitrateKbps: 128 },
-  balanced: { audioBitrateKbps: 192 },
-  high: { audioBitrateKbps: 320 },
-};
 
 function formatFileSize(bytes: number): string {
   if (bytes >= 1_000_000_000) {
@@ -156,7 +133,20 @@ const ExportModal = ({
   onOpenFFmpegSetup,
 }: ExportModalProps) => {
   const { t } = useTranslation('export');
-  const [settings, setSettings] = useState(() => loadStoredSettings());
+  const [settings, setSettings] = useState(() => loadStoredExportSettings());
+  // Select plain fields: a selector that builds a new object on every call
+  // makes the store re-render the dialog endlessly.
+  const prerenderStatus = usePrerenderStore((state) => state.status);
+  const prerenderStateVersion = usePrerenderStore((state) => state.stateVersion);
+  const prerenderSettingsUsed = usePrerenderStore((state) => state.settingsKey);
+  const prerenderReadiness = selectPrerenderReadiness(
+    {
+      status: prerenderStatus,
+      stateVersion: prerenderStateVersion,
+      settingsKey: prerenderSettingsUsed,
+    },
+    prerenderSettingsKey(settings),
+  );
   const [outputPath, setOutputPath] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -165,6 +155,7 @@ const ExportModal = ({
   const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
   const captions = useStore((s) => s.captions);
   const currentProjectId = useStore((s) => s.currentProjectId);
+  const { directorSharing, chunkedExport } = useFeatureFlags();
   const exportStartRef = useRef<number | null>(null);
   // Tracks which (recordingName, format) pair the current outputPath was generated for,
   // so we re-suggest when the recording or format changes even if a path is already set.
@@ -212,7 +203,7 @@ const ExportModal = ({
       quality: settings.quality,
       resolution: settings.resolution,
       fps: settings.fps,
-      audioBitrateKbps: QUALITY_PRESET[settings.quality].audioBitrateKbps,
+      audioBitrateKbps: EXPORT_QUALITY_PRESET[settings.quality].audioBitrateKbps,
       durationSeconds: duration,
     });
     return formatFileSize(bytes);
@@ -344,16 +335,7 @@ const ExportModal = ({
 
     setIsSubmitting(true);
 
-    const payload: ExportSettings = {
-      quality: settings.quality,
-      format: settings.format,
-      resolution: settings.resolution,
-      fps: settings.fps,
-      // GIF has no audio track
-      includeAudio: settings.format !== 'gif',
-      burnCaptions: captions.captionsEnabled && captions.segments.length > 0,
-      ...QUALITY_PRESET[settings.quality],
-    };
+    const payload: ExportSettings = buildExportSettings(settings, captions);
 
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     const chosenDir = dirnameFromFilePath(outputPath.trim());
@@ -410,13 +392,15 @@ const ExportModal = ({
                   </p>
                 </div>
               </div>
-              <SharePanel
-                filePath={exportedPath}
-                format={formatFromPath(exportedPath, settings.format)}
-                durationS={duration}
-                title={recordingName}
-                projectId={currentProjectId ?? null}
-              />
+              {directorSharing && (
+                <SharePanel
+                  filePath={exportedPath}
+                  format={formatFromPath(exportedPath, settings.format)}
+                  durationS={duration}
+                  title={recordingName}
+                  projectId={currentProjectId ?? null}
+                />
+              )}
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-sf-border/40 px-6 pb-[20px] pt-[14px]">
               <Button
@@ -596,6 +580,23 @@ const ExportModal = ({
               <p className="text-md text-sf-muted -mt-2">
                 {t('estimatedSize')}{' '}
                 <span className="tabular-nums text-sf-secondary">{estimatedSize}</span>
+                {/* Stays mounted so screen readers hear the readiness change. */}
+                {chunkedExport && (
+                  <span role="status" aria-live="polite" className="tabular-nums">
+                    {prerenderReadiness && prerenderReadiness.cached > 0 && (
+                      <>
+                        {' · '}
+                        {prerenderReadiness.cached >= prerenderReadiness.total
+                          ? t('prerenderedAll')
+                          : t('prerendered', {
+                              percent: Math.floor(
+                                (prerenderReadiness.cached / prerenderReadiness.total) * 100,
+                              ),
+                            })}
+                      </>
+                    )}
+                  </span>
+                )}
               </p>
             )}
 

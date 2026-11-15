@@ -23,6 +23,7 @@ import { useNewRecordingFlow } from '../_hooks/useNewRecordingFlow';
 import { trackEvent } from 'src/lib/analytics';
 import { useProjectPersistence } from 'src/components/ProjectPersistenceProvider';
 import { useShareLibrary } from 'src/hooks/useShareLibrary';
+import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import { useShareJob } from 'src/hooks/useShareJob';
 import { shareExpiry } from 'src/lib/share';
 import type { ProjectShareLink, ShareActionResult } from 'src/types';
@@ -111,7 +112,8 @@ export const RecordingWidget = () => {
     trackEvent('project_opened');
   };
 
-  const shareLibrary = useShareLibrary();
+  const { directorSharing } = useFeatureFlags();
+  const shareLibrary = useShareLibrary(directorSharing);
   const shareJob = useShareJob();
   const [pendingLinkRemoval, setPendingLinkRemoval] = useState<{
     projectId: string;
@@ -338,13 +340,15 @@ export const RecordingWidget = () => {
                       </div>
                     </motion.div>
 
-                    <ProjectShareStatus
-                      projectId={project.id}
-                      link={shareLibrary.links[project.id]}
-                      pending={shareLibrary.pending[project.id]}
-                      job={shareJob}
-                      onRemove={(link) => handleRemoveLink(project.id, project.name, link)}
-                    />
+                    {directorSharing && (
+                      <ProjectShareStatus
+                        projectId={project.id}
+                        link={shareLibrary.links[project.id]}
+                        pending={shareLibrary.pending[project.id]}
+                        job={shareJob}
+                        onRemove={(link) => handleRemoveLink(project.id, project.name, link)}
+                      />
+                    )}
                   </motion.div>
                 </ButtonWrapper>
               </ContextMenuTrigger>

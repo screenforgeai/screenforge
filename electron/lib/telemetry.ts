@@ -69,6 +69,19 @@ export function initTelemetry({ enabled = true }: { enabled?: boolean } = {}): v
   }
 }
 
+/**
+ * PostHog's answer for a feature flag; null when there's none to be had:
+ * development builds, no key, or "Share usage data" turned off (the flag
+ * check would itself send the anonymous id).
+ */
+export async function evaluateFeatureFlag(flag: string): Promise<boolean | null> {
+  if (!posthogClient || !anonymousId || !usageDataEnabled) {
+    return null;
+  }
+  const enabled = await posthogClient.isFeatureEnabled(flag, anonymousId);
+  return enabled ?? null;
+}
+
 export function getAnonymousId(): string | null {
   return anonymousId;
 }

@@ -424,6 +424,15 @@ export interface CaptureWindowParams {
   /** Data URL of the user-picked custom wallpaper, if active. Session-only. */
   customWallpaperDataUrl?: string | null;
   musicClips?: import('../lib/timeline').MusicClip[];
+  /**
+   * Chunked export: render only the chunks missing from the cache ('export'),
+   * or fill the cache in the background without audio or output ('prerender').
+   */
+  chunking?: 'export' | 'prerender' | null;
+  /** Pre-render: the editor state version these params were built from. */
+  stateVersion?: number;
+  /** Pre-render: share of wall time spent rendering (see captureTimeline). */
+  dutyCycle?: number;
 }
 
 /** Result returned from the hidden export-worker BrowserWindow. */
@@ -431,6 +440,37 @@ export interface CaptureWindowResult {
   frameCount: number;
   audioWavBuffer?: ArrayBuffer;
   perfStats?: ExportCapturePerfStats;
+  /** Chunked capture: every chunk's key in timeline order, for joining. */
+  chunkKeys?: string[];
+  /** Chunked capture: how many chunks there are and how many were rendered. */
+  chunkStats?: ExportChunkStats;
+}
+
+export interface ExportChunkStats {
+  total: number;
+  rendered: number;
+}
+
+/** A chunk of the timeline, as the main process caches it. */
+export interface ExportChunkSpec {
+  key: string;
+  startFrame: number;
+  endFrame: number;
+}
+
+export interface ExportRunSpec {
+  startFrame: number;
+  endFrame: number;
+  chunks: ExportChunkSpec[];
+}
+
+/** Background pre-render progress, forwarded to the editor window. */
+export interface ExportPrerenderStatus {
+  phase: 'planned' | 'rendering' | 'done' | 'stopped' | 'failed';
+  total: number;
+  cached: number;
+  /** The editor's state version the plan was made for. */
+  stateVersion: number;
 }
 
 export interface ExportCapturePerfStats {
@@ -485,6 +525,8 @@ export interface ExportRequest {
   effectiveFps: number;
   outputPath: string;
   settings: ExportSettings;
+  /** Chunked export: join these cached chunks instead of the muxer's file. */
+  chunkKeys?: string[];
 }
 
 // 'capturing' = rVFC + VideoEncoder phase (renderer-side)
@@ -639,6 +681,14 @@ export interface TextClip {
   animationInDuration: number;
   animationOut: 'none' | 'fade' | 'slide-up' | 'slide-down';
   animationOutDuration: number;
+}
+
+/** This release's feature flags (PostHog), as the renderer sees them. */
+export interface FeatureFlags {
+  /** Screenforge Director sign-in, share links and their UI. */
+  directorSharing: boolean;
+  /** Chunked export, background prerendering and its progress in the top bar. */
+  chunkedExport: boolean;
 }
 
 /** The optional Director sign-in, as the app shows it. Never carries the token. */
@@ -835,6 +885,9 @@ export interface ScreenforgeAPI {
   importVideoForInsert: () => Promise<RecordingResult | null>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
+  /** This release's feature flags; off until PostHog says on. */
+  getFeatureFlags: () => Promise<FeatureFlags>;
+  onFeatureFlagsChanged: (cb: (flags: FeatureFlags) => void) => () => void;
   getDirectorAccount: () => Promise<DirectorAccountState>;
   /** Opens Director's approval page; resolves once signed in, cancelled or expired. */
   signInToDirector: () => Promise<void>;

@@ -24,5 +24,9 @@
   "support": "Screenforgeを支援する",
   "settingsLabel": "設定",
   "personalAccount": "個人アカウント",
-  "logOut": "ログアウト"
+  "logOut": "ログアウト",
+  "prerenderPreparing": "事前レンダリング中 {{percent}}%",
+  "prerenderPartial": "{{percent}}% 事前レンダリング済み",
+  "prerenderReady": "書き出しの準備完了",
+  "prerenderHint": "編集中にバックグラウンドで書き出しを準備するので、書き出しは数秒で完了します。"
 }

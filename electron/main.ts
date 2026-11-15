@@ -42,6 +42,8 @@ import {
   isExportBusy,
   onExportActivityChanged,
   setMainWindowForCapture,
+  setPrerenderBlocker,
+  stopExportPrerender,
 } from './modules/export/service';
 import { runExportHarness } from './testing/exportHarness';
 import { isAllowedRendererPermission } from '../src/lib/electronPermissions';
@@ -84,6 +86,8 @@ import {
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
 import { registerDirectorChannels } from './modules/director/channel';
 import { registerShareChannels } from './modules/share/channel';
+import { registerFeatureChannels } from './modules/features/channel';
+import { initFeatureFlags } from './modules/features/service';
 import { initDirectorAccount } from './modules/director/service';
 import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
 
@@ -121,6 +125,13 @@ if (process.platform === 'win32') {
 // One switch: a second enable-features would replace the first.
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer,GlobalShortcutsPortal');
+}
+
+// Tests on machines without a GPU (Linux CI runners): render WebGL in
+// software. Chromium no longer falls back to SwiftShader on its own.
+if (process.env.SCREENFORGE_SOFTWARE_GL === '1') {
+  app.commandLine.appendSwitch('use-angle', 'swiftshader');
+  app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 }
 
 // Must be called before app.ready
@@ -475,6 +486,8 @@ app.on('ready', async () => {
     return;
   }
   registerProtocols([APP_ORIGIN]);
+  // The cached answer before any window asks; PostHog's follows.
+  await initFeatureFlags().catch(() => undefined);
 
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
     cb(isAllowedRendererPermission(permission)),
@@ -575,6 +588,7 @@ app.on('ready', async () => {
   });
   registerAreaSelectorChannels(PRELOAD_PATH, loadURL);
   registerImportChannels();
+  registerFeatureChannels();
   registerDirectorChannels();
   registerShareChannels();
   void initDirectorAccount();
@@ -609,6 +623,13 @@ app.on('ready', async () => {
     getToolbarLayout: () => toolbarLayout,
   });
   onRecordingActivityChanged(() => notifyUpdaterActivityChanged());
+  // A background export pre-render never runs alongside a recording.
+  setPrerenderBlocker(() => isRecordingBusy());
+  onRecordingActivityChanged(() => {
+    if (isRecordingBusy()) {
+      stopExportPrerender();
+    }
+  });
   onRecordingActivityChanged(() => {
     if (isRecordingBusy()) {
       setAppTrayRecordingState(true, () => {

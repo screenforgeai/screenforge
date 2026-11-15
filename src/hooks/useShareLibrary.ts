@@ -7,10 +7,13 @@ const EMPTY: ShareLibrary = { links: {}, pending: {} };
  * Each project's share link and unfinished upload. Shows what's saved
  * straight away, then asks Director for the latest status and expiry.
  */
-export const useShareLibrary = (): ShareLibrary => {
+export const useShareLibrary = (enabled = true): ShareLibrary => {
   const [library, setLibrary] = useState<ShareLibrary>(EMPTY);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     let isMounted = true;
     const unsubscribe = window.screenforge.onShareLibraryChanged((next) => {
       if (isMounted) {
@@ -32,7 +35,7 @@ export const useShareLibrary = (): ShareLibrary => {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [enabled]);
 
   return library;
 };

@@ -24,5 +24,9 @@
   "support": "Soutenir Screenforge",
   "settingsLabel": "Paramètres",
   "personalAccount": "Compte personnel",
-  "logOut": "Se déconnecter"
+  "logOut": "Se déconnecter",
+  "prerenderPreparing": "Pré-rendu en cours {{percent}} %",
+  "prerenderPartial": "{{percent}} % pré-rendu",
+  "prerenderReady": "Export prêt",
+  "prerenderHint": "Screenforge prépare votre export en arrière-plan pendant que vous montez, pour qu'il se termine en quelques secondes."
 }

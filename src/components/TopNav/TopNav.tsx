@@ -17,14 +17,17 @@ import {
 } from '../../lib/ui';
 import { useUpdaterState } from '../../hooks/useUpdaterState';
 import { useVideoExport } from '../../hooks/useVideoExport';
+import { useExportPrerender } from '../../hooks/useExportPrerender';
 import { useStore } from '../../store';
 import type { ExportSettings } from '../../types';
 import ExportModal from '../ExportModal';
 import { ShareBackgroundToasts } from '../Share/ShareBackgroundToasts';
+import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import { useShareJob } from '../../hooks/useShareJob';
 import { EDITOR_SIDEBAR_WIDTH_CLASS } from '../layout';
 import { useProjectPersistence } from '../ProjectPersistenceProvider';
 import { ActivityIndicator } from './_components/ActivityIndicator';
+import { PrerenderIndicator } from './_components/PrerenderIndicator';
 import { UpdateReadyPrompt } from './_components/UpdateReadyPrompt';
 import { CanvasRatioDropdown } from './_components/CanvasRatioDropdown';
 import { StylesDropdown } from './_components/StylesDropdown';
@@ -124,6 +127,7 @@ const TitlePopoverBody = ({
 export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void }) => {
   const { t } = useTranslation('topnav');
   const [exportOpen, setExportOpen] = useState(false);
+  const { directorSharing, chunkedExport } = useFeatureFlags();
   const [milestoneKofiOpen, setMilestoneKofiOpen] = useState(false);
   const [milestoneNumber, setMilestoneNumber] = useState(1);
   // Shown once the export window closes, so it never covers the share link.
@@ -140,6 +144,8 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
     reset: resetExport,
     isExporting,
   } = useVideoExport();
+  // Pre-render the export's chunks while the editor sits idle.
+  useExportPrerender(chunkedExport);
   const {
     closeTitleEditor,
     flushPendingSave,
@@ -386,6 +392,12 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
                 </span>
               </Button>
             )}
+            {/* One loader at a time: autosave and update activity come first. */}
+            {chunkedExport &&
+              recordingResult &&
+              !isExporting &&
+              !isSaving &&
+              !showUpdaterActivity && <PrerenderIndicator />}
             <CanvasRatioDropdown />
             <Button
               size="sm"
@@ -411,9 +423,10 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
             resetExport();
           }
           if (
-            shareJob.status === 'preparing' ||
-            shareJob.status === 'uploading' ||
-            shareJob.status === 'finishing'
+            directorSharing &&
+            (shareJob.status === 'preparing' ||
+              shareJob.status === 'uploading' ||
+              shareJob.status === 'finishing')
           ) {
             toast(tExport('share_backgroundUploading'));
           }
@@ -433,11 +446,13 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
         onOpenFFmpegSetup={onOpenFFmpegSetup}
       />
 
-      <ShareBackgroundToasts
-        shownFilePath={
-          exportOpen && exportState.status === 'success' ? exportState.outputPath : null
-        }
-      />
+      {directorSharing && (
+        <ShareBackgroundToasts
+          shownFilePath={
+            exportOpen && exportState.status === 'success' ? exportState.outputPath : null
+          }
+        />
+      )}
 
       <KofiModal
         open={milestoneKofiOpen}

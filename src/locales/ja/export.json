@@ -64,5 +64,7 @@
   "share_linkExpired": "リンクの期限切れ",
   "share_linkRemoved": "リンクは削除されました",
   "share_copyFailed": "リンクをコピーできませんでした。",
-  "share_waiting": "ブラウザで承認してください"
+  "share_waiting": "ブラウザで承認してください",
+  "prerendered": "{{percent}}% 事前レンダリング済み",
+  "prerenderedAll": "すぐに書き出せます"
 }

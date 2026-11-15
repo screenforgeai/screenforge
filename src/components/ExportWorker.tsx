@@ -5,6 +5,7 @@ import { normalizeCursorEffect } from '../lib/effects/cursor/effects';
 import type { MusicClip } from '../lib/timeline';
 import type { ZoomClip, MediaSegment, CameraClip, MaskClip } from '../types/timeline';
 import { captureTimeline } from '../lib/export/captureTimeline';
+import { createChunkedCaptureHooks } from '../lib/export/chunkedCapture';
 import { setCustomWallpaperUrl } from '../lib/effects/frame/wallpapers';
 import { useStore } from '../store';
 import { normalizeMotionClips } from '../lib/animation/motionClips';
@@ -54,6 +55,55 @@ const ExportWorker = () => {
       // Register custom wallpaper data URL so the export window can render it.
       setCustomWallpaperUrl(params.customWallpaperDataUrl ?? null);
 
+      // Chunked export renders only the chunks missing from the cache; a
+      // pre-render fills the cache and reports how much of it is ready.
+      const isPrerender = params.chunking === 'prerender';
+      // Chunks cached when the plan was made, the latest confirmed count (after
+      // each run), and the last count reported.
+      let total = 0;
+      let cachedAtPlan = -1;
+      let confirmedCached = 0;
+      let reportedCached = -1;
+      const reportPrerender = (
+        phase: 'planned' | 'rendering' | 'done' | 'failed',
+        cached = confirmedCached,
+      ) => {
+        if (isPrerender) {
+          // A failed run may have stopped short of a chunk the estimate counted.
+          reportedCached = phase === 'failed' ? cached : Math.max(reportedCached, cached);
+          window.screenforge.reportPrerenderStatus({
+            phase,
+            total,
+            cached: reportedCached,
+            stateVersion: params.stateVersion ?? 0,
+          });
+        }
+      };
+      const chunked = params.chunking
+        ? createChunkedCaptureHooks(params, window.screenforge, (progress) => {
+            total = progress.total;
+            confirmedCached = progress.cached;
+            if (cachedAtPlan < 0) {
+              cachedAtPlan = progress.cached;
+              reportPrerender(progress.cached >= progress.total ? 'done' : 'planned');
+            } else {
+              reportPrerender('rendering');
+            }
+          })
+        : null;
+      // Between runs, estimate finished chunks from frame progress so the
+      // editor's readiness moves chunk by chunk (never ahead by a full chunk).
+      const reportFrameProgress = (value: number) => {
+        if (!isPrerender || cachedAtPlan < 0) {
+          return;
+        }
+        const missing = total - cachedAtPlan;
+        const estimate = cachedAtPlan + Math.floor(Math.min(1, value / 0.96) * missing);
+        if (estimate > reportedCached && estimate < total) {
+          reportPrerender('rendering', estimate);
+        }
+      };
+
       const captureStartedAt = performance.now();
       captureTimeline({
         recording: params.recording,
@@ -75,7 +125,18 @@ const ExportWorker = () => {
         signal: controller.signal,
         onProgress: (value) => {
           window.screenforge.notifyCaptureProgress(value);
+          reportFrameProgress(value);
         },
+        ...(chunked
+          ? {
+              planRuns: chunked.planRuns,
+              onRunStart: chunked.onRunStart,
+              onRunChunks: chunked.onRunChunks,
+              onRunEnd: chunked.onRunEnd,
+              skipAudio: isPrerender,
+              dutyCycle: isPrerender ? params.dutyCycle : undefined,
+            }
+          : {}),
         onChunk: (chunks) => window.screenforge.writeEncodedChunks(params.workspaceId, chunks),
         onInitMuxer: (decoderConfig) => {
           // GIF uses a temp MP4 during the WebCodecs phase; palette conversion is in FFmpeg.
@@ -122,10 +183,17 @@ const ExportWorker = () => {
               ),
             });
           }
-          window.screenforge.notifyCaptureDone(result);
+          reportPrerender('done');
+          window.screenforge.notifyCaptureDone({
+            frameCount: result.frameCount,
+            audioWavBuffer: result.audioWavBuffer,
+            perfStats: result.perfStats,
+            ...(chunked ? { chunkKeys: chunked.keys(), chunkStats: chunked.stats() } : {}),
+          });
         })
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : 'Capture failed';
+          reportPrerender('failed');
           window.screenforge.notifyCaptureError(message);
         })
         .finally(() => {
