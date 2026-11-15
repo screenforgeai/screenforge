@@ -187,7 +187,7 @@ describe('TopNav updater activity', () => {
 
 describe('TopNav share upload notice', () => {
   const closeExportDuringUpload = async () => {
-    render(<TopNav />);
+    render(<TopNav onOpenFFmpegSetup={vi.fn()} />);
     await userEvent.click(screen.getByRole('button', { name: /^export$/i }));
     act(() =>
       pushShareState({
