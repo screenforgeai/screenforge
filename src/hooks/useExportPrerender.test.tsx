@@ -132,6 +132,24 @@ describe('useExportPrerender', () => {
     expect(startExportPrerender.mock.calls[1][0].stateVersion).toBe(2);
   });
 
+  it('drops a start whose project changed while it checked the power', async () => {
+    let answerPower: (allowed: boolean) => void = () => undefined;
+    canPrerenderOnPower.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => (answerPower = resolve)),
+    );
+    renderHook(() => useExportPrerender(true));
+    await wait(PRERENDER_EDIT_DELAY_MS);
+    // Captions turned off (any edit) while the power check is out.
+    act(() => useStore.setState({ zoomClips: [] }));
+    await act(async () => answerPower(true));
+    expect(startExportPrerender).not.toHaveBeenCalled();
+
+    // The restart after the edit renders the new state instead.
+    await wait(PRERENDER_EDIT_DELAY_MS);
+    expect(startExportPrerender).toHaveBeenCalledTimes(1);
+    expect(startExportPrerender.mock.calls[0][0].stateVersion).toBe(1);
+  });
+
   it('pauses for playback and resumes once the playhead is still', async () => {
     await startRunning();
     act(() => useStore.setState({ currentTime: 1 }));

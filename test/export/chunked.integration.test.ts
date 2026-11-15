@@ -28,7 +28,8 @@ const processTree = require('../../shared/process-tree.js');
 
 const ROOT = path.resolve(__dirname, '../..');
 const MEDIA = path.join(ROOT, 'test/fixtures/export/media/screen-motion-20s.mp4');
-const HARNESS_TIMEOUT_MS = 240_000;
+// Software WebGL (GPU-less CI) renders several times slower.
+const HARNESS_TIMEOUT_MS = process.env.SCREENFORGE_SOFTWARE_GL === '1' ? 600_000 : 240_000;
 const FPS = 30;
 const DURATION = 20;
 const WIDTH = 640;

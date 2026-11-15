@@ -127,6 +127,13 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer,GlobalShortcutsPortal');
 }
 
+// Tests on machines without a GPU (Linux CI runners): render WebGL in
+// software. Chromium no longer falls back to SwiftShader on its own.
+if (process.env.SCREENFORGE_SOFTWARE_GL === '1') {
+  app.commandLine.appendSwitch('use-angle', 'swiftshader');
+  app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+}
+
 // Must be called before app.ready
 registerSchemePrivileges();
 

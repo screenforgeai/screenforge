@@ -8,7 +8,11 @@
 import fs from 'node:fs/promises';
 import { BrowserWindow } from 'electron';
 import type { CaptureWindowParams } from '../../src/types';
-import { runExportPrerender, stopExportPrerender } from '../modules/export/service';
+import {
+  isPrerenderCapturing,
+  runExportPrerender,
+  stopExportPrerender,
+} from '../modules/export/service';
 
 const PROBE_PAGE = `<!doctype html><html><body style="margin:0;background:#000">
 <canvas id="c" width="1920" height="1080" style="width:100vw;height:100vh"></canvas>
@@ -116,8 +120,16 @@ export async function runPrerenderProbe(
     const running = runExportPrerender({ ...params, dutyCycle }, preloadPath).finally(() => {
       settled = true;
     });
-    // Let the hidden window load and start rendering before measuring.
-    await delay(3000);
+    // Measure only once its hidden window is open and has had time to load
+    // and start rendering; startup can take longer than a fixed wait.
+    const startDeadline = Date.now() + 60_000;
+    while (!settled && !isPrerenderCapturing() && Date.now() < startDeadline) {
+      await delay(100);
+    }
+    const started = isPrerenderCapturing();
+    if (started) {
+      await delay(3000);
+    }
     const endedBeforeMeasuring = settled;
     const chunksAtStart = await countCachedChunks(cacheDir);
     await take();
@@ -125,15 +137,20 @@ export async function runPrerenderProbe(
     const intervals = await take();
     const endedWhileMeasuring = settled;
     const chunks = (await countCachedChunks(cacheDir)) - chunksAtStart;
+    // Our own stop makes the run report false, so its result only counts
+    // when it ended on its own before the stop.
     stopExportPrerender();
     const ran = await running;
-    // A refused or finished pre-render measured the editor alone, not alongside it.
-    const skipped = !ran
+    const skipped = !started
       ? 'pre-render did not run'
       : endedBeforeMeasuring
-        ? 'pre-render finished before measuring'
+        ? ran
+          ? 'pre-render finished before measuring'
+          : 'pre-render stopped before measuring'
         : endedWhileMeasuring
-          ? 'pre-render finished while measuring'
+          ? ran
+            ? 'pre-render finished while measuring'
+            : 'pre-render failed while measuring'
           : undefined;
     phases.push({
       ...summarize(`with pre-render at ${Math.round(dutyCycle * 100)}%`, intervals, refreshMs),

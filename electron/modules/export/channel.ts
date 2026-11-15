@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
-import { ipcMain } from 'electron';
 import { CH } from '../../channels';
-import { handleChannel, handleChannelWithSender } from '../../lib/ipc-main';
+import { handleChannel, handleChannelWithSender, listenChannel } from '../../lib/ipc-main';
 import type {
   CaptureWindowParams,
   CaptureWindowResult,
@@ -148,7 +147,7 @@ export function registerExportChannels(preloadPath: string): void {
     return powerAllowsExportPrerender();
   });
   // From the hidden window, on to the editor.
-  ipcMain.on(CH.export.PRERENDER_STATUS, (_event, status: ExportPrerenderStatus) => {
+  listenChannel<[ExportPrerenderStatus]>(CH.export.PRERENDER_STATUS, (status) => {
     getMainWindowForCapture()?.send(CH.export.PRERENDER_STATUS, status);
   });
 }

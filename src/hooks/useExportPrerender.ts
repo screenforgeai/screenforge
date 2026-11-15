@@ -139,6 +139,9 @@ export function useExportPrerender(enabled: boolean): void {
       if (disposed || state.isExporting || !state.recordingResult) {
         return;
       }
+      // Read with `state`, so an edit during the waits below (captions
+      // turned off, say) makes this start stale instead of rendering old state.
+      const stateVersion = usePrerenderStore.getState().stateVersion;
       // Reserved before the first wait, so a second start cannot slip in.
       running = true;
       try {
@@ -152,7 +155,6 @@ export function useExportPrerender(enabled: boolean): void {
         }
         const stored = loadStoredExportSettings();
         const settings = buildExportSettings(stored, state.captions);
-        const stateVersion = usePrerenderStore.getState().stateVersion;
         const prepared = await prepareExportCapture(settings);
         if (paused) {
           return;

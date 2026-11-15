@@ -42,6 +42,7 @@ import {
   streamSignatureFor,
   type ChunkContainer,
 } from './chunkCache';
+import { ChunkRuns } from './chunkRuns';
 import { runFFmpeg } from '../ffmpeg/runner';
 
 interface ActiveExport {
@@ -59,7 +60,7 @@ interface WorkspaceChunking {
   container: ChunkContainer;
   fps: number;
   scratchDir: string | null;
-  runs: Map<number, { writer: ChunkRunWriter; signature: string }>;
+  runs: ChunkRuns<{ writer: ChunkRunWriter; signature: string }>;
   /** Keys this capture uses; never evicted while it runs. */
   usedKeys: Set<string>;
 }
@@ -303,6 +304,13 @@ export async function runCaptureInWindow(
     // the React useEffect listener is registered.
     const onReady = (_event: Electron.IpcMainEvent) => {
       if (_event.sender !== win.webContents) {
+        return;
+      }
+      // The worker only listens for an abort once it has its params, so a
+      // stop sent while it was loading never reached it.
+      if (kind === 'prerender' && isStopped()) {
+        reject(new Error('Prerender stopped before it started'));
+        cleanup();
         return;
       }
       win.webContents.send(CH.export.CAPTURE_PARAMS, params);
@@ -799,7 +807,7 @@ export async function cleanupExportWorkspace(workspaceId: string): Promise<void>
   workspaces.delete(workspaceId);
   await workspace.activeMuxer?.cancel().catch(() => undefined);
   if (workspace.chunking) {
-    for (const { writer } of workspace.chunking.runs.values()) {
+    for (const { writer } of await workspace.chunking.runs.settled()) {
       await writer.cancel();
     }
     if (workspace.chunking.scratchDir) {
@@ -847,7 +855,7 @@ async function prepareChunking(params: CaptureWindowParams): Promise<void> {
     container: chunkContainerFor(params.format),
     fps: params.fps,
     scratchDir: null,
-    runs: new Map(),
+    runs: new ChunkRuns(),
     usedKeys: new Set(),
   };
 }
@@ -883,23 +891,24 @@ export async function startChunkRun(
   for (const chunk of run.chunks) {
     assertChunkKey(chunk.key);
   }
-  if (chunking.runs.has(runIndex)) {
-    throw new Error(`Chunk run ${runIndex} already started`);
-  }
-  chunking.scratchDir ??= await getChunkCache().createScratchDir(chunking.namespace);
-  const signature = streamSignatureFor(decoderConfig, chunking.fps);
-  const cache = getChunkCache();
-  chunking.runs.set(runIndex, {
-    writer: new ChunkRunWriter({
-      dir: chunking.scratchDir,
-      container: chunking.container,
-      fps: chunking.fps,
-      decoderConfig,
-      run,
-      onChunkComplete: (chunk) =>
-        cache.put(chunking.namespace, chunk, chunking.container, chunking.fps, signature),
-    }),
-    signature,
+  // Registered before the scratch folder exists: the run's first frames can
+  // arrive while it is being made.
+  await chunking.runs.start(runIndex, async () => {
+    chunking.scratchDir ??= await getChunkCache().createScratchDir(chunking.namespace);
+    const signature = streamSignatureFor(decoderConfig, chunking.fps);
+    const cache = getChunkCache();
+    return {
+      writer: new ChunkRunWriter({
+        dir: chunking.scratchDir,
+        container: chunking.container,
+        fps: chunking.fps,
+        decoderConfig,
+        run,
+        onChunkComplete: (chunk) =>
+          cache.put(chunking.namespace, chunk, chunking.container, chunking.fps, signature),
+      }),
+      signature,
+    };
   });
 }
 
@@ -908,21 +917,14 @@ export async function writeChunkRun(
   runIndex: number,
   chunks: SerializedChunk[],
 ): Promise<void> {
-  const run = getChunking(workspaceId).runs.get(runIndex);
-  if (!run) {
-    throw new Error(`Chunk run ${runIndex} was not started`);
-  }
+  const run = await getChunking(workspaceId).runs.get(runIndex);
   await run.writer.write(chunks);
 }
 
 /** Verifies a finished run's chunks and moves them into the cache. */
 export async function endChunkRun(workspaceId: string, runIndex: number): Promise<void> {
   const chunking = getChunking(workspaceId);
-  const run = chunking.runs.get(runIndex);
-  if (!run) {
-    throw new Error(`Chunk run ${runIndex} was not started`);
-  }
-  chunking.runs.delete(runIndex);
+  const run = await chunking.runs.take(runIndex);
   await run.writer.finish();
   await getChunkCache()
     .evict(chunking.usedKeys)
@@ -1064,6 +1066,11 @@ export function setPrerenderBlocker(isBlocked: () => boolean): void {
 
 // Bumped by every stop, so a prerender still starting up sees it was stopped.
 let prerenderGeneration = 0;
+
+/** True while a background prerender's hidden window is open. */
+export function isPrerenderCapturing(): boolean {
+  return captureWindow !== null && captureWindowKind === 'prerender';
+}
 
 export async function runExportPrerender(
   params: CaptureWindowParams,
