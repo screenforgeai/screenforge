@@ -6,13 +6,10 @@
  * with SCREENFORGE_PRERENDER_PROBE=1.
  */
 import fs from 'node:fs/promises';
-import { BrowserWindow } from 'electron';
-import type { CaptureWindowParams } from '../../src/types';
-import {
-  isPrerenderCapturing,
-  runExportPrerender,
-  stopExportPrerender,
-} from '../modules/export/service';
+import { BrowserWindow, ipcMain } from 'electron';
+import type { CaptureWindowParams, ExportPrerenderStatus } from '../../src/types';
+import { CH } from '../channels';
+import { runExportPrerender, stopExportPrerender } from '../modules/export/service';
 
 const PROBE_PAGE = `<!doctype html><html><body style="margin:0;background:#000">
 <canvas id="c" width="1920" height="1080" style="width:100vw;height:100vh"></canvas>
@@ -116,42 +113,48 @@ export async function runPrerenderProbe(
 
   for (const dutyCycle of dutyCycles) {
     await fs.rm(cacheDir, { recursive: true, force: true });
+    // The hidden window's own reports: 'rendering' once frames are encoded,
+    // 'done' or 'failed' the moment capture ends (before workspace cleanup).
+    let phase: ExportPrerenderStatus['phase'] | null = null;
+    const onStatus = (_event: Electron.IpcMainEvent, status: ExportPrerenderStatus) => {
+      phase = status.phase;
+    };
+    ipcMain.on(CH.export.PRERENDER_STATUS, onStatus);
     let settled = false;
     const running = runExportPrerender({ ...params, dutyCycle }, preloadPath).finally(() => {
       settled = true;
     });
-    // Measure only once its hidden window is open and has had time to load
-    // and start rendering; startup can take longer than a fixed wait.
-    const startDeadline = Date.now() + 60_000;
-    while (!settled && !isPrerenderCapturing() && Date.now() < startDeadline) {
-      await delay(100);
-    }
-    const started = isPrerenderCapturing();
-    if (started) {
-      await delay(3000);
-    }
-    const endedBeforeMeasuring = settled;
-    const chunksAtStart = await countCachedChunks(cacheDir);
-    await take();
-    await delay(phaseMs);
-    const intervals = await take();
-    const endedWhileMeasuring = settled;
-    const chunks = (await countCachedChunks(cacheDir)) - chunksAtStart;
-    // Our own stop makes the run report false, so its result only counts
-    // when it ended on its own before the stop.
-    stopExportPrerender();
-    const ran = await running;
-    const skipped = !started
-      ? 'pre-render did not run'
-      : endedBeforeMeasuring
-        ? ran
-          ? 'pre-render finished before measuring'
-          : 'pre-render stopped before measuring'
+    const ended = () => settled || phase === 'done' || phase === 'failed';
+
+    let skipped: string | undefined;
+    let intervals: number[] = [];
+    let chunks = 0;
+    try {
+      const startDeadline = Date.now() + 120_000;
+      while (phase !== 'rendering' && !ended() && Date.now() < startDeadline) {
+        await delay(100);
+      }
+      const started = phase === 'rendering';
+      const chunksAtStart = await countCachedChunks(cacheDir);
+      await take();
+      await delay(phaseMs);
+      intervals = await take();
+      const endedWhileMeasuring = ended();
+      const finished = phase === 'done';
+      chunks = (await countCachedChunks(cacheDir)) - chunksAtStart;
+      skipped = !started
+        ? 'pre-render never started rendering'
         : endedWhileMeasuring
-          ? ran
+          ? finished
             ? 'pre-render finished while measuring'
-            : 'pre-render failed while measuring'
+            : 'pre-render stopped or failed while measuring'
           : undefined;
+    } finally {
+      // Our own stop ends a run that was still rendering; that is expected.
+      stopExportPrerender();
+      await running;
+      ipcMain.off(CH.export.PRERENDER_STATUS, onStatus);
+    }
     phases.push({
       ...summarize(`with pre-render at ${Math.round(dutyCycle * 100)}%`, intervals, refreshMs),
       prerenderedSeconds: chunks * 2,

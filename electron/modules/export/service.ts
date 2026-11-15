@@ -1067,11 +1067,6 @@ export function setPrerenderBlocker(isBlocked: () => boolean): void {
 // Bumped by every stop, so a prerender still starting up sees it was stopped.
 let prerenderGeneration = 0;
 
-/** True while a background prerender's hidden window is open. */
-export function isPrerenderCapturing(): boolean {
-  return captureWindow !== null && captureWindowKind === 'prerender';
-}
-
 export async function runExportPrerender(
   params: CaptureWindowParams,
   preloadPath: string,
