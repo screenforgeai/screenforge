@@ -191,6 +191,37 @@ describe('app permission service', () => {
     expect(electronMock.isTrustedAccessibilityClient).not.toHaveBeenCalledWith(true);
   });
 
+  describe('openExternalUrl', () => {
+    it.each(['https://ko-fi.com/mohibarshi', 'http://localhost:3000/s/1', 'mailto:hi@example.com'])(
+      'opens %s',
+      async (url) => {
+        const { openExternalUrl } = await loadServiceModule();
+        await openExternalUrl(url);
+        expect(electronMock.shellOpenExternal).toHaveBeenCalledWith(url);
+      },
+    );
+
+    it.each([
+      'file:///etc/passwd?token=secret',
+      'javascript:alert(1)',
+      'smb://host/share',
+      'ms-settings:privacy-webcam',
+      'not a url',
+      '',
+    ])('refuses %s', async (url) => {
+      const { openExternalUrl } = await loadServiceModule();
+      await openExternalUrl(url);
+      expect(electronMock.shellOpenExternal).not.toHaveBeenCalled();
+    });
+
+    it('warns about a refused link without its query', async () => {
+      const { openExternalUrl } = await loadServiceModule();
+      await openExternalUrl('file:///etc/passwd?token=secret');
+      expect(loggerMock.warn).toHaveBeenCalled();
+      expect(JSON.stringify(loggerMock.warn.mock.calls)).not.toContain('secret');
+    });
+  });
+
   describe('saveScreenshot', () => {
     const pngHeader = (width: number, height: number): Buffer => {
       const bytes = Buffer.alloc(33);

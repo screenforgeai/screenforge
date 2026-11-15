@@ -323,8 +323,18 @@ export function trackAnalyticsEvent(event: string, properties?: Record<string, u
   trackEvent(event, properties);
 }
 
+const EXTERNAL_URL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
+
+/** Opens web and mail links only: links can come from Director, never a file or app handler. */
 export async function openExternalUrl(url: string): Promise<void> {
-  if (!url.trim()) {
+  let protocol: string | null = null;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    // Not a URL.
+  }
+  if (!protocol || !EXTERNAL_URL_PROTOCOLS.has(protocol)) {
+    log.warn('[app] refused to open a link', { protocol });
     return;
   }
 
