@@ -36,9 +36,7 @@
   "share_body": "リンクを知っている人なら誰でも視聴できます。無料のリンクは 30 日間有効です。",
   "share_button": "リンクを共有",
   "share_resume": "アップロードを再開",
-  "share_signInBody": "無料の Screenforge Director アカウントが必要です。",
   "share_signIn": "サインイン",
-  "share_signInAgain": "もう一度サインイン",
   "share_preparing": "アップロードを準備中…",
   "share_uploading": "アップロード中…",
   "share_uploadedOf": "{{done}} / {{total}}",
@@ -65,5 +63,6 @@
   "share_error_failed": "動画を共有できませんでした。もう一度お試しください。",
   "share_linkExpired": "リンクの期限切れ",
   "share_linkRemoved": "リンクは削除されました",
-  "share_copyFailed": "リンクをコピーできませんでした。"
+  "share_copyFailed": "リンクをコピーできませんでした。",
+  "share_waiting": "ブラウザで承認してください"
 }

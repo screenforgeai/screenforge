@@ -19,9 +19,13 @@ const SIGNED_IN: DirectorAccountState = {
 };
 
 let pushState: (state: ShareJobState) => void = () => undefined;
+let pushAccount: (state: DirectorAccountState) => void = () => undefined;
 const api = {
   getDirectorAccount: vi.fn(),
-  onDirectorAccountChanged: vi.fn(() => vi.fn()),
+  onDirectorAccountChanged: vi.fn((cb: (state: DirectorAccountState) => void) => {
+    pushAccount = cb;
+    return vi.fn();
+  }),
   getShareState: vi.fn(),
   onShareStateChanged: vi.fn((cb: (state: ShareJobState) => void) => {
     pushState = cb;
@@ -30,6 +34,8 @@ const api = {
   canResumeShare: vi.fn(),
   shareVideo: vi.fn(),
   cancelShare: vi.fn().mockResolvedValue(undefined),
+  signInToDirector: vi.fn().mockResolvedValue(undefined),
+  cancelDirectorSignIn: vi.fn().mockResolvedValue(undefined),
   copyShareLink: vi.fn().mockResolvedValue(true),
   openExternalUrl: vi.fn(),
 };
@@ -247,7 +253,7 @@ describe('SharePanel', () => {
     expect(api.shareVideo).toHaveBeenCalled();
   });
 
-  it('asks to sign in again when Director signed the app out', async () => {
+  it('once signed in again after Director signed the app out, offers to resume the upload', async () => {
     renderPanel();
     await screen.findByRole('button', { name: /share link/i });
     act(() =>
@@ -259,20 +265,55 @@ describe('SharePanel', () => {
         resumable: true,
       }),
     );
-    fireEvent.click(screen.getByRole('button', { name: /sign in again/i }));
-    expect(openSettings).toHaveBeenCalledWith('director');
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+    // The account is signed in again, so the old "signed out" message is gone.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /resume upload/i }));
+    expect(api.shareVideo).toHaveBeenCalled();
+    expect(api.signInToDirector).not.toHaveBeenCalled();
   });
 
-  it('when signed out, says sharing needs a free account and opens Settings › Director', async () => {
+  it('when signed out, is one row whose Sign in signs in right here', async () => {
     renderPanel({ account: { status: 'signed-out' } });
-    expect(
-      await screen.findByText('Needs a free Screenforge Director account.'),
-    ).toBeInTheDocument();
-    const signIn = screen.getByRole('button', { name: 'Sign in' });
+    const signIn = await screen.findByRole('button', { name: 'Sign in' });
     expect(signIn.querySelector('svg[data-director-mark][aria-hidden="true"]')).not.toBeNull();
+    // No line under the row.
+    expect(screen.getByRole('region', { name: 'Share a link' }).querySelector('p')).toBeNull();
+
     fireEvent.click(signIn);
-    expect(openSettings).toHaveBeenCalledWith('director');
+    expect(api.signInToDirector).toHaveBeenCalled();
+    expect(openSettings).not.toHaveBeenCalled();
     expect(api.shareVideo).not.toHaveBeenCalled();
+  });
+
+  it('while signing in, announces the wait in a status region already there, and can be cancelled', async () => {
+    renderPanel({ account: { status: 'signed-out' } });
+    await screen.findByRole('button', { name: 'Sign in' });
+    const region = screen.getByTestId('share-status');
+    expect(region).toHaveAttribute('role', 'status');
+    expect(region).toBeEmptyDOMElement();
+
+    act(() =>
+      pushAccount({
+        status: 'signing-in',
+        approveUrl: 'https://director.screenforge.co/desktop-login/X',
+      }),
+    );
+
+    // The same region, mounted before the text arrived (WAI ARIA22).
+    expect(screen.getByTestId('share-status')).toBe(region);
+    expect(region).toHaveTextContent('Approve in your browser');
+    expect(region).not.toContainElement(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.cancelDirectorSignIn).toHaveBeenCalled();
+  });
+
+  it('says why a sign-in from here failed, under the row', async () => {
+    renderPanel({ account: { status: 'signed-out', error: 'expired' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The sign-in link expired. Try again.',
+    );
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 
   it.each(['gif', 'mov'] as const)('explains that a %s export cannot be shared', async (format) => {

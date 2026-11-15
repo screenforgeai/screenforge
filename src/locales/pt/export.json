@@ -36,9 +36,7 @@
   "share_body": "Qualquer pessoa com o link pode assistir. Links gratuitos duram 30 dias.",
   "share_button": "Compartilhar link",
   "share_resume": "Retomar envio",
-  "share_signInBody": "Precisa de uma conta gratuita do Screenforge Director.",
   "share_signIn": "Entrar",
-  "share_signInAgain": "Entrar novamente",
   "share_preparing": "Preparando o envio…",
   "share_uploading": "Enviando…",
   "share_uploadedOf": "{{done}} de {{total}}",
@@ -65,5 +63,6 @@
   "share_error_failed": "Não foi possível compartilhar o vídeo. Tente novamente.",
   "share_linkExpired": "Link expirado",
   "share_linkRemoved": "Link removido",
-  "share_copyFailed": "Não foi possível copiar o link."
+  "share_copyFailed": "Não foi possível copiar o link.",
+  "share_waiting": "Aprove no navegador"
 }
