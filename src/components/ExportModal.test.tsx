@@ -21,6 +21,9 @@ vi.mock('../store', () => ({
     }),
 }));
 
+const flags = vi.hoisted(() => ({ value: { directorSharing: true } }));
+vi.mock('../hooks/useFeatureFlags', () => ({ useFeatureFlags: () => flags.value }));
+
 // The share panel has its own tests; here we only check what it's given.
 vi.mock('./Share/SharePanel', () => ({
   SharePanel: (props: Record<string, unknown>) => (
@@ -386,6 +389,17 @@ describe('ExportModal — after a successful export', () => {
     expect(screen.queryByRole('button', { name: /^export$/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^done$/i }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('offers no sharing while the director-sharing flag is off', () => {
+    flags.value = { directorSharing: false };
+    try {
+      renderDone('/Users/test/output.mp4');
+      expect(screen.getByText(/export completed/i)).toBeInTheDocument();
+      expect(screen.queryByTestId('share-panel')).not.toBeInTheDocument();
+    } finally {
+      flags.value = { directorSharing: true };
+    }
   });
 
   it('passes the exported format, so GIF and MOV can explain they cannot be shared', () => {

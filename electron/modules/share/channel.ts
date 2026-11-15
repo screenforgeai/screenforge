@@ -1,6 +1,7 @@
 import { CH } from '../../channels';
 import { handleChannel } from '../../lib/ipc-main';
 import { getShareManager } from './service';
+import { getFeatureFlags } from '../features/service';
 import type { ShareRequest } from '../../../src/types/index';
 
 const isShareRequest = (value: unknown): value is ShareRequest => {
@@ -21,6 +22,9 @@ export function registerShareChannels(): void {
     if (!isShareRequest(request)) {
       throw new Error('Invalid share request.');
     }
+    if (!getFeatureFlags().directorSharing) {
+      throw new Error('Sharing is not available in this version yet.');
+    }
     return shares().share(request);
   });
   handleChannel(CH.share.CANCEL, () => shares().cancel());
@@ -32,9 +36,12 @@ export function registerShareChannels(): void {
     shares().removeLink(String(projectId)),
   );
   handleChannel(CH.share.COPY_LINK, (projectId: string) => shares().copyLink(String(projectId)));
-  handleChannel(CH.share.RESUME_PROJECT, (projectId: string) =>
-    shares().resumeProject(String(projectId)),
-  );
+  handleChannel(CH.share.RESUME_PROJECT, (projectId: string) => {
+    if (!getFeatureFlags().directorSharing) {
+      throw new Error('Sharing is not available in this version yet.');
+    }
+    return shares().resumeProject(String(projectId));
+  });
   handleChannel(CH.share.DISCARD_PENDING, (projectId: string) =>
     shares().discardPending(String(projectId)),
   );

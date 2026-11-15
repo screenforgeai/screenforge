@@ -641,6 +641,12 @@ export interface TextClip {
   animationOutDuration: number;
 }
 
+/** This release's feature flags (PostHog), as the renderer sees them. */
+export interface FeatureFlags {
+  /** Screenforge Director sign-in, share links and their UI. */
+  directorSharing: boolean;
+}
+
 /** The optional Director sign-in, as the app shows it. Never carries the token. */
 export type DirectorAccountState =
   | { status: 'signed-out'; error?: 'expired' | 'failed' | 'disconnected' }
@@ -835,6 +841,9 @@ export interface ScreenforgeAPI {
   importVideoForInsert: () => Promise<RecordingResult | null>;
   onImportTriggeredFromTray: (cb: (result: RecordingResult) => void) => () => void;
   deleteProject: (id: string) => Promise<void>;
+  /** This release's feature flags; off until PostHog says on. */
+  getFeatureFlags: () => Promise<FeatureFlags>;
+  onFeatureFlagsChanged: (cb: (flags: FeatureFlags) => void) => () => void;
   getDirectorAccount: () => Promise<DirectorAccountState>;
   /** Opens Director's approval page; resolves once signed in, cancelled or expired. */
   signInToDirector: () => Promise<void>;

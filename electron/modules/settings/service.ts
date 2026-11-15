@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { app } from 'electron';
 import { setTelemetryEnabled } from '../../lib/telemetry';
+import { refreshFeatureFlags } from '../features/service';
 
 export interface AppSettings {
   profile: { name: string; email: string };
@@ -80,6 +81,7 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
   await fs.writeFile(settingsPath(), JSON.stringify(next), 'utf8');
   if (isBoolean(patch.telemetryEnabled)) {
     setTelemetryEnabled(next.telemetryEnabled);
+    refreshFeatureFlags();
   }
   return next;
 }

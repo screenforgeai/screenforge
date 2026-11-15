@@ -17,6 +17,10 @@ vi.mock('sonner', () => ({
   }),
 }));
 
+vi.mock('../../hooks/useFeatureFlags', () => ({
+  useFeatureFlags: () => ({ directorSharing: false }),
+}));
+
 vi.mock('../../hooks/useUpdaterState', () => ({
   useUpdaterState: () => updaterState,
 }));

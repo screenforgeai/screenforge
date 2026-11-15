@@ -21,6 +21,7 @@ import { useStore } from '../../store';
 import type { ExportSettings } from '../../types';
 import ExportModal from '../ExportModal';
 import { ShareBackgroundToasts } from '../Share/ShareBackgroundToasts';
+import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import { useShareJob } from '../../hooks/useShareJob';
 import { EDITOR_SIDEBAR_WIDTH_CLASS } from '../layout';
 import { useProjectPersistence } from '../ProjectPersistenceProvider';
@@ -124,6 +125,7 @@ const TitlePopoverBody = ({
 export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void }) => {
   const { t } = useTranslation('topnav');
   const [exportOpen, setExportOpen] = useState(false);
+  const { directorSharing } = useFeatureFlags();
   const [milestoneKofiOpen, setMilestoneKofiOpen] = useState(false);
   const [milestoneNumber, setMilestoneNumber] = useState(1);
   // Shown once the export window closes, so it never covers the share link.
@@ -433,11 +435,13 @@ export const TopNav = ({ onOpenFFmpegSetup }: { onOpenFFmpegSetup: () => void })
         onOpenFFmpegSetup={onOpenFFmpegSetup}
       />
 
-      <ShareBackgroundToasts
-        shownFilePath={
-          exportOpen && exportState.status === 'success' ? exportState.outputPath : null
-        }
-      />
+      {directorSharing && (
+        <ShareBackgroundToasts
+          shownFilePath={
+            exportOpen && exportState.status === 'success' ? exportState.outputPath : null
+          }
+        />
+      )}
 
       <KofiModal
         open={milestoneKofiOpen}
