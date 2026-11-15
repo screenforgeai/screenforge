@@ -117,6 +117,10 @@ export const CH = {
     GET: 'settings:get',
     SAVE: 'settings:save',
   },
+  features: {
+    GET: 'features:get',
+    CHANGED: 'features:changed',
+  },
   director: {
     GET_ACCOUNT: 'director:get-account',
     SIGN_IN: 'director:sign-in',

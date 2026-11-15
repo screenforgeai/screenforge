@@ -29,6 +29,7 @@ import { estimateDisplayExportSizeBytes } from '../lib/export/estimate';
 import { stripExt } from '../lib/utils';
 import type { ExportFormat, ExportSettings } from '../types';
 import { SharePanel } from './Share/SharePanel';
+import { useFeatureFlags } from '../hooks/useFeatureFlags';
 
 const KOFI_URL = 'https://ko-fi.com/mohibarshi';
 
@@ -165,6 +166,7 @@ const ExportModal = ({
   const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
   const captions = useStore((s) => s.captions);
   const currentProjectId = useStore((s) => s.currentProjectId);
+  const { directorSharing } = useFeatureFlags();
   const exportStartRef = useRef<number | null>(null);
   // Tracks which (recordingName, format) pair the current outputPath was generated for,
   // so we re-suggest when the recording or format changes even if a path is already set.
@@ -410,13 +412,15 @@ const ExportModal = ({
                   </p>
                 </div>
               </div>
-              <SharePanel
-                filePath={exportedPath}
-                format={formatFromPath(exportedPath, settings.format)}
-                durationS={duration}
-                title={recordingName}
-                projectId={currentProjectId ?? null}
-              />
+              {directorSharing && (
+                <SharePanel
+                  filePath={exportedPath}
+                  format={formatFromPath(exportedPath, settings.format)}
+                  durationS={duration}
+                  title={recordingName}
+                  projectId={currentProjectId ?? null}
+                />
+              )}
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-sf-border/40 px-6 pb-[20px] pt-[14px]">
               <Button

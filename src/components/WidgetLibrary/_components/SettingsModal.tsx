@@ -7,6 +7,7 @@ import { IconGlobe, IconLink, IconShield, IconUserAccount, IconX } from 'src/lib
 import type { SettingsSection } from 'src/lib/settingsNavigation';
 import { DirectorInfoTip } from '../../Director/DirectorInfoTip';
 import { DirectorAccountPanel } from './DirectorAccountPanel';
+import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import i18n from '../../../i18n';
 import {
   Button,
@@ -67,12 +68,20 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
   const [savedTelemetryEnabled, setSavedTelemetryEnabled] = useState(true);
 
   const hasOpenedRef = useRef(false);
+  const { directorSharing } = useFeatureFlags();
 
   useEffect(() => {
     if (open && section) {
       setActiveSection(section);
     }
   }, [open, section]);
+
+  // Account is hidden while the director-sharing flag is off.
+  useEffect(() => {
+    if (!directorSharing && activeSection === 'director') {
+      setActiveSection('profile');
+    }
+  }, [directorSharing, activeSection]);
 
   // Load persisted settings from main process when modal opens
   useEffect(() => {
@@ -201,12 +210,14 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
                 </span>
                 {t('tabs_language')}
               </TabsTrigger>
-              <TabsTrigger value="director">
-                <span data-tab-icon="">
-                  <IconLink size={15} />
-                </span>
-                {t('tabs_director')}
-              </TabsTrigger>
+              {directorSharing && (
+                <TabsTrigger value="director">
+                  <span data-tab-icon="">
+                    <IconLink size={15} />
+                  </span>
+                  {t('tabs_director')}
+                </TabsTrigger>
+              )}
               <TabsTrigger value="privacy">
                 <span data-tab-icon="">
                   <IconShield size={15} />
@@ -290,7 +301,7 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
             </TabsContent>
 
             <TabsContent value="director" className="flex-1 overflow-y-auto px-5 py-5">
-              {activeSection === 'director' && <DirectorAccountPanel />}
+              {directorSharing && activeSection === 'director' && <DirectorAccountPanel />}
             </TabsContent>
 
             <TabsContent value="privacy" className="flex-1 overflow-y-auto px-5 py-5">

@@ -84,6 +84,8 @@ import {
 import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules/app/app-tray';
 import { registerDirectorChannels } from './modules/director/channel';
 import { registerShareChannels } from './modules/share/channel';
+import { registerFeatureChannels } from './modules/features/channel';
+import { initFeatureFlags } from './modules/features/service';
 import { initDirectorAccount } from './modules/director/service';
 import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
 
@@ -475,6 +477,8 @@ app.on('ready', async () => {
     return;
   }
   registerProtocols([APP_ORIGIN]);
+  // The cached answer before any window asks; PostHog's follows.
+  await initFeatureFlags().catch(() => undefined);
 
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
     cb(isAllowedRendererPermission(permission)),
@@ -575,6 +579,7 @@ app.on('ready', async () => {
   });
   registerAreaSelectorChannels(PRELOAD_PATH, loadURL);
   registerImportChannels();
+  registerFeatureChannels();
   registerDirectorChannels();
   registerShareChannels();
   void initDirectorAccount();

@@ -15,6 +15,7 @@ import { cameraPreviewBridge } from './modules/camera-preview/bridge';
 import { areaSelectorBridge } from './modules/area-selector/bridge';
 import { importBridge } from './modules/import/bridge';
 import { directorBridge } from './modules/director/bridge';
+import { featuresBridge } from './modules/features/bridge';
 import { shareBridge } from './modules/share/bridge';
 import { whatsNewBridge } from './modules/whats-new/bridge';
 import { screenshotBridge } from './modules/screenshot/bridge';
@@ -37,6 +38,7 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...areaSelectorBridge,
   ...importBridge,
   ...directorBridge,
+  ...featuresBridge,
   ...shareBridge,
   ...whatsNewBridge,
   ...screenshotBridge,
