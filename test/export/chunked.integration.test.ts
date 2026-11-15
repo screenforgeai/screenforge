@@ -159,7 +159,7 @@ async function exportThroughApp(
   manifest: ExportFixtureManifest,
   chunked: boolean,
   options: { prerender?: boolean; cache?: string } = {},
-): Promise<ExportHarnessResult & { outputPath: string }> {
+): Promise<ExportHarnessResult & { outputPath: string; log: string }> {
   const dir = await fs.mkdtemp(path.join(workDir, `${manifest.id}-`));
   const manifestPath = path.join(dir, 'manifest.json');
   const resultPath = path.join(dir, 'result.json');
@@ -200,7 +200,7 @@ async function exportThroughApp(
       try {
         const result = JSON.parse(await fs.readFile(resultPath, 'utf8')) as ExportHarnessResult;
         if (result.success && result.outputPath) {
-          return result as ExportHarnessResult & { outputPath: string };
+          return { ...result, outputPath: result.outputPath, log };
         }
         if (result.error !== 'Harness started') {
           throw new Error(`Export failed: ${result.error}\n${log.slice(-4000)}`);
@@ -338,7 +338,12 @@ describe.sequential('chunked export', () => {
         prerender: true,
         cache: path.join(workDir, 'prerender-cache'),
       });
-      expect(result.prerendered).toBe(true);
+      // On failure, say why the app did not pre-render.
+      const why = result.log
+        .split('\n')
+        .filter((line) => line.includes('[export:prerender]'))
+        .join('\n');
+      expect(result.prerendered, why || result.log.slice(-4000)).toBe(true);
       expect(result.chunkStats).toEqual({ total: totalChunks, rendered: 0 });
       const psnr = await framePsnr(outputs.single, result.outputPath);
       expect(Math.min(...psnr)).toBeGreaterThanOrEqual(MIN_FRAME_PSNR);

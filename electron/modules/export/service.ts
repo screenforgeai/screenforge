@@ -1073,11 +1073,24 @@ export async function runExportPrerender(
 ): Promise<boolean> {
   const generation = prerenderGeneration;
   const isStopped = () => generation !== prerenderGeneration;
-  if (activeExport || (captureWindow && captureWindowKind === 'export') || prerenderBlocked()) {
+  const refuse = (reason: string) => {
+    log.info(`[export:prerender] not started: ${reason}`);
     return false;
+  };
+  if (activeExport || (captureWindow && captureWindowKind === 'export')) {
+    return refuse('an export is running');
   }
-  if (!getFeatureFlags().chunkedExport || !(await powerAllowsExportPrerender()) || isStopped()) {
-    return false;
+  if (prerenderBlocked()) {
+    return refuse('a recording is running');
+  }
+  if (!getFeatureFlags().chunkedExport) {
+    return refuse('the chunked-export flag is off');
+  }
+  if (!(await powerAllowsExportPrerender())) {
+    return refuse('on battery below 30%');
+  }
+  if (isStopped()) {
+    return refuse('stopped while starting');
   }
   const workspace = await createExportWorkspace(`prerender-${Date.now()}`);
   try {
