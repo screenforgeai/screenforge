@@ -1,5 +1,12 @@
 # screenforge
 
+## 0.10.0
+
+### Minor Changes
+
+- 52c2728: Sign in to a Screenforge Director workspace, optionally, from Settings › Account or right from the Share panel. Approve the sign-in in your browser and Screenforge finishes on its own; the sign-in is kept in your system keychain, and you can sign out at any time. Screenforge keeps working fully without an account.
+- e57b156: Share a link in one click. After an MP4 or WebM export, Share link uploads the video to Screenforge Director and copies its link, with progress and Cancel. An upload the network or a quit interrupts resumes where it stopped. Recordings shows each project's link and when it expires, with Copy and Remove. Needs the optional Screenforge Director sign-in, which you can do right in the Share panel; on the free plan links last 30 days (with an email 3 days before they expire), videos can be up to 10 minutes and you can have 25 active links, while paid plans keep links forever.
+
 ## 0.9.1
 
 ### Patch Changes
