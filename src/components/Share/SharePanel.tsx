@@ -5,9 +5,7 @@ import { useDirectorAccount } from 'src/hooks/useDirectorAccount';
 import { useShareJob } from 'src/hooks/useShareJob';
 import { IconCopy, IconLink } from 'src/lib/icons';
 import { formatShareDate, isShareableFormat, shareExpiry } from 'src/lib/share';
-import { openSettings } from 'src/lib/settingsNavigation';
 import { trackEvent } from 'src/lib/analytics';
-import { useStore } from 'src/store';
 import { DirectorInfoTip } from '../Director/DirectorInfoTip';
 import { DirectorMark } from '../Director/DirectorMark';
 import { Button, Progress, Spinner } from 'src/lib/ui';
@@ -57,16 +55,16 @@ const ExpiryText = ({ link }: { link: ProjectShareLink }) => {
 /** After an export: upload the video to Director and copy its link (#26). */
 export const SharePanel = ({ filePath, format, durationS, title, projectId }: SharePanelProps) => {
   const { t } = useTranslation('export');
+  const { t: tSettings } = useTranslation('settings');
   const account = useDirectorAccount();
   const job = useShareJob();
   const [canResume, setCanResume] = useState(false);
   const shareable = isShareableFormat(format);
-  const setFocusMode = useStore((s) => s.setFocusMode);
 
-  const openDirectorSettings = () => {
-    // Settings lives in the sidebar, which focus mode hides.
-    setFocusMode(false);
-    openSettings('director');
+  // Signs in right here: the browser opens to approve, and the panel follows
+  // the account state, so there's no detour through Settings.
+  const signIn = () => {
+    void window.screenforge.signInToDirector().catch(() => toast.error(t('share_error_failed')));
   };
 
   useEffect(() => {
@@ -123,7 +121,7 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
     }
   };
 
-  // One row: what it is on the left, the one action on the right; one quiet line below.
+  // One row: what it is on the left, the one action on the right; a quiet line below only when there's something to say.
   const shell = (body: React.ReactNode, action?: React.ReactNode) => (
     <section
       aria-label={t('share_title')}
@@ -155,10 +153,31 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
     return shell(null, <Spinner className="size-3.5" />);
   }
 
+  if (account.status === 'signing-in') {
+    return shell(
+      null,
+      <span className="flex items-center gap-2 text-sm text-sf-muted">
+        <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
+        {t('share_waiting')}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => void window.screenforge.cancelDirectorSignIn().catch(() => undefined)}
+        >
+          {t('share_cancel')}
+        </Button>
+      </span>,
+    );
+  }
+
   if (account.status !== 'signed-in') {
     return shell(
-      note(t('share_signInBody')),
-      <Button size="sm" variant="secondary" className="gap-1.5" onClick={openDirectorSettings}>
+      account.error ? (
+        <p role="alert" className="text-sm text-sf-red">
+          {tSettings(`director_error_${account.error}`)}
+        </p>
+      ) : null,
+      <Button size="sm" variant="secondary" className="gap-1.5" onClick={signIn}>
         <DirectorMark size={13} />
         {t('share_signIn')}
       </Button>,
@@ -230,7 +249,7 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
   const resume = canResume || (failed?.resumable ?? false);
   const action =
     failed?.error === 'signed-out' ? (
-      <Button size="sm" variant="secondary" onClick={openDirectorSettings}>
+      <Button size="sm" variant="secondary" onClick={signIn}>
         {t('share_signInAgain')}
       </Button>
     ) : failed && FINAL_ERRORS.has(failed.error) ? undefined : (
