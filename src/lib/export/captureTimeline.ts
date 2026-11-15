@@ -22,7 +22,7 @@ import {
   setupPixiPipeline,
   tickPixiPipeline,
 } from '../pixi/pipeline';
-import { warmupFrameCount, type ExportRun } from './chunkPlan';
+import { startsChunk, warmupFrameCount, type ExportRun } from './chunkPlan';
 import { useStore } from '../../store';
 import { renderTimelineAudio } from './audioTimeline';
 import { VideoEncoderWrapper } from './videoEncoder';
@@ -521,6 +521,16 @@ export async function captureTimeline(
     const toTimestampMicros = (outputTime: number): number =>
       Math.round((outputTime - timestampOffsetSeconds) * 1_000_000);
 
+    // A chunk must start on a keyframe, but some encoders (seen with Windows'
+    // software H.264 encoder) skip a keyframe request while frames are queued
+    // behind it. In a chunked capture the queue is emptied before each chunk's
+    // first frame; a single-pass export never waits here.
+    const drainBeforeChunkStart = async (outputTime: number): Promise<void> => {
+      if (runs !== null && startsChunk(Math.round(outputTime * fps), fps)) {
+        await encoder.waitForEncoderCapacity(0);
+      }
+    };
+
     const drainAndEncodePending = async (): Promise<void> => {
       if (pendingPbos.length === 0) {
         return;
@@ -574,6 +584,7 @@ export async function captureTimeline(
         }
 
         const encodeStart = performance.now();
+        await drainBeforeChunkStart(outputTime);
         encoder.encodePixelBuffer(
           cpuBuf,
           targetWidth,
@@ -706,6 +717,7 @@ export async function captureTimeline(
             // Reuse the pre-created black canvas — VideoFrame copies pixel data at
             // construction, so the same canvas can be encoded for every black frame.
             const encodeStartedAt = performance.now();
+            await drainBeforeChunkStart(outputTime);
             encoder.encodeFrame(
               blackCanvas,
               toTimestampMicros(outputTime),
@@ -766,6 +778,7 @@ export async function captureTimeline(
                 const remIdx = batch.frameIndices[rem];
                 const remTime = batch.outputTimes[rem] ?? remIdx / fps;
                 const encodeStart = performance.now();
+                await drainBeforeChunkStart(remTime);
                 encoder.encodeFrame(
                   blackCanvas,
                   toTimestampMicros(remTime),
@@ -783,6 +796,7 @@ export async function captureTimeline(
               // Single null frame from decoder — drain PBOs and encode black.
               await drainAndEncodePending();
               const encodeStart = performance.now();
+              await drainBeforeChunkStart(outputTime);
               encoder.encodeFrame(
                 blackCanvas,
                 toTimestampMicros(outputTime),

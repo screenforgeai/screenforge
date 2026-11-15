@@ -5,6 +5,7 @@ import {
   chunkFrameCount,
   groupMissingRuns,
   planChunks,
+  startsChunk,
   warmupFrameCount,
 } from './chunkPlan';
 
@@ -38,6 +39,24 @@ describe('planChunks', () => {
     expect(chunkFrameCount(60)).toBe(60 * CHUNK_SECONDS);
     expect(chunkFrameCount(29.97)).toBe(30 * CHUNK_SECONDS);
     expect(warmupFrameCount(60)).toBe(180);
+  });
+});
+
+describe('startsChunk', () => {
+  it("marks exactly each planned chunk's first frame", () => {
+    const starts = planChunks(10 * 30 + 7, 30).map((chunk) => chunk.startFrame);
+    const marked = Array.from({ length: 10 * 30 + 7 }, (_, f) => f).filter((f) =>
+      startsChunk(f, 30),
+    );
+    expect(marked).toEqual(starts);
+  });
+
+  it('only marks frames that are keyframes anyway', () => {
+    for (let f = 0; f < 600; f++) {
+      if (startsChunk(f, 29.97)) {
+        expect(isCaptureKeyFrame(f, 29.97)).toBe(true);
+      }
+    }
   });
 });
 

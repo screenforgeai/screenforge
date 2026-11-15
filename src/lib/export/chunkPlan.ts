@@ -42,6 +42,11 @@ export function chunkFrameCount(fps: number): number {
   return keyframeIntervalFrames(fps) * CHUNK_SECONDS;
 }
 
+/** Whether this frame is the first of a chunk, so it must be a keyframe. */
+export function startsChunk(frame: number, fps: number): boolean {
+  return frame % chunkFrameCount(fps) === 0;
+}
+
 export function warmupFrameCount(fps: number): number {
   return Math.ceil(CHUNK_WARMUP_SECONDS * Math.max(1, fps));
 }
