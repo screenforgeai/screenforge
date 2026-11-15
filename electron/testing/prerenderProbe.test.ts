@@ -7,10 +7,21 @@ const mocks = vi.hoisted(() => {
   const statusListeners = new Set<(event: unknown, status: ExportPrerenderStatus) => void>();
   // When each frame-time read happened (fake clock), in order.
   const takes: number[] = [];
+  const activityListeners = new Set<() => void>();
+  const window = { open: false };
   let stopPending: (() => void) | null = null;
   return {
     statusListeners,
     takes,
+    activityListeners,
+    window,
+    /** The hidden window opens or closes, as the service announces it. */
+    setWindowOpen(open: boolean) {
+      window.open = open;
+      for (const listener of activityListeners) {
+        listener();
+      }
+    },
     emit(phase: ExportPrerenderStatus['phase']) {
       for (const listener of statusListeners) {
         listener({}, { phase, total: 10, cached: 0, stateVersion: 0 });
@@ -60,6 +71,11 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('../modules/export/service', () => ({
   runExportPrerender: mocks.runExportPrerender,
   stopExportPrerender: mocks.stopExportPrerender,
+  isPrerenderWindowOpen: () => mocks.window.open,
+  onExportActivityChanged: (listener: () => void) => {
+    mocks.activityListeners.add(listener);
+    return () => mocks.activityListeners.delete(listener);
+  },
 }));
 
 import { runPrerenderProbe } from './prerenderProbe';
@@ -82,6 +98,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   mocks.takes.length = 0;
   mocks.statusListeners.clear();
+  mocks.activityListeners.clear();
+  mocks.window.open = false;
 });
 
 afterEach(() => {
@@ -134,9 +152,26 @@ describe('runPrerenderProbe', () => {
     expect(phase.skipped).toBe('pre-render finished while measuring');
   });
 
-  it('stops listening for status once done', async () => {
+  it('skips the phase when the window closes mid-measurement without reporting', async () => {
+    mocks.runExportPrerender.mockImplementationOnce(() => {
+      mocks.setWindowOpen(true);
+      setTimeout(() => mocks.emit('rendering'), 500);
+      // Closed with no 'done' or 'failed'; the run is still in workspace cleanup.
+      setTimeout(() => mocks.setWindowOpen(false), 500 + PHASE_MS / 2 + 200);
+      return new Promise<boolean>((resolve) => {
+        mocks.stopExportPrerender.mockImplementationOnce(() => resolve(false));
+      });
+    });
+
+    const [, phase] = await probe();
+
+    expect(phase.skipped).toBe('pre-render stopped or failed while measuring');
+  });
+
+  it('stops listening once done', async () => {
     mocks.runExportPrerender.mockImplementationOnce(async () => false);
     await probe();
     expect(mocks.statusListeners.size).toBe(0);
+    expect(mocks.activityListeners.size).toBe(0);
   });
 });

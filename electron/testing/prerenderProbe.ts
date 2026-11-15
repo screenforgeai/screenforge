@@ -9,7 +9,12 @@ import fs from 'node:fs/promises';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { CaptureWindowParams, ExportPrerenderStatus } from '../../src/types';
 import { CH } from '../channels';
-import { runExportPrerender, stopExportPrerender } from '../modules/export/service';
+import {
+  isPrerenderWindowOpen,
+  onExportActivityChanged,
+  runExportPrerender,
+  stopExportPrerender,
+} from '../modules/export/service';
 
 const PROBE_PAGE = `<!doctype html><html><body style="margin:0;background:#000">
 <canvas id="c" width="1920" height="1080" style="width:100vw;height:100vh"></canvas>
@@ -120,11 +125,19 @@ export async function runPrerenderProbe(
       phase = status.phase;
     };
     ipcMain.on(CH.export.PRERENDER_STATUS, onStatus);
+    // A window that closes without reporting (crashed, destroyed) also ends
+    // capture; it closes before the workspace cleanup that settles the run.
+    let windowClosed = false;
+    const offActivity = onExportActivityChanged(() => {
+      if (phase !== null && !isPrerenderWindowOpen()) {
+        windowClosed = true;
+      }
+    });
     let settled = false;
     const running = runExportPrerender({ ...params, dutyCycle }, preloadPath).finally(() => {
       settled = true;
     });
-    const ended = () => settled || phase === 'done' || phase === 'failed';
+    const ended = () => settled || windowClosed || phase === 'done' || phase === 'failed';
 
     let skipped: string | undefined;
     let intervals: number[] = [];
@@ -154,6 +167,7 @@ export async function runPrerenderProbe(
       stopExportPrerender();
       await running;
       ipcMain.off(CH.export.PRERENDER_STATUS, onStatus);
+      offActivity();
     }
     phases.push({
       ...summarize(`with pre-render at ${Math.round(dutyCycle * 100)}%`, intervals, refreshMs),

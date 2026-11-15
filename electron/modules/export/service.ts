@@ -110,6 +110,11 @@ export function onExportActivityChanged(listener: () => void): () => void {
   };
 }
 
+/** True while a background prerender's hidden window is open. */
+export function isPrerenderWindowOpen(): boolean {
+  return captureWindow !== null && captureWindowKind === 'prerender';
+}
+
 export function isExportBusy(): boolean {
   return (captureWindow !== null && captureWindowKind === 'export') || activeExport !== null;
 }
