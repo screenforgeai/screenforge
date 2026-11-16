@@ -66,6 +66,8 @@ export interface CreateEncoderResult {
    * Null when not available up-front — onDecoderConfig will fire on first keyframe.
    */
   decoderConfig: SerializedDecoderConfig | null;
+  /** The configuration the encoder was opened with, for diagnostics. */
+  config: Pick<VideoEncoderConfig, 'codec' | 'hardwareAcceleration' | 'bitrate' | 'latencyMode'>;
 }
 
 // ── VideoEncoderWrapper ────────────────────────────────────────────────────
@@ -137,7 +139,13 @@ export class VideoEncoderWrapper {
     realEncoder.configure(resolvedConfig.config as VideoEncoderConfig);
     wrapper = new VideoEncoderWrapper(realEncoder, opts);
 
-    return { wrapper, decoderConfig: preflight };
+    const { codec, hardwareAcceleration, bitrate, latencyMode } =
+      resolvedConfig.config as VideoEncoderConfig;
+    return {
+      wrapper,
+      decoderConfig: preflight,
+      config: { codec, hardwareAcceleration, bitrate, latencyMode },
+    };
   }
 
   private handleOutput(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): void {

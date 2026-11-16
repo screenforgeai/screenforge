@@ -482,6 +482,8 @@ export interface ExportCapturePerfStats {
   encoderFlushMs: number;
   writerBackpressureMs: number;
   audioRenderMs: number;
+  /** Time a background prerender spent resting between batches (duty cycle). */
+  restMs: number;
   batchCount: number;
   yieldedFrameCount: number;
   videoFrameCount: number;

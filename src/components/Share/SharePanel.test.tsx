@@ -286,6 +286,30 @@ describe('SharePanel', () => {
     expect(api.shareVideo).not.toHaveBeenCalled();
   });
 
+  it('shows preparing and finishing in the header row, not on a line below it', async () => {
+    renderPanel();
+    await screen.findByRole('button', { name: /share link/i });
+    const panel = screen.getByRole('region', { name: 'Share a link' });
+
+    act(() => pushState({ status: 'preparing', filePath: FILE, projectId: 'p1' }));
+    expect(screen.getByTestId('share-status')).toHaveTextContent('Preparing upload…');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+
+    act(() => pushState({ status: 'finishing', filePath: FILE, projectId: 'p1' }));
+    expect(screen.getByTestId('share-status')).toHaveTextContent('Finishing…');
+    // Nothing under the row.
+    expect(panel.children).toHaveLength(1);
+  });
+
+  it('keeps a long link inside the panel instead of widening it', async () => {
+    renderPanel();
+    await screen.findByRole('button', { name: /share link/i });
+    // A grid item is as wide as its content unless it may shrink; these let the
+    // link truncate rather than push past the dialog's edge.
+    const panel = screen.getByRole('region', { name: 'Share a link' });
+    expect(panel).toHaveClass('min-w-0', 'grid-cols-1');
+  });
+
   it('while signing in, announces the wait in a status region already there, and can be cancelled', async () => {
     renderPanel({ account: { status: 'signed-out' } });
     await screen.findByRole('button', { name: 'Sign in' });

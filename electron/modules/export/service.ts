@@ -233,6 +233,29 @@ async function assertCaptureSourcesUsable(params: CaptureWindowParams): Promise<
   }
 }
 
+/** The machine an export runs on, so its speed can be compared across computers. */
+function logCaptureSystem(kind: 'export' | 'prerender', params: CaptureWindowParams): void {
+  try {
+    const cpus = os.cpus();
+    const gpu = app.getGPUFeatureStatus();
+    log.info('[export] system', {
+      kind,
+      chunking: params.chunking ?? null,
+      size: `${params.targetWidth}x${params.targetHeight}@${params.fps}`,
+      format: params.format,
+      platform: `${process.platform}-${process.arch} ${os.release()}`,
+      cpu: `${cpus[0]?.model ?? 'unknown'} x${cpus.length}`,
+      memoryGb: Math.round(os.totalmem() / 1e9),
+      onBattery: powerMonitor.isOnBatteryPower(),
+      gpuVideoEncode: gpu.video_encode,
+      gpuVideoDecode: gpu.video_decode,
+      gpuWebgl2: gpu.webgl2,
+    });
+  } catch (error) {
+    log.info(`[export] system info unavailable: ${String(error)}`);
+  }
+}
+
 /**
  * Create a hidden BrowserWindow that runs captureTimeline() in isolation so the
  * main window's JS event loop is never blocked during export compositing.
@@ -246,6 +269,7 @@ export async function runCaptureInWindow(
 ): Promise<CaptureWindowResult> {
   await assertCaptureSourcesUsable(params);
   await prepareChunking(params);
+  logCaptureSystem(kind, params);
   // Checked after the awaits above: an export, a recording or a stop may have
   // arrived meanwhile, and a prerender must never replace an export's window.
   if (
