@@ -35,6 +35,7 @@ import {
 import { createExportVideoFrameSource, type ExportVideoFrameSource } from './videoFrameSource';
 import { preloadWallpapersAsync, preloadCustomWallpaperAsync } from '../effects/frame/wallpapers';
 import { computeExportRenderSize } from './renderSizing';
+import { createExportPace } from './exportPace';
 
 const CAPTURE_STALL_TIMEOUT_MS = 15_000;
 const CAPTURE_YIELD_INTERVAL_FRAMES = 12;
@@ -106,6 +107,8 @@ export interface CaptureTimelineOptions {
    * and CPU to the editor. Exports leave it at 1.
    */
   dutyCycle?: number;
+  /** Writes a line to the app log; used for render speed diagnostics. */
+  onDiagnostic?: (event: string, data: Record<string, unknown>) => void;
 }
 
 export interface CapturePlanInfo {
@@ -267,6 +270,7 @@ export async function captureTimeline(
   let encodeMs = 0;
   let encoderFlushMs = 0;
   let writerBackpressureMs = 0;
+  let restMs = 0;
   let audioRenderMs = 0;
   let batchCount = 0;
   let yieldedFrameCount = 0;
@@ -452,7 +456,12 @@ export async function captureTimeline(
       musicClips,
       signal,
     });
-    void audioPromise.catch(() => undefined);
+    void audioPromise.then(
+      () => {
+        audioRenderMs = performance.now() - audioStartedAt;
+      },
+      () => undefined,
+    );
 
     // Renders one frame into the WebGL framebuffer. Readback is initiated separately
     // via initiateReadback() so multiple frames can be queued to the GPU before any
@@ -604,12 +613,13 @@ export async function captureTimeline(
     // Store a reference to the Promise reject so onError can propagate failures
     // into the rVFC capture loop (onError fires outside the Promise scope).
     let encoderError: Error | null = null;
+    let encoderLogged = false;
 
     const createEncoder = async (handlers: {
       onChunks: (chunks: SerializedChunk[]) => Promise<void>;
       onConfig: (config: SerializedDecoderConfig | null) => Promise<void>;
     }): Promise<VideoEncoderWrapper> => {
-      const { wrapper, decoderConfig } = await VideoEncoderWrapper.create({
+      const { wrapper, decoderConfig, config } = await VideoEncoderWrapper.create({
         format,
         quality,
         resolution,
@@ -631,6 +641,15 @@ export async function captureTimeline(
         },
       });
 
+      if (!encoderLogged) {
+        encoderLogged = true;
+        opts.onDiagnostic?.('export:capture:encoder', {
+          ...config,
+          width: targetWidth,
+          height: targetHeight,
+          fps,
+        });
+      }
       // If decoderConfig came from isConfigSupported pre-flight, initMuxer now
       if (decoderConfig !== null) {
         assertNotAborted();
@@ -660,16 +679,39 @@ export async function captureTimeline(
     // that rendering takes only `dutyCycle` of the time since the last rest.
     const yieldAndRest = async (): Promise<void> => {
       yieldedFrameCount += 1;
-      const restMs =
+      pace.sample(renderedInEarlierRuns + currentOutputFrame - currentRunStartFrame, {
+        decodeWaitMs,
+        renderMs,
+        encodeMs,
+        writerBackpressureMs,
+        restMs,
+      });
+      const restFor =
         dutyCycle < 1 ? ((performance.now() - busySince) * (1 - dutyCycle)) / dutyCycle : 0;
-      await new Promise<void>((resolve) => setTimeout(resolve, restMs));
+      const restStartedAt = performance.now();
+      await new Promise<void>((resolve) => setTimeout(resolve, restFor));
       busySince = performance.now();
+      restMs += busySince - restStartedAt;
     };
     const framesToRender = runs
       ? runs.reduce((sum, run) => sum + (run.endFrame - run.startFrame), 0)
       : totalFrames;
     let renderedInEarlierRuns = 0;
     let currentRunStartFrame = 0;
+    // Every 5 s: frames done and the rate since the last line.
+    const pace = createExportPace({
+      totalFrames: framesToRender,
+      intervalMs: 5000,
+      emit: (data) => opts.onDiagnostic?.('export:capture:pace', data),
+    });
+    opts.onDiagnostic?.('export:capture:setup', {
+      setupMs: Math.round(performance.now() - captureStartedAt),
+      totalFrames,
+      framesToRender,
+      runs: runs?.length ?? null,
+      fps,
+      dutyCycle,
+    });
     const reportFrameProgress = (): void => {
       const done = renderedInEarlierRuns + currentOutputFrame - currentRunStartFrame;
       onProgress?.((done / Math.max(1, framesToRender)) * CAPTURE_FRAME_PROGRESS_MAX);
@@ -944,8 +986,8 @@ export async function captureTimeline(
     const frameCount = runs ? renderedInEarlierRuns : currentOutputFrame;
 
     // ── Audio ──────────────────────────────────────────────────────────────
+    // audioRenderMs is set when audio finishes; it renders alongside the video.
     const audioWavBuffer = await audioPromise;
-    audioRenderMs += performance.now() - audioStartedAt;
     assertNotAborted();
     onProgress?.(CAPTURE_DONE_PROGRESS);
 
@@ -958,6 +1000,7 @@ export async function captureTimeline(
       encoderFlushMs,
       writerBackpressureMs,
       audioRenderMs,
+      restMs,
       batchCount,
       yieldedFrameCount,
       videoFrameCount,

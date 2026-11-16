@@ -137,6 +137,11 @@ const ExportWorker = () => {
               dutyCycle: isPrerender ? params.dutyCycle : undefined,
             }
           : {}),
+        onDiagnostic: (event, data) =>
+          window.screenforge.writeDiagnosticLog(event, {
+            kind: isPrerender ? 'prerender' : params.chunking ? 'chunked-export' : 'export',
+            ...data,
+          }),
         onChunk: (chunks) => window.screenforge.writeEncodedChunks(params.workspaceId, chunks),
         onInitMuxer: (decoderConfig) => {
           // GIF uses a temp MP4 during the WebCodecs phase; palette conversion is in FFmpeg.
@@ -156,6 +161,7 @@ const ExportWorker = () => {
           const s = result.perfStats;
           if (s) {
             window.screenforge.writeDiagnosticLog('export:capture:perf', {
+              kind: isPrerender ? 'prerender' : params.chunking ? 'chunked-export' : 'export',
               totalMs,
               frames: s.videoFrameCount + s.blackFrameCount,
               videoFrames: s.videoFrameCount,
@@ -171,7 +177,10 @@ const ExportWorker = () => {
               // In-loop backpressure waits + pre-flush drain combined:
               writerBackpressureMs: Math.round(s.writerBackpressureMs),
               audioRenderMs: Math.round(s.audioRenderMs),
-              // Unaccounted = GC, yields, IPC round-trip overhead, etc.
+              // A prerender's rests between batches (its duty cycle):
+              restMs: Math.round(s.restMs),
+              // Unaccounted = GC, yields, IPC round-trip overhead, etc. Audio
+              // renders alongside the video, so it is not subtracted.
               unaccountedMs: Math.round(
                 totalMs -
                   s.decodeWaitMs -
@@ -179,7 +188,7 @@ const ExportWorker = () => {
                   s.encodeMs -
                   s.encoderFlushMs -
                   s.writerBackpressureMs -
-                  s.audioRenderMs,
+                  s.restMs,
               ),
             });
           }
