@@ -132,13 +132,7 @@ export const UpdateReadyPrompt = ({
       </Button>
 
       <AlertDialog open={open} onOpenChange={handleOpenChange}>
-        <AlertDialogContent
-          className="max-w-sm gap-0 overflow-hidden p-0"
-          initial={{ opacity: 0, y: 10, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 6, scale: 0.99 }}
-          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-        >
+        <AlertDialogContent className="max-w-sm gap-0 overflow-hidden p-0" from="bottom">
           <div className="border-b border-sf-border px-5 py-4">
             <p className="mb-2 text-2xs font-medium uppercase tracking-widest text-sf-muted">
               {t('readyLabel', { version: versionLabel })}

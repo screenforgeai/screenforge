@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { markModalOpen } from '../lib/ui/hooks/use-modal-activity';
 import { useStore } from '../store';
 import type { RecordingResult } from '../types/index';
 import { usePixiRenderer } from './usePixiRenderer';
@@ -169,5 +170,49 @@ describe('usePixiRenderer', () => {
     act(() => useStore.setState({ screenshotCapture: null }));
     runFrames(1);
     expect(scene.app.renderer.render).toHaveBeenCalled();
+  });
+
+  const mountPreview = async () => {
+    const scene = fakeScene();
+    pixi.createPreviewPixiApp.mockResolvedValue(scene);
+    pixi.setupPixiPipeline.mockResolvedValue([]);
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'videoWidth', { value: 1280 });
+    Object.defineProperty(video, 'videoHeight', { value: 720 });
+    // Stable refs and recording, as the editor passes them: one render loop.
+    const canvasRef = { current: document.createElement('canvas') };
+    const videoRef = { current: video };
+    const rec = recording('/a.mp4');
+    renderHook(() => usePixiRenderer(canvasRef, videoRef, rec));
+    await act(async () => undefined);
+    return { scene, video };
+  };
+
+  it('stops redrawing a paused preview while a modal covers it', async () => {
+    const { scene } = await mountPreview();
+    runFrames(1);
+    expect(scene.app.renderer.render).toHaveBeenCalled();
+
+    // A modal opens over the paused preview: its frame can't change, so the GPU
+    // and main thread go to the modal's open animation instead.
+    const release = markModalOpen();
+    scene.app.renderer.render.mockClear();
+    runFrames(3);
+    expect(scene.app.renderer.render).not.toHaveBeenCalled();
+
+    release();
+    runFrames(1);
+    expect(scene.app.renderer.render).toHaveBeenCalled();
+  });
+
+  it('keeps drawing a playing preview under a modal', async () => {
+    const { scene, video } = await mountPreview();
+    Object.defineProperty(video, 'paused', { value: false });
+
+    const release = markModalOpen();
+    scene.app.renderer.render.mockClear();
+    runFrames(2);
+    expect(scene.app.renderer.render).toHaveBeenCalledTimes(2);
+    release();
   });
 });

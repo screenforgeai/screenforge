@@ -332,7 +332,7 @@ export const PreviewCardProvider = ({ children }: { children: React.ReactNode })
             onPointerEnter={keepOpen}
             onPointerLeave={scheduleClose}
             className={cn(
-              'sf-preview-card fixed z-50 overflow-hidden rounded-xl border border-sf-border bg-sf-panel/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_1px_1px_rgba(0,0,0,0.2),0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl',
+              'sf-preview-card fixed z-50 overflow-hidden rounded-xl border border-sf-border bg-sf-panel/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_1px_1px_rgba(0,0,0,0.2),0_18px_44px_rgba(0,0,0,0.45)]',
               card.phase !== 'open' && 'pointer-events-none',
             )}
             style={{

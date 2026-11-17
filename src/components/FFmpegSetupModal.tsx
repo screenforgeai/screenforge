@@ -119,10 +119,13 @@ const FFmpegSetupModal = ({ open, onReady }: FFmpegSetupModalProps) => {
               {phase === 'downloading' && (
                 <div className="flex flex-col gap-2">
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                    {/* A full-width bar slid in from the left (the track clips it): a transform
+                        runs on the compositor, where animating `width` re-laid out the modal
+                        on every frame of every progress tick. */}
                     <motion.div
-                      className="h-full rounded-full bg-primary"
-                      initial={{ width: 0 }}
-                      animate={{ width: total > 0 ? `${percent}%` : '0%' }}
+                      className="h-full w-full rounded-full bg-primary"
+                      initial={{ transform: 'translateX(-100%)' }}
+                      animate={{ transform: `translateX(-${Math.max(0, 100 - percent)}%)` }}
                       transition={{ ease: 'linear', duration: 0.2 }}
                     />
                   </div>

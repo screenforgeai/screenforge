@@ -10,6 +10,7 @@ import {
   type ClickSoundHit,
 } from '../lib/effects/cursor/audio';
 import { createPreviewPixiApp, getPreviewRendererResolution } from '../lib/pixi/createPixiApp';
+import { isModalOpen } from '../lib/ui/hooks/use-modal-activity';
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
 import {
   analyzePixiEffects,
@@ -338,6 +339,12 @@ export const usePixiRenderer = (
       // The screenshot editor covers the whole window: drawing the hidden preview would only
       // take GPU time from the editor's own 3D view. It picks up again once the editor closes.
       if (useStore.getState().screenshotCapture !== null) {
+        lastFrameTime = performance.now();
+        return;
+      }
+      // A modal over a paused preview: the frame can't change while it's up, so redrawing it
+      // 60+ times a second only steals frames from the modal's own open/close animation.
+      if (video.paused && isModalOpen()) {
         lastFrameTime = performance.now();
         return;
       }

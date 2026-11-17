@@ -6,6 +6,15 @@ import { AnimatePresence, motion, type HTMLMotionProps } from 'motion/react';
 
 import { getStrictContext } from 'src/lib/get-strict-context';
 import { useControlledState } from '../../hooks/use-controlled-state';
+import { useModalActivity } from '../../hooks/use-modal-activity';
+import {
+  DIALOG_ENTER_TRANSITION,
+  DIALOG_EXIT_TRANSITION,
+  DIALOG_OVERLAY_TRANSITION,
+  DIALOG_SHOWN_TRANSFORM,
+  dialogHiddenTransform,
+  type DialogMotionDirection,
+} from './dialog-motion';
 
 type AlertDialogContextType = {
   isOpen: boolean;
@@ -23,6 +32,7 @@ function AlertDialog(props: AlertDialogProps) {
     defaultValue: props?.defaultOpen,
     onChange: props?.onOpenChange,
   });
+  useModalActivity(isOpen);
 
   return (
     <AlertDialogProvider value={{ isOpen, setIsOpen }}>
@@ -61,16 +71,16 @@ type AlertDialogOverlayProps = Omit<
   HTMLMotionProps<'div'>;
 
 function AlertDialogOverlay({
-  transition = { duration: 0.2, ease: 'easeInOut' },
+  transition = DIALOG_OVERLAY_TRANSITION,
   ...props
 }: AlertDialogOverlayProps) {
   return (
     <AlertDialogPrimitive.Overlay data-slot="alert-dialog-overlay" asChild forceMount>
       <motion.div
         key="alert-dialog-overlay"
-        initial={{ opacity: 0, filter: 'blur(4px)' }}
-        animate={{ opacity: 1, filter: 'blur(0px)' }}
-        exit={{ opacity: 0, filter: 'blur(4px)' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         transition={transition}
         {...props}
       />
@@ -78,7 +88,7 @@ function AlertDialogOverlay({
   );
 }
 
-type AlertDialogFlipDirection = 'top' | 'bottom' | 'left' | 'right';
+type AlertDialogFlipDirection = DialogMotionDirection;
 
 type AlertDialogContentProps = Omit<
   React.ComponentProps<typeof AlertDialogPrimitive.Content>,
@@ -93,12 +103,10 @@ function AlertDialogContent({
   onOpenAutoFocus,
   onCloseAutoFocus,
   onEscapeKeyDown,
-  transition = { type: 'spring', stiffness: 150, damping: 25 },
+  transition = DIALOG_ENTER_TRANSITION,
   ...props
 }: AlertDialogContentProps) {
-  const initialRotation = from === 'bottom' || from === 'left' ? '20deg' : '-20deg';
-  const isVertical = from === 'top' || from === 'bottom';
-  const rotateAxis = isVertical ? 'rotateX' : 'rotateY';
+  const hidden = dialogHiddenTransform(from);
 
   return (
     <AlertDialogPrimitive.Content
@@ -111,21 +119,9 @@ function AlertDialogContent({
       <motion.div
         key="alert-dialog-content"
         data-slot="alert-dialog-content"
-        initial={{
-          opacity: 0,
-          filter: 'blur(4px)',
-          transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
-        }}
-        animate={{
-          opacity: 1,
-          filter: 'blur(0px)',
-          transform: `perspective(500px) ${rotateAxis}(0deg) scale(1)`,
-        }}
-        exit={{
-          opacity: 0,
-          filter: 'blur(4px)',
-          transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
-        }}
+        initial={{ opacity: 0, transform: hidden }}
+        animate={{ opacity: 1, transform: DIALOG_SHOWN_TRANSFORM }}
+        exit={{ opacity: 0, transform: hidden, transition: DIALOG_EXIT_TRANSITION }}
         transition={transition}
         {...props}
       />

@@ -5,6 +5,15 @@ import { Dialog as DialogPrimitive } from 'radix-ui';
 import { AnimatePresence, motion, type HTMLMotionProps } from 'motion/react';
 
 import { useControlledState } from '../../hooks/use-controlled-state';
+import { useModalActivity } from '../../hooks/use-modal-activity';
+import {
+  DIALOG_ENTER_TRANSITION,
+  DIALOG_EXIT_TRANSITION,
+  DIALOG_OVERLAY_TRANSITION,
+  DIALOG_SHOWN_TRANSFORM,
+  dialogHiddenTransform,
+  type DialogMotionDirection,
+} from './dialog-motion';
 import { getStrictContext } from '../../../get-strict-context';
 
 type DialogContextType = {
@@ -22,6 +31,7 @@ function Dialog(props: DialogProps) {
     defaultValue: props?.defaultOpen,
     onChange: props?.onOpenChange,
   });
+  useModalActivity(isOpen);
 
   return (
     <DialogProvider value={{ isOpen, setIsOpen }}>
@@ -54,10 +64,7 @@ type DialogOverlayProps = Omit<
 > &
   HTMLMotionProps<'div'>;
 
-function DialogOverlay({
-  transition = { duration: 0.2, ease: 'easeInOut' },
-  ...props
-}: DialogOverlayProps) {
+function DialogOverlay({ transition = DIALOG_OVERLAY_TRANSITION, ...props }: DialogOverlayProps) {
   return (
     <DialogPrimitive.Overlay data-slot="dialog-overlay" asChild forceMount>
       <motion.div
@@ -72,7 +79,7 @@ function DialogOverlay({
   );
 }
 
-type DialogFlipDirection = 'top' | 'bottom' | 'left' | 'right';
+type DialogFlipDirection = DialogMotionDirection;
 
 type DialogContentProps = Omit<
   React.ComponentProps<typeof DialogPrimitive.Content>,
@@ -89,12 +96,10 @@ function DialogContent({
   onEscapeKeyDown,
   onPointerDownOutside,
   onInteractOutside,
-  transition = { type: 'spring', stiffness: 150, damping: 25 },
+  transition = DIALOG_ENTER_TRANSITION,
   ...props
 }: DialogContentProps) {
-  const initialRotation = from === 'bottom' || from === 'left' ? '20deg' : '-20deg';
-  const isVertical = from === 'top' || from === 'bottom';
-  const rotateAxis = isVertical ? 'rotateX' : 'rotateY';
+  const hidden = dialogHiddenTransform(from);
 
   return (
     <DialogPrimitive.Content
@@ -109,18 +114,9 @@ function DialogContent({
       <motion.div
         key="dialog-content"
         data-slot="dialog-content"
-        initial={{
-          opacity: 0,
-          transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
-        }}
-        animate={{
-          opacity: 1,
-          transform: `perspective(500px) ${rotateAxis}(0deg) scale(1)`,
-        }}
-        exit={{
-          opacity: 0,
-          transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
-        }}
+        initial={{ opacity: 0, transform: hidden }}
+        animate={{ opacity: 1, transform: DIALOG_SHOWN_TRANSFORM }}
+        exit={{ opacity: 0, transform: hidden, transition: DIALOG_EXIT_TRANSITION }}
         transition={transition}
         {...props}
       />
