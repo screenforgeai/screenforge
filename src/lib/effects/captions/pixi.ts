@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { useStore } from '../../../store';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
+import { createLocalMsaaFilter } from '../../pixi/edgeSmoothing';
 import type { CaptionSegment, CaptionSettings } from '../../../types';
 
 function findActiveSegment(segments: CaptionSegment[], t: number): CaptionSegment | null {
@@ -48,6 +49,10 @@ export const captionsPixiEffect: PixiEffect<null> = {
     wordContainer.eventMode = 'none';
 
     container.addChild(background, wordContainer);
+    if (scene.edgeSmoothing === 'shader') {
+      // No canvas MSAA: the pill's rounded ends get MSAA of their own.
+      container.filters = [createLocalMsaaFilter()];
+    }
     scene.overlayContainer.addChild(container);
 
     let lastText = '';

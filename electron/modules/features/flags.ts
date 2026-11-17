@@ -4,11 +4,14 @@ import type { FeatureFlags } from '../../../src/types/index';
 export const DIRECTOR_SHARING_FLAG = 'director-sharing';
 /** The PostHog flag that turns on chunked export and background prerendering. */
 export const CHUNKED_EXPORT_FLAG = 'chunked-export';
+/** The PostHog flag that renders exports without canvas MSAA. */
+export const FAST_EXPORT_EDGES_FLAG = 'fast-export-edges';
 
 /** Each app flag and the PostHog flag behind it. */
 export const FEATURE_FLAG_KEYS: Record<keyof FeatureFlags, string> = {
   directorSharing: DIRECTOR_SHARING_FLAG,
   chunkedExport: CHUNKED_EXPORT_FLAG,
+  fastExportEdges: FAST_EXPORT_EDGES_FLAG,
 };
 
 const NAMES = Object.keys(FEATURE_FLAG_KEYS) as (keyof FeatureFlags)[];

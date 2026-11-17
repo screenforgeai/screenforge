@@ -1,5 +1,5 @@
 import type { Application, Container } from 'pixi.js';
-import type { RecordingResult } from '../../types';
+import type { EdgeSmoothing, RecordingResult } from '../../types';
 import type { RenderContext } from '../effects/types';
 
 /**
@@ -28,6 +28,11 @@ export interface PixiScene {
   videoContainer: Container;
   contentContainer: Container;
   overlayContainer: Container;
+  /**
+   * 'msaa': the canvas is multisampled, so masks and shapes are smooth as drawn.
+   * 'shader' (export only): it is not; effects smooth their own edges.
+   */
+  edgeSmoothing: EdgeSmoothing;
   /** Source video natural pixel dimensions — updated by the frame effect when video loads. */
   sourceWidth: number;
   sourceHeight: number;

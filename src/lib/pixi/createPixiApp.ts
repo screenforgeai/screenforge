@@ -1,5 +1,6 @@
 import { Application, Container } from 'pixi.js';
 import type { PixiScene } from './types';
+import type { EdgeSmoothing } from '../../types';
 
 // Preview renders at CSS pixel density (1:1) so the RAF loop stays smooth even
 // on high-resolution Retina displays. Resolution=1 matches the export renderer
@@ -79,7 +80,14 @@ export async function createPreviewPixiApp(canvas: HTMLCanvasElement): Promise<P
   });
 
   const containers = buildSceneGraph(app);
-  return { app, ...containers, sourceWidth: 1280, sourceHeight: 800, renderScale: 1 };
+  return {
+    app,
+    ...containers,
+    edgeSmoothing: 'msaa',
+    sourceWidth: 1280,
+    sourceHeight: 800,
+    renderScale: 1,
+  };
 }
 
 /**
@@ -90,15 +98,22 @@ export async function createPreviewPixiApp(canvas: HTMLCanvasElement): Promise<P
  * autoStart=false — captureTimeline drives rendering one frame at a time.
  * antialias=true — 4× MSAA, as in the preview: rounded corners, masks, click rings and
  * shapes are drawn as geometry, whose edges step without it (the 1:1 blit cannot smooth them).
+ * edgeSmoothing 'shader' turns canvas MSAA off: it costs ~4 ms a 1080p frame, and the
+ * effects then smooth their own edges (the frame's corners in a shader, small shapes
+ * with MSAA of their own; see src/lib/pixi/edgeSmoothing.ts).
  */
-export async function createExportPixiApp(width: number, height: number): Promise<PixiScene> {
+export async function createExportPixiApp(
+  width: number,
+  height: number,
+  edgeSmoothing: EdgeSmoothing = 'msaa',
+): Promise<PixiScene> {
   const app = new Application();
 
   await app.init({
     width,
     height,
     backgroundAlpha: 0,
-    antialias: true,
+    antialias: edgeSmoothing === 'msaa',
     failIfMajorPerformanceCaveat: false,
     // preserveDrawingBuffer so the WebGL backbuffer remains readable after render()
     // and before the next render call — VideoFrame reads directly from the WebGL
@@ -114,5 +129,12 @@ export async function createExportPixiApp(width: number, height: number): Promis
   console.log('[ExportPixiApp] Renderer type:', app.renderer.type, '(1=WebGL, 2=WebGPU, 4=Canvas)');
 
   const containers = buildSceneGraph(app);
-  return { app, ...containers, sourceWidth: width, sourceHeight: height, renderScale: 1 };
+  return {
+    app,
+    ...containers,
+    edgeSmoothing,
+    sourceWidth: width,
+    sourceHeight: height,
+    renderScale: 1,
+  };
 }

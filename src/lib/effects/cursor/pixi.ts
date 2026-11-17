@@ -14,6 +14,7 @@ import { Container, Sprite, Graphics, Assets, Texture, Matrix } from 'pixi.js';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
 import { RECORDING_MASK_LABEL, RECORDING_VIDEO_SPRITE_LABEL } from '../../pixi/types';
 import { smoothWhenShrunk } from '../../pixi/smoothEdges';
+import { createLocalMsaaFilter } from '../../pixi/edgeSmoothing';
 import { useStore } from '../../../store';
 import { getFrameGeometry, getFrameGeometryForPanel } from '../frame/analyze';
 import { getClipTransitionAlpha } from '../frame/index';
@@ -380,6 +381,17 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
       return g;
     });
 
+    // The ripples share one layer (no transform of its own) so that, without
+    // canvas MSAA, they can get MSAA of their own over just their bounds.
+    const rippleLayer = new Container();
+    rippleLayer.eventMode = 'none';
+    rippleLayer.addChild(...ripplePool);
+    if (scene.edgeSmoothing === 'shader') {
+      rippleLayer.filters = [createLocalMsaaFilter()];
+      // The magnifier's crop clip is a stencil inside its round alpha mask.
+      lens.filters = [createLocalMsaaFilter()];
+    }
+
     const cursorContainer = new Container();
     cursorContainer.eventMode = 'none';
     // Draw order: effects → magnifier → ghosts → ripples → prevSprite → mainSprite
@@ -388,7 +400,7 @@ export const cursorPixiEffect: PixiEffect<CursorData> = {
       lens,
       effectsSprite,
       ...ghostSprites,
-      ...ripplePool,
+      rippleLayer,
       prevSprite,
       mainSprite,
     );

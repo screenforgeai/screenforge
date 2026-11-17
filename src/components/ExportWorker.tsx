@@ -114,6 +114,7 @@ const ExportWorker = () => {
         sourceFps: params.sourceFps,
         targetWidth: params.targetWidth,
         targetHeight: params.targetHeight,
+        edgeSmoothing: params.edgeSmoothing,
         format: params.format,
         quality: params.quality,
         resolution: params.resolution,
@@ -170,7 +171,9 @@ const ExportWorker = () => {
               // Phase breakdown (ms):
               decodeWaitMs: Math.round(s.decodeWaitMs),
               renderMs: Math.round(s.renderMs),
-              readPixelsYFlipMs: Math.round(s.gpuSyncMs),
+              glFinishMs: Math.round(s.gpuSyncMs),
+              // Waiting for the GPU to finish each frame, then copying it back:
+              readbackMs: Math.round(s.readbackMs),
               encodeMs: Math.round(s.encodeMs),
               // Time in encoder.flush() AFTER pre-flush drain:
               encoderFlushMs: Math.round(s.encoderFlushMs),
@@ -185,6 +188,7 @@ const ExportWorker = () => {
                 totalMs -
                   s.decodeWaitMs -
                   s.renderMs -
+                  s.readbackMs -
                   s.encodeMs -
                   s.encoderFlushMs -
                   s.writerBackpressureMs -

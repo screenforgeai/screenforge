@@ -63,6 +63,8 @@ vi.mock('../../lib/telemetry', () => ({
   initTelemetry: vi.fn(),
   getAnonymousId: vi.fn(),
   shutdownTelemetry: vi.fn(),
+  // Read when an export window gets its params (the edge-smoothing flag).
+  evaluateFeatureFlag: vi.fn(async () => null),
 }));
 
 vi.mock('./videoMuxer', () => ({

@@ -3,6 +3,12 @@ import { findSegmentAtTime, isMediaTrackEnabled } from '../helpers/segments';
 
 export const VIDEO_DECODE_STALL_ERROR = 'Video decode stalled during export';
 
+/**
+ * Share of wall time a background pre-render spends rendering. Here rather
+ * than in the editor's hook so the export test harness runs at the same pace.
+ */
+export const PRERENDER_DUTY_CYCLE = 0.5;
+
 export function isCaptureKeyFrame(frameIndex: number, fps: number): boolean {
   return frameIndex % Math.max(1, Math.round(fps)) === 0;
 }

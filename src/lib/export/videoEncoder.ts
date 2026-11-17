@@ -6,6 +6,7 @@ import type {
   SerializedDecoderConfig,
 } from '../../types/index';
 import { resolveSupportedVideoEncoderConfig } from './support';
+import type { Nv12Layout } from './nv12Readback';
 
 const ENCODED_CHUNK_BATCH_SIZE = 60;
 // batchWriteQueue serializes IPC sends — short timer so chunks are forwarded
@@ -279,7 +280,8 @@ export class VideoEncoderWrapper {
 
   /**
    * Encode one frame from a canvas source.
-   * Used for black frames (2D canvas). Video frames use encodePixelBuffer instead.
+   * Used for black frames (2D canvas). Video frames use encodeNv12Buffer, or
+   * encodePixelBuffer when the NV12 readback is not available.
    */
   encodeFrame(
     source: HTMLCanvasElement | OffscreenCanvas,
@@ -299,7 +301,46 @@ export class VideoEncoderWrapper {
   }
 
   /**
-   * Encode one frame from a CPU pixel buffer (top-to-bottom RGBA).
+   * Encode one frame read back as NV12 (see nv12Readback). Full-range BT.709,
+   * like the RGBA frames encodePixelBuffer gives: the output is yuvj420p
+   * either way.
+   */
+  encodeNv12Buffer(
+    pixels: Uint8Array,
+    layout: Nv12Layout,
+    timestampMicros: number,
+    isKeyFrame: boolean,
+  ): void {
+    if (this.faulted) {
+      throw new Error('VideoEncoder is in an error state — export aborted');
+    }
+    this.pendingEncodes += 1;
+    const frame = new VideoFrame(pixels, {
+      format: 'NV12',
+      codedWidth: layout.width,
+      codedHeight: layout.height,
+      timestamp: timestampMicros,
+      layout: [
+        { offset: 0, stride: layout.stride },
+        { offset: layout.uvOffset, stride: layout.stride },
+      ],
+      colorSpace: {
+        primaries: 'bt709',
+        transfer: 'iec61966-2-1',
+        matrix: 'bt709',
+        fullRange: true,
+      },
+    });
+    try {
+      this.encoder.encode(frame, { keyFrame: isKeyFrame });
+    } finally {
+      frame.close();
+    }
+  }
+
+  /**
+   * Encode one frame from a CPU pixel buffer (top-to-bottom RGBA). The
+   * fallback when the NV12 readback cannot be set up.
    *
    * Preferred over encodeFrame(canvas) for video frames: VideoToolbox reads
    * CPU memory instead of the WebGL canvas IOSurface, eliminating the Metal

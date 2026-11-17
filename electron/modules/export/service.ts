@@ -9,6 +9,7 @@ import { getFeatureFlags } from '../features/service';
 import type {
   CaptureWindowParams,
   CaptureWindowResult,
+  EdgeSmoothing,
   ExportFormat,
   ExportProgress,
   ExportRequest,
@@ -233,6 +234,11 @@ async function assertCaptureSourcesUsable(params: CaptureWindowParams): Promise<
   }
 }
 
+/** How this export smooths edges (see CaptureWindowParams.edgeSmoothing). */
+function currentEdgeSmoothing(): EdgeSmoothing {
+  return getFeatureFlags().fastExportEdges ? 'shader' : 'msaa';
+}
+
 /** The machine an export runs on, so its speed can be compared across computers. */
 function logCaptureSystem(kind: 'export' | 'prerender', params: CaptureWindowParams): void {
   try {
@@ -241,6 +247,7 @@ function logCaptureSystem(kind: 'export' | 'prerender', params: CaptureWindowPar
     log.info('[export] system', {
       kind,
       chunking: params.chunking ?? null,
+      edgeSmoothing: params.edgeSmoothing ?? currentEdgeSmoothing(),
       size: `${params.targetWidth}x${params.targetHeight}@${params.fps}`,
       format: params.format,
       platform: `${process.platform}-${process.arch} ${os.release()}`,
@@ -342,7 +349,10 @@ export async function runCaptureInWindow(
         cleanup();
         return;
       }
-      win.webContents.send(CH.export.CAPTURE_PARAMS, params);
+      win.webContents.send(CH.export.CAPTURE_PARAMS, {
+        ...params,
+        edgeSmoothing: params.edgeSmoothing ?? currentEdgeSmoothing(),
+      });
     };
 
     // ── Resolve/reject handlers (one-shot) ─────────────────────────────
