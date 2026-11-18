@@ -21,13 +21,14 @@ import { useStore } from '../store';
 import type { AppStore } from '../store/types';
 import { prepareExportCapture } from '../lib/export/captureParams';
 import { buildExportSettings, loadStoredExportSettings } from '../lib/export/exportSettingsStorage';
+import { PRERENDER_DUTY_CYCLE } from '../lib/export/captureScheduling';
+
+export { PRERENDER_DUTY_CYCLE };
 
 /** Wait after the last edit before (re)starting. */
 export const PRERENDER_EDIT_DELAY_MS = 1_000;
 /** Wait after the playhead last moved before resuming. */
 export const PRERENDER_PLAYBACK_DELAY_MS = 1_500;
-/** Share of wall time the pre-render spends rendering. */
-export const PRERENDER_DUTY_CYCLE = 0.5;
 
 /** The store fields an export's pixels depend on. */
 const EXPORT_STATE_FIELDS: ReadonlyArray<keyof AppStore> = [

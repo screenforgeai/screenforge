@@ -5,7 +5,10 @@ import { createCaptureStoreSnapshot } from '../../src/lib/export/captureSnapshot
 import { DEFAULT_CURSOR_SETTINGS } from '../../src/store/defaults';
 import { normalizeExportFpsForFormat } from '../../src/lib/export/gif';
 import { computeRequestedExportSize, computeTimelineDuration } from '../../src/lib/export/planning';
-import { VIDEO_DECODE_STALL_ERROR } from '../../src/lib/export/captureScheduling';
+import {
+  PRERENDER_DUTY_CYCLE,
+  VIDEO_DECODE_STALL_ERROR,
+} from '../../src/lib/export/captureScheduling';
 import {
   cleanupExportWorkspace,
   createExportWorkspace,
@@ -140,7 +143,11 @@ export async function runExportHarness(
     // pre-render first, as the editor does while idle.
     let prerendered: boolean | undefined;
     if (chunked && process.env.SCREENFORGE_EXPORT_PRERENDER === '1') {
-      prerendered = await runExportPrerender(captureParams, preloadPath);
+      // At the editor's pace, so its speed lines compare with the real app's.
+      prerendered = await runExportPrerender(
+        { ...captureParams, dutyCycle: PRERENDER_DUTY_CYCLE },
+        preloadPath,
+      );
     }
 
     const captureResult = await runCaptureInWindow(captureParams, preloadPath);

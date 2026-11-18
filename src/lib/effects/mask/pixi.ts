@@ -1,4 +1,5 @@
-import { Container, Sprite, Graphics, BlurFilter, RenderTexture } from 'pixi.js';
+import { Container, Sprite, Graphics, BlurFilter, RenderTexture, Rectangle } from 'pixi.js';
+import { createLocalMsaaFilter } from '../../pixi/edgeSmoothing';
 import { useStore } from '../../../store';
 import type { PixiEffect, PixiEffectUpdater, PixiScene } from '../../pixi/types';
 import type { RenderContext } from '../types';
@@ -101,6 +102,12 @@ export const maskPixiEffect: PixiEffect<null> = {
           solidRect.mask = clipMask;
 
           container.addChild(clipMask, blurSprite, solidRect);
+          if (scene.edgeSmoothing === 'shader') {
+            // No canvas MSAA: the region's edge gets MSAA of its own. Its area
+            // is set each frame to the region, not the full-canvas blur sprite.
+            container.filters = [createLocalMsaaFilter()];
+            container.filterArea = new Rectangle();
+          }
           root.addChild(container);
           node = { container, blurSprite, solidRect, clipMask };
           nodes.set(mask.id, node);
@@ -142,6 +149,16 @@ function updateMaskNode(
   node.clipMask.clear();
   node.clipMask.poly([tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
   node.clipMask.fill(0xffffff);
+  const area = node.container.filterArea;
+  if (area) {
+    // The region's bounds, with a pixel to spare for its smoothed edge.
+    const minX = Math.min(tl.x, tr.x, br.x, bl.x) - 1;
+    const minY = Math.min(tl.y, tr.y, br.y, bl.y) - 1;
+    area.x = minX;
+    area.y = minY;
+    area.width = Math.max(tl.x, tr.x, br.x, bl.x) + 1 - minX;
+    area.height = Math.max(tl.y, tr.y, br.y, bl.y) + 1 - minY;
+  }
 
   if (mask.type === 'blur' && sceneSnapshot) {
     node.blurSprite.visible = true;

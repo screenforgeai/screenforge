@@ -154,7 +154,15 @@ export class ChunkRunWriter {
           throw new ChunkCacheError('Encoded frames arrived out of chunk order');
         }
         if (packet.type !== 'key') {
-          throw new ChunkCacheError(`Chunk ${run.chunks[index].key} does not start on a keyframe`);
+          // Which frame arrived first says why: the chunk's first frame as a
+          // delta (the keyframe request was ignored) or a later frame (the
+          // first one was dropped).
+          const frame = run.startFrame + Math.round((packet.timestamp * fps) / 1_000_000);
+          throw new ChunkCacheError(
+            `Chunk ${run.chunks[index].key} does not start on a keyframe: its first ` +
+              `encoded frame is ${frame} (${packet.type}), the chunk starts at ` +
+              `${run.chunks[index].startFrame}`,
+          );
         }
         await flushGroup();
         await this.closeCurrent();

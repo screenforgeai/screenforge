@@ -103,7 +103,11 @@ function runProcess(
   });
 }
 
-function launchHarnessProcess(manifestPath: string, resultPath: string): HarnessLaunch {
+function launchHarnessProcess(
+  manifestPath: string,
+  resultPath: string,
+  env: Record<string, string> = {},
+): HarnessLaunch {
   // BSD script(1) takes the command as positional args; util-linux needs -c.
   const startCommand =
     process.platform === 'darwin'
@@ -114,8 +118,13 @@ function launchHarnessProcess(manifestPath: string, resultPath: string): Harness
     env: {
       ...process.env,
       CI: '1',
+      // Development builds turn every feature flag on; test what release builds
+      // ship unless the run asks otherwise.
+      SCREENFORGE_FEATURE_FAST_EXPORT_EDGES:
+        process.env.SCREENFORGE_FEATURE_FAST_EXPORT_EDGES ?? '0',
       SCREENFORGE_EXPORT_TEST_MANIFEST: manifestPath,
       SCREENFORGE_EXPORT_TEST_RESULT: resultPath,
+      ...env,
     },
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -184,9 +193,7 @@ async function inspectMedia(filePath: string): Promise<MediaInspection> {
 
   const durationMatch = output.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
   const duration = durationMatch
-    ? Number(durationMatch[1]) * 3600 +
-      Number(durationMatch[2]) * 60 +
-      Number(durationMatch[3])
+    ? Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3])
     : null;
 
   const lines = output.split(/\r?\n/);
@@ -277,7 +284,10 @@ async function sampleFrame(
   return frame;
 }
 
-async function runHarnessScenario(manifestFileName: string): Promise<{
+async function runHarnessScenario(
+  manifestFileName: string,
+  env: Record<string, string> = {},
+): Promise<{
   manifest: ExportFixtureManifest;
   result: ExportHarnessResult;
   stdout: string;
@@ -287,7 +297,7 @@ async function runHarnessScenario(manifestFileName: string): Promise<{
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), `screenforge-export-${manifest.id}-`));
   const manifestPath = path.resolve(MANIFEST_DIR, manifestFileName);
   const resultPath = path.join(tempDir, 'result.json');
-  const launch = launchHarnessProcess(manifestPath, resultPath);
+  const launch = launchHarnessProcess(manifestPath, resultPath, env);
 
   try {
     const result = await waitForFinalHarnessResult(resultPath, EXPORT_HARNESS_TIMEOUT_MS);
@@ -305,9 +315,7 @@ async function runHarnessScenario(manifestFileName: string): Promise<{
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `${message}\nSTDOUT:\n${launch.getStdout()}\nSTDERR:\n${launch.getStderr()}`,
-    );
+    throw new Error(`${message}\nSTDOUT:\n${launch.getStdout()}\nSTDERR:\n${launch.getStderr()}`);
   } finally {
     await stopHarnessProcess(launch);
   }
@@ -372,7 +380,9 @@ beforeAll(async () => {
       timeoutMs: 15_000,
     },
   ).catch((error) => {
-    throw new Error(`A PTY-capable 'script' command is required for test:export.\n${String(error)}`);
+    throw new Error(
+      `A PTY-capable 'script' command is required for test:export.\n${String(error)}`,
+    );
   });
 });
 
@@ -389,58 +399,62 @@ describe.sequential('export integration', () => {
     'gif-smoke.json',
   ];
 
-  it.each(scenarios)('exports %s through the real Electron harness', async (manifestFileName) => {
-    const { manifest, result } = await runHarnessScenario(manifestFileName);
-    expect(result.outputPath).toBeTruthy();
-    expect(result.captureFrameCount).toBeGreaterThan(0);
-    expect(result.outputPath && path.extname(result.outputPath)).toBe(
-      manifest.export.format === 'gif' ? '.gif' : `.${manifest.export.format}`,
-    );
-    expect(result.effectiveFps).toBe(
-      normalizeExportFpsForFormat(manifest.export.format, manifest.export.fps),
-    );
-
-    const outputInfo = await inspectMedia(result.outputPath as string);
-    expect(outputInfo.videoStreams).toBeGreaterThan(0);
-    expect(outputInfo.width).toBe(result.targetWidth);
-    expect(outputInfo.height).toBe(result.targetHeight);
-    expect(outputInfo.duration).not.toBeNull();
-    const expectedDuration = manifest.expected.outputDurationSeconds ?? result.duration ?? 0;
-    expect(Math.abs((outputInfo.duration ?? 0) - expectedDuration)).toBeLessThanOrEqual(
-      manifest.expected.durationToleranceSeconds,
-    );
-
-    if (manifest.expected.audio) {
-      expect(outputInfo.audioStreams).toBeGreaterThan(0);
-    } else {
-      expect(outputInfo.audioStreams).toBe(0);
-    }
-
-    if (manifest.expected.moving) {
-      await assertMovingOutput(
-        result.outputPath as string,
-        outputInfo.duration ?? result.duration ?? 0.5,
-        manifest.expected.minDistinctFrameHashes,
+  it.each(scenarios)(
+    'exports %s through the real Electron harness',
+    async (manifestFileName) => {
+      const { manifest, result } = await runHarnessScenario(manifestFileName);
+      expect(result.outputPath).toBeTruthy();
+      expect(result.captureFrameCount).toBeGreaterThan(0);
+      expect(result.outputPath && path.extname(result.outputPath)).toBe(
+        manifest.export.format === 'gif' ? '.gif' : `.${manifest.export.format}`,
       );
-    }
-
-    // Speed budgets assume a GPU; with software WebGL (GPU-less CI) only the
-    // result is checked.
-    const softwareGl = process.env.SCREENFORGE_SOFTWARE_GL === '1';
-    if (manifest.expected.maxElapsedMs != null && !softwareGl) {
-      expect(result.elapsedMs).toBeLessThanOrEqual(manifest.expected.maxElapsedMs);
-    }
-
-    if (manifest.expected.cropEdgeMaxLuma != null) {
-      await assertCropEdges(
-        result.outputPath as string,
-        outputInfo.width ?? 0,
-        outputInfo.height ?? 0,
-        outputInfo.duration ?? result.duration ?? 0.5,
-        manifest.expected.cropEdgeMaxLuma,
+      expect(result.effectiveFps).toBe(
+        normalizeExportFpsForFormat(manifest.export.format, manifest.export.fps),
       );
-    }
-  }, EXPORT_HARNESS_TIMEOUT_MS);
+
+      const outputInfo = await inspectMedia(result.outputPath as string);
+      expect(outputInfo.videoStreams).toBeGreaterThan(0);
+      expect(outputInfo.width).toBe(result.targetWidth);
+      expect(outputInfo.height).toBe(result.targetHeight);
+      expect(outputInfo.duration).not.toBeNull();
+      const expectedDuration = manifest.expected.outputDurationSeconds ?? result.duration ?? 0;
+      expect(Math.abs((outputInfo.duration ?? 0) - expectedDuration)).toBeLessThanOrEqual(
+        manifest.expected.durationToleranceSeconds,
+      );
+
+      if (manifest.expected.audio) {
+        expect(outputInfo.audioStreams).toBeGreaterThan(0);
+      } else {
+        expect(outputInfo.audioStreams).toBe(0);
+      }
+
+      if (manifest.expected.moving) {
+        await assertMovingOutput(
+          result.outputPath as string,
+          outputInfo.duration ?? result.duration ?? 0.5,
+          manifest.expected.minDistinctFrameHashes,
+        );
+      }
+
+      // Speed budgets assume a GPU; with software WebGL (GPU-less CI) only the
+      // result is checked.
+      const softwareGl = process.env.SCREENFORGE_SOFTWARE_GL === '1';
+      if (manifest.expected.maxElapsedMs != null && !softwareGl) {
+        expect(result.elapsedMs).toBeLessThanOrEqual(manifest.expected.maxElapsedMs);
+      }
+
+      if (manifest.expected.cropEdgeMaxLuma != null) {
+        await assertCropEdges(
+          result.outputPath as string,
+          outputInfo.width ?? 0,
+          outputInfo.height ?? 0,
+          outputInfo.duration ?? result.duration ?? 0.5,
+          manifest.expected.cropEdgeMaxLuma,
+        );
+      }
+    },
+    EXPORT_HARNESS_TIMEOUT_MS,
+  );
 
   it(
     'moves the picture only where the motion blocks are',
@@ -476,6 +490,23 @@ describe.sequential('export integration', () => {
       expect(await differenceAt(2.5)).toBeLessThan(1); // clip a, between its intro and outro
       expect(await differenceAt(0.8)).toBeGreaterThan(1.5); // tilt-in intro
       expect(await differenceAt(5.2)).toBeGreaterThan(1.5); // strong slow push
+    },
+    EXPORT_HARNESS_TIMEOUT_MS * 2,
+  );
+
+  it.each(['mp4-camera.json', 'mp4-aspect-4x3.json'])(
+    'smooths edges without canvas MSAA and gives the same picture (%s)',
+    async (name) => {
+      const msaa = (await runHarnessScenario(name, { SCREENFORGE_FEATURE_FAST_EXPORT_EDGES: '0' }))
+        .result.outputPath as string;
+      const shader = (
+        await runHarnessScenario(name, { SCREENFORGE_FEATURE_FAST_EXPORT_EDGES: '1' })
+      ).result.outputPath as string;
+      // Only edges differ, by under a pixel: about 0.2 grey levels on average.
+      // A missing or misplaced clip differs by tens.
+      for (const time of [0.5, 1.5, 2.5]) {
+        expect(await meanFrameDifference(msaa, shader, time)).toBeLessThan(0.6);
+      }
     },
     EXPORT_HARNESS_TIMEOUT_MS * 2,
   );

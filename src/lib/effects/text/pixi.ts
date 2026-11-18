@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { useStore } from '../../../store';
 import type { PixiEffect, PixiEffectUpdater, PixiScene } from '../../pixi/types';
+import { createLocalMsaaFilter } from '../../pixi/edgeSmoothing';
 import type { TextClip } from '../../../types';
 
 const REFERENCE_HEIGHT = 1080;
@@ -129,6 +130,10 @@ export const textPixiEffect: PixiEffect<null> = {
           const ul = new Graphics();
           ul.eventMode = 'none';
           container.addChild(bg, label, ul);
+          if (scene.edgeSmoothing === 'shader') {
+            // No canvas MSAA: the background's rounded corners get MSAA of their own.
+            container.filters = [createLocalMsaaFilter()];
+          }
           root.addChild(container);
           node = { container, bg, label, ul };
           nodes.set(clip.id, node);
