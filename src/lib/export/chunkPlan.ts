@@ -2,9 +2,11 @@
  * Chunked export: the timeline is cut into fixed-length chunks that can be
  * rendered independently, cached, and joined without re-encoding.
  *
- * Chunk boundaries sit on encoder keyframes (keyframes are forced every
- * round(fps) frames, see isCaptureKeyFrame), so every chunk starts with a
- * keyframe and joins cleanly with its neighbours.
+ * Chunk boundaries sit on encoder keyframes, so every chunk starts with a
+ * keyframe and joins cleanly with its neighbours. Keyframes are requested
+ * every round(fps) frames (isCaptureKeyFrame), and each chunk after a run's
+ * first is encoded by a new encoder, whose first frame is always a keyframe
+ * even where an encoder ignores the request (captureTimeline).
  */
 
 /** Chunk length. A multiple of the 1 s keyframe interval. */
@@ -27,7 +29,11 @@ export interface ExportChunk {
   endFrame: number;
 }
 
-/** A contiguous stretch of chunks rendered in one encoder session. */
+/**
+ * A contiguous stretch of chunks rendered in one pass: one warm-up, one seek
+ * into the recording, and one stream configuration (each chunk still gets its
+ * own encoder).
+ */
 export interface ExportRun {
   startFrame: number;
   endFrame: number;

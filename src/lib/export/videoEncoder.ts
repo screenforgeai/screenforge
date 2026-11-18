@@ -13,6 +13,29 @@ const ENCODED_CHUNK_BATCH_SIZE = 60;
 // to the muxer quickly, reducing startup latency and keeping IPC write pressure steady.
 const ENCODED_CHUNK_BATCH_DELAY_MS = 100;
 
+/**
+ * Whether two encoders produce the same stream: same codec string, coded size
+ * and codec description (the H.264 SPS/PPS). Frames from either then decode
+ * with the same stream header, so they can share a file or be joined.
+ */
+export function decoderConfigsMatch(
+  a: SerializedDecoderConfig | null,
+  b: SerializedDecoderConfig | null,
+): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
+  if (a.codec !== b.codec || a.codedWidth !== b.codedWidth || a.codedHeight !== b.codedHeight) {
+    return false;
+  }
+  const da = a.description ? new Uint8Array(a.description) : null;
+  const db = b.description ? new Uint8Array(b.description) : null;
+  if (!da || !db) {
+    return da === db;
+  }
+  return da.length === db.length && da.every((byte, i) => byte === db[i]);
+}
+
 function serializeDecoderConfig(
   config: VideoDecoderConfig,
   fallbackWidth: number,

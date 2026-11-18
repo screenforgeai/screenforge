@@ -1,5 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { VideoEncoderWrapper } from './videoEncoder';
+import { decoderConfigsMatch, VideoEncoderWrapper } from './videoEncoder';
+
+describe('decoderConfigsMatch', () => {
+  const config = (bytes: number[], overrides: Record<string, unknown> = {}) => ({
+    codec: 'avc1.640034',
+    codedWidth: 1280,
+    codedHeight: 720,
+    description: new Uint8Array(bytes).buffer,
+    ...overrides,
+  });
+
+  it('matches two encoders that give the same stream header', () => {
+    expect(decoderConfigsMatch(config([1, 2, 3]), config([1, 2, 3]))).toBe(true);
+  });
+
+  it('tells apart a different SPS/PPS, codec or size', () => {
+    expect(decoderConfigsMatch(config([1, 2, 3]), config([1, 2, 4]))).toBe(false);
+    expect(decoderConfigsMatch(config([1, 2, 3]), config([1, 2]))).toBe(false);
+    expect(decoderConfigsMatch(config([1]), config([1], { codec: 'avc1.4d0028' }))).toBe(false);
+    expect(decoderConfigsMatch(config([1]), config([1], { codedHeight: 1080 }))).toBe(false);
+  });
+
+  it('treats a missing header as matching only another missing one', () => {
+    expect(decoderConfigsMatch(null, null)).toBe(true);
+    expect(decoderConfigsMatch(config([1]), null)).toBe(false);
+    expect(decoderConfigsMatch(config([], { description: undefined }), config([1]))).toBe(false);
+  });
+});
 
 class FakeEncodedVideoChunk {
   public readonly byteLength = 1;

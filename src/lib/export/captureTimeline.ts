@@ -26,7 +26,7 @@ import {
 import { startsChunk, warmupFrameCount, type ExportRun } from './chunkPlan';
 import { useStore } from '../../store';
 import { renderTimelineAudio } from './audioTimeline';
-import { VideoEncoderWrapper } from './videoEncoder';
+import { decoderConfigsMatch, VideoEncoderWrapper } from './videoEncoder';
 import {
   clampMediaSegmentsToSourceDuration,
   isCaptureKeyFrame,
@@ -279,6 +279,7 @@ export async function captureTimeline(
   let encoderFlushMs = 0;
   let writerBackpressureMs = 0;
   let restMs = 0;
+  let chunkEncoderRestarts = 0;
   let audioRenderMs = 0;
   let batchCount = 0;
   let yieldedFrameCount = 0;
@@ -563,14 +564,41 @@ export async function captureTimeline(
     const toTimestampMicros = (outputTime: number): number =>
       Math.round((outputTime - timestampOffsetSeconds) * 1_000_000);
 
-    // A chunk must start on a keyframe, but some encoders (seen with Windows'
-    // software H.264 encoder) skip a keyframe request while frames are queued
-    // behind it. In a chunked capture the queue is emptied before each chunk's
-    // first frame; a single-pass export never waits here.
-    const drainBeforeChunkStart = async (outputTime: number): Promise<void> => {
-      if (runs !== null && startsChunk(Math.round(outputTime * fps), fps)) {
-        await encoder.waitForEncoderCapacity(0);
+    // A chunk must start on a keyframe. Encoders are asked for one there, but
+    // Windows' software H.264 encoder has been seen to ignore the request, even
+    // with nothing queued. A new encoder's first frame is always a keyframe, so
+    // in a chunked capture each chunk after a run's first gets an encoder of its
+    // own; a single-pass export keeps one encoder throughout.
+    const startChunkOnFreshEncoder = async (outputTime: number): Promise<void> => {
+      const run = activeRun;
+      const frame = Math.round(outputTime * fps);
+      if (!run || !startsChunk(frame, fps) || frame === run.startFrame) {
+        return;
       }
+      const startedAt = performance.now();
+      // Every frame of the chunk before is out and written.
+      await encoder.flush();
+      assertNotAborted();
+      if (encoderError) {
+        throw encoderError;
+      }
+      encoder.close();
+      encoderOpen = false;
+      encoder = await createEncoder({
+        onChunks: run.onChunks,
+        // The run's chunk files were opened with its first encoder's stream
+        // configuration; a later encoder must produce the same stream.
+        onConfig: async (config) => {
+          if (run.config !== undefined && !decoderConfigsMatch(run.config, config)) {
+            throw new Error(
+              "[Export] A chunk's encoder produced a different stream configuration than the rest of its run",
+            );
+          }
+        },
+      });
+      encoderOpen = true;
+      chunkEncoderRestarts += 1;
+      encoderFlushMs += performance.now() - startedAt;
     };
 
     const drainAndEncodePending = async (): Promise<void> => {
@@ -631,7 +659,7 @@ export async function captureTimeline(
         readbackMs += performance.now() - readbackStart;
 
         const encodeStart = performance.now();
-        await drainBeforeChunkStart(outputTime);
+        await startChunkOnFreshEncoder(outputTime);
         if (nv12) {
           encoder.encodeNv12Buffer(cpuBuf, nv12.layout, toTimestampMicros(outputTime), isKeyFrame);
         } else {
@@ -703,10 +731,18 @@ export async function captureTimeline(
       return wrapper;
     };
 
-    // A chunked capture opens one encoder per run, inside the loop below.
+    // A chunked capture opens an encoder per run, inside the loop below, and a
+    // new one at each of the run's later chunks (startChunkOnFreshEncoder).
     let encoder!: VideoEncoderWrapper;
     // A run's encoder is closed once flushed; closing it twice would throw.
     let encoderOpen = false;
+    // Chunked capture: the run being rendered, where its encoded frames go, and
+    // the stream configuration its first encoder reported.
+    let activeRun: {
+      startFrame: number;
+      onChunks: (chunks: SerializedChunk[]) => Promise<void>;
+      config?: SerializedDecoderConfig | null;
+    } | null = null;
     if (runs === null) {
       encoder = await createEncoder({ onChunks: onChunk, onConfig: onInitMuxer });
       encoderOpen = true;
@@ -803,7 +839,7 @@ export async function captureTimeline(
             // Reuse the pre-created black canvas — VideoFrame copies pixel data at
             // construction, so the same canvas can be encoded for every black frame.
             const encodeStartedAt = performance.now();
-            await drainBeforeChunkStart(outputTime);
+            await startChunkOnFreshEncoder(outputTime);
             encoder.encodeFrame(
               blackCanvas,
               toTimestampMicros(outputTime),
@@ -864,7 +900,7 @@ export async function captureTimeline(
                 const remIdx = batch.frameIndices[rem];
                 const remTime = batch.outputTimes[rem] ?? remIdx / fps;
                 const encodeStart = performance.now();
-                await drainBeforeChunkStart(remTime);
+                await startChunkOnFreshEncoder(remTime);
                 encoder.encodeFrame(
                   blackCanvas,
                   toTimestampMicros(remTime),
@@ -882,7 +918,7 @@ export async function captureTimeline(
               // Single null frame from decoder — drain PBOs and encode black.
               await drainAndEncodePending();
               const encodeStart = performance.now();
-              await drainBeforeChunkStart(outputTime);
+              await startChunkOnFreshEncoder(outputTime);
               encoder.encodeFrame(
                 blackCanvas,
                 toTimestampMicros(outputTime),
@@ -1003,9 +1039,17 @@ export async function captureTimeline(
           if (!onRunChunks || !onRunStart) {
             throw new Error('Chunked capture needs onRunStart and onRunChunks');
           }
-          encoder = await createEncoder({
+          const thisRun: NonNullable<typeof activeRun> = {
+            startFrame: run.startFrame,
             onChunks: (chunks) => onRunChunks(runIndex, chunks),
-            onConfig: (config) => onRunStart(runIndex, run, config),
+          };
+          activeRun = thisRun;
+          encoder = await createEncoder({
+            onChunks: thisRun.onChunks,
+            onConfig: async (config) => {
+              thisRun.config = config;
+              await onRunStart(runIndex, run, config);
+            },
           });
           encoderOpen = true;
           currentOutputFrame = run.startFrame;
@@ -1014,6 +1058,7 @@ export async function captureTimeline(
           await finishEncoder();
           encoderOpen = false;
           encoder.close();
+          activeRun = null;
           renderedInEarlierRuns += run.endFrame - run.startFrame;
           currentRunStartFrame = currentOutputFrame;
           await opts.onRunEnd?.(runIndex, run);
@@ -1046,6 +1091,7 @@ export async function captureTimeline(
       writerBackpressureMs,
       audioRenderMs,
       restMs,
+      chunkEncoderRestarts,
       batchCount,
       yieldedFrameCount,
       videoFrameCount,
