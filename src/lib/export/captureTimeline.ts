@@ -280,6 +280,7 @@ export async function captureTimeline(
   let writerBackpressureMs = 0;
   let restMs = 0;
   let chunkEncoderRestarts = 0;
+  let keyframeRetries = 0;
   let audioRenderMs = 0;
   let batchCount = 0;
   let yieldedFrameCount = 0;
@@ -709,6 +710,14 @@ export async function captureTimeline(
         onError: (err) => {
           encoderError = err;
         },
+        onKeyframeRetry: (retry) => {
+          keyframeRetries += 1;
+          opts.onDiagnostic?.('export:capture:keyframe-retry', {
+            frame: Math.round((retry.timestampMicros / 1_000_000 + timestampOffsetSeconds) * fps),
+            problem: retry.problem,
+            attempt: retry.attempt,
+          });
+        },
       });
 
       if (!encoderLogged) {
@@ -1092,6 +1101,7 @@ export async function captureTimeline(
       audioRenderMs,
       restMs,
       chunkEncoderRestarts,
+      keyframeRetries,
       batchCount,
       yieldedFrameCount,
       videoFrameCount,

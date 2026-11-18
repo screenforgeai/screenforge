@@ -496,6 +496,8 @@ export interface ExportCapturePerfStats {
   restMs: number;
   /** Chunked capture: encoders opened for a chunk part-way through a run. */
   chunkEncoderRestarts: number;
+  /** Keyframes the encoder did not produce and that were encoded again. */
+  keyframeRetries: number;
   batchCount: number;
   yieldedFrameCount: number;
   videoFrameCount: number;

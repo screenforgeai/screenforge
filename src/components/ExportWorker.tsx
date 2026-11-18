@@ -184,6 +184,8 @@ const ExportWorker = () => {
               restMs: Math.round(s.restMs),
               // Chunked: a fresh encoder per chunk, so each starts on a keyframe.
               chunkEncoderRestarts: s.chunkEncoderRestarts,
+              // Keyframes the encoder missed and encoded again:
+              keyframeRetries: s.keyframeRetries,
               // Unaccounted = GC, yields, IPC round-trip overhead, etc. Audio
               // renders alongside the video, so it is not subtracted.
               unaccountedMs: Math.round(
