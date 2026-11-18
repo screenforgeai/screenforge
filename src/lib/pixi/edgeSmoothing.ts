@@ -103,15 +103,23 @@ interface RoundedClipUniforms {
  */
 export class RoundedClipFilter extends Filter {
   private readonly clipUniforms: UniformGroup;
+  // The objects the uniform group holds: written in place, then update().
+  private readonly u: RoundedClipUniforms;
   private readonly worldTransform = new Matrix();
   private target: Container | null = null;
 
   constructor() {
+    const u: RoundedClipUniforms = {
+      uWorldToLocal: new Matrix(),
+      uRectA: new Float32Array(4),
+      uRectB: new Float32Array(4),
+      uRadii: new Float32Array(2),
+    };
     const clipUniforms = new UniformGroup({
-      uWorldToLocal: { value: new Matrix(), type: 'mat3x3<f32>' },
-      uRectA: { value: new Float32Array(4), type: 'vec4<f32>' },
-      uRectB: { value: new Float32Array(4), type: 'vec4<f32>' },
-      uRadii: { value: new Float32Array(2), type: 'vec2<f32>' },
+      uWorldToLocal: { value: u.uWorldToLocal, type: 'mat3x3<f32>' },
+      uRectA: { value: u.uRectA, type: 'vec4<f32>' },
+      uRectB: { value: u.uRectB, type: 'vec4<f32>' },
+      uRadii: { value: u.uRadii, type: 'vec2<f32>' },
     });
     super({
       glProgram: GlProgram.from({
@@ -126,12 +134,13 @@ export class RoundedClipFilter extends Filter {
       antialias: 'off',
     });
     this.clipUniforms = clipUniforms;
+    this.u = u;
   }
 
   /** The rectangles, in `target`'s local coordinates; call when they change. */
   setClip(target: Container, a: RoundedRect, b: RoundedRect): void {
     this.target = target;
-    const u = this.clipUniforms.uniforms as RoundedClipUniforms;
+    const u = this.u;
     u.uRectA.set([a.x, a.y, a.width, a.height]);
     u.uRectB.set([b.x, b.y, b.width, b.height]);
     u.uRadii.set([a.radius, b.radius]);
@@ -149,7 +158,7 @@ export class RoundedClipFilter extends Filter {
       // (FilterSystem.calculateSpriteMatrix): not the scene's global one, so
       // a render of part of the scene into a texture (the mask effect's
       // snapshot of compositeContainer) is cut in the right place too.
-      const u = this.clipUniforms.uniforms as RoundedClipUniforms;
+      const u = this.u;
       const world = this.worldTransform.copyFrom(this.target.worldTransform);
       const renderGroup = this.target.renderGroup ?? this.target.parentRenderGroup;
       if (renderGroup?.cacheToLocalTransform) {

@@ -14,9 +14,10 @@ export function getPreviewRendererResolution(): number {
   return Math.min(clamped, PREVIEW_MAX_RESOLUTION);
 }
 
+/** The containers only; each factory adds the rest of PixiScene. */
 function buildSceneGraph(
   app: Application,
-): Omit<PixiScene, 'app' | 'sourceWidth' | 'sourceHeight'> {
+): Omit<PixiScene, 'app' | 'edgeSmoothing' | 'sourceWidth' | 'sourceHeight' | 'renderScale'> {
   const motionContainer = new Container();
   const motionOverlayContainer = new Container();
   const compositeContainer = new Container();
