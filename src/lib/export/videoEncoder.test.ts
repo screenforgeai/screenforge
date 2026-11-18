@@ -1,32 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decoderConfigsMatch, VideoEncoderWrapper } from './videoEncoder';
-
-describe('decoderConfigsMatch', () => {
-  const config = (bytes: number[], overrides: Record<string, unknown> = {}) => ({
-    codec: 'avc1.640034',
-    codedWidth: 1280,
-    codedHeight: 720,
-    description: new Uint8Array(bytes).buffer,
-    ...overrides,
-  });
-
-  it('matches two encoders that give the same stream header', () => {
-    expect(decoderConfigsMatch(config([1, 2, 3]), config([1, 2, 3]))).toBe(true);
-  });
-
-  it('tells apart a different SPS/PPS, codec or size', () => {
-    expect(decoderConfigsMatch(config([1, 2, 3]), config([1, 2, 4]))).toBe(false);
-    expect(decoderConfigsMatch(config([1, 2, 3]), config([1, 2]))).toBe(false);
-    expect(decoderConfigsMatch(config([1]), config([1], { codec: 'avc1.4d0028' }))).toBe(false);
-    expect(decoderConfigsMatch(config([1]), config([1], { codedHeight: 1080 }))).toBe(false);
-  });
-
-  it('treats a missing header as matching only another missing one', () => {
-    expect(decoderConfigsMatch(null, null)).toBe(true);
-    expect(decoderConfigsMatch(config([1]), null)).toBe(false);
-    expect(decoderConfigsMatch(config([], { description: undefined }), config([1]))).toBe(false);
-  });
-});
+import { VideoEncoderWrapper } from './videoEncoder';
 
 class FakeEncodedVideoChunk {
   public readonly byteLength = 1;
@@ -43,30 +16,14 @@ class FakeEncodedVideoChunk {
 }
 
 class FakeVideoFrame {
-  /** Clones not closed yet: frames the wrapper still holds. */
-  static openClones = 0;
   public readonly timestamp: number;
-  private closed = false;
-  private isClone = false;
 
   constructor(_canvas: HTMLCanvasElement, init: VideoFrameInit) {
     this.timestamp = init.timestamp;
   }
 
-  clone(): FakeVideoFrame {
-    const copy = new FakeVideoFrame(undefined as unknown as HTMLCanvasElement, {
-      timestamp: this.timestamp,
-    });
-    copy.isClone = true;
-    FakeVideoFrame.openClones += 1;
-    return copy;
-  }
-
   close(): void {
-    if (this.isClone && !this.closed) {
-      FakeVideoFrame.openClones -= 1;
-    }
-    this.closed = true;
+    // no-op
   }
 }
 
@@ -108,35 +65,25 @@ class FakeVideoEncoder {
     // no-op
   }
 
-  reset(): void {
-    // no-op
-  }
-
   close(): void {
     // no-op
   }
 }
 
 /**
- * An encoder that outputs asynchronously, like a real one, and can get a
- * requested keyframe wrong: `misbehave(timestamp, attempt)` returns 'delta'
- * (encode it as a delta frame) or 'drop' (no output) for a keyframe request,
- * or null to behave. reset() discards outputs not delivered yet.
+ * Like the software H.264 encoders: no stream configuration up front, only
+ * with the first keyframe's output, and outputs arrive asynchronously.
  */
-class ScriptedVideoEncoder {
-  static misbehave: (timestamp: number, attempt: number) => 'delta' | 'drop' | null = () => null;
-  static instance: ScriptedVideoEncoder | null = null;
-  static isConfigSupported = FakeVideoEncoder.isConfigSupported;
-
-  public resets = 0;
-  private generation = 0;
-  private readonly attempts = new Map<number, number>();
-  private queue: Promise<void> = Promise.resolve();
+class LateConfigVideoEncoder {
   private readonly output: EncodedVideoChunkOutputCallback;
+  private queue: Promise<void> = Promise.resolve();
+
+  static async isConfigSupported(config: VideoEncoderConfig): Promise<VideoEncoderSupport> {
+    return { supported: true, config };
+  }
 
   constructor(init: VideoEncoderInit) {
     this.output = init.output;
-    ScriptedVideoEncoder.instance = this;
   }
 
   configure(): void {
@@ -144,29 +91,20 @@ class ScriptedVideoEncoder {
   }
 
   encode(frame: FakeVideoFrame, options?: VideoEncoderEncodeOptions): void {
-    const generation = this.generation;
-    let type: 'key' | 'delta' | null = options?.keyFrame ? 'key' : 'delta';
-    if (options?.keyFrame) {
-      const attempt = (this.attempts.get(frame.timestamp) ?? 0) + 1;
-      this.attempts.set(frame.timestamp, attempt);
-      const fault = ScriptedVideoEncoder.misbehave(frame.timestamp, attempt);
-      type = fault === 'drop' ? null : fault === 'delta' ? 'delta' : 'key';
-    }
-    const timestamp = frame.timestamp;
-    this.queue = this.queue.then(() => {
-      if (type !== null && generation === this.generation) {
-        this.output(new FakeEncodedVideoChunk(timestamp, type) as unknown as EncodedVideoChunk, {});
-      }
-    });
+    const key = options?.keyFrame === true;
+    this.queue = this.queue.then(() =>
+      this.output(
+        new FakeEncodedVideoChunk(
+          frame.timestamp,
+          key ? 'key' : 'delta',
+        ) as unknown as EncodedVideoChunk,
+        key ? { decoderConfig: { codec: 'avc1.640034', codedWidth: 1280, codedHeight: 720 } } : {},
+      ),
+    );
   }
 
   async flush(): Promise<void> {
     await this.queue;
-  }
-
-  reset(): void {
-    this.resets += 1;
-    this.generation += 1;
   }
 
   close(): void {
@@ -174,26 +112,25 @@ class ScriptedVideoEncoder {
   }
 }
 
-describe('VideoEncoderWrapper keyframe recovery', () => {
-  const frameMicros = (frame: number) => Math.round((frame / 30) * 1_000_000);
-
+describe('VideoEncoderWrapper with the stream configuration on the first keyframe', () => {
   beforeEach(() => {
-    vi.stubGlobal('VideoEncoder', ScriptedVideoEncoder);
+    vi.stubGlobal('VideoEncoder', LateConfigVideoEncoder);
     vi.stubGlobal('VideoFrame', FakeVideoFrame);
-    FakeVideoFrame.openClones = 0;
   });
 
   afterEach(() => {
-    ScriptedVideoEncoder.misbehave = () => null;
     vi.unstubAllGlobals();
   });
 
-  /** Encodes `count` frames with a keyframe every 30 and returns what reached the muxer. */
-  async function encodeAll(count: number) {
+  it('writes the first keyframe before the frames encoded while the muxer was being set up', async () => {
+    const frameMicros = (frame: number) => Math.round((frame / 30) * 1_000_000);
+    let releaseMuxer!: () => void;
+    const muxerSetUp = new Promise<void>((resolve) => {
+      releaseMuxer = resolve;
+    });
     const written: Array<{ timestamp: number; type: string }> = [];
-    const retries: Array<{ problem: string; attempt: number; timestampMicros: number }> = [];
-    const errors: Error[] = [];
-    const { wrapper } = await VideoEncoderWrapper.create({
+
+    const { wrapper, decoderConfig } = await VideoEncoderWrapper.create({
       format: 'mp4',
       quality: 'balanced',
       resolution: '720p',
@@ -203,65 +140,25 @@ describe('VideoEncoderWrapper keyframe recovery', () => {
       onChunkBatch: async (chunks) => {
         written.push(...chunks.map(({ timestamp, type }) => ({ timestamp, type })));
       },
-      onDecoderConfig: async () => undefined,
-      onError: (err) => errors.push(err),
-      onKeyframeRetry: (retry) => retries.push(retry),
+      // A slow machine: setting up the muxer takes longer than the batch timer.
+      onDecoderConfig: () => muxerSetUp,
+      onError: () => undefined,
     });
-    wrapper.markMuxerReady();
-    // Stops at an encoder error, as the capture loop does.
-    for (let frame = 0; frame < count && errors.length === 0; frame += 1) {
+    expect(decoderConfig).toBeNull();
+
+    for (let frame = 0; frame < 70; frame += 1) {
       wrapper.encodeFrame(document.createElement('canvas'), frameMicros(frame), frame % 30 === 0);
-      await wrapper.waitForEncoderCapacity(6);
     }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    // Nothing goes out before the keyframe that sets up the muxer.
+    expect(written).toEqual([]);
+
+    releaseMuxer();
     await wrapper.flush();
-    return { written, retries, errors };
-  }
-
-  const expectComplete = (written: Array<{ timestamp: number; type: string }>, count: number) => {
     expect(written.map((c) => c.timestamp)).toEqual(
-      Array.from({ length: count }, (_, i) => frameMicros(i)),
+      Array.from({ length: 70 }, (_, i) => frameMicros(i)),
     );
-    written.forEach((chunk, i) => expect(chunk.type).toBe(i % 30 === 0 ? 'key' : 'delta'));
-    // Every frame held for a keyframe was let go once it came out.
-    expect(FakeVideoFrame.openClones).toBe(0);
-  };
-
-  it('passes a well-behaved encoder through without retrying', async () => {
-    const { written, retries, errors } = await encodeAll(65);
-    expectComplete(written, 65);
-    expect(retries).toEqual([]);
-    expect(errors).toEqual([]);
-    expect(ScriptedVideoEncoder.instance?.resets).toBe(0);
-  });
-
-  it('encodes again from a keyframe that came out as a delta frame', async () => {
-    ScriptedVideoEncoder.misbehave = (timestamp, attempt) =>
-      timestamp === frameMicros(30) && attempt === 1 ? 'delta' : null;
-    const { written, retries, errors } = await encodeAll(65);
-    expectComplete(written, 65);
-    expect(retries).toEqual([{ timestampMicros: frameMicros(30), problem: 'delta', attempt: 1 }]);
-    expect(errors).toEqual([]);
-  });
-
-  it('encodes again from a keyframe the encoder dropped, even the very first', async () => {
-    ScriptedVideoEncoder.misbehave = (timestamp, attempt) =>
-      timestamp === 0 && attempt === 1 ? 'drop' : null;
-    const { written, retries, errors } = await encodeAll(40);
-    expectComplete(written, 40);
-    expect(retries).toEqual([{ timestampMicros: 0, problem: 'missing', attempt: 1 }]);
-    expect(errors).toEqual([]);
-  });
-
-  it('fails the export when the keyframe never comes out', async () => {
-    ScriptedVideoEncoder.misbehave = (timestamp) =>
-      timestamp === frameMicros(30) ? 'delta' : null;
-    const { written, retries, errors } = await encodeAll(40);
-    expect(retries.map((r) => r.attempt)).toEqual([1, 2, 3, 4]);
-    expect(errors).toHaveLength(1);
-    expect(errors[0].message).toContain('did not produce a keyframe');
-    // Nothing from the failed keyframe on reached the muxer, and nothing is held.
-    expect(written.every((c) => c.timestamp < frameMicros(30))).toBe(true);
-    expect(FakeVideoFrame.openClones).toBe(0);
+    expect(written[0].type).toBe('key');
   });
 });
 

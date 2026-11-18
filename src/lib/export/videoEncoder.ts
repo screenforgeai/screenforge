@@ -13,29 +13,6 @@ const ENCODED_CHUNK_BATCH_SIZE = 60;
 // to the muxer quickly, reducing startup latency and keeping IPC write pressure steady.
 const ENCODED_CHUNK_BATCH_DELAY_MS = 100;
 
-/**
- * Whether two encoders produce the same stream: same codec string, coded size
- * and codec description (the H.264 SPS/PPS). Frames from either then decode
- * with the same stream header, so they can share a file or be joined.
- */
-export function decoderConfigsMatch(
-  a: SerializedDecoderConfig | null,
-  b: SerializedDecoderConfig | null,
-): boolean {
-  if (!a || !b) {
-    return a === b;
-  }
-  if (a.codec !== b.codec || a.codedWidth !== b.codedWidth || a.codedHeight !== b.codedHeight) {
-    return false;
-  }
-  const da = a.description ? new Uint8Array(a.description) : null;
-  const db = b.description ? new Uint8Array(b.description) : null;
-  if (!da || !db) {
-    return da === db;
-  }
-  return da.length === db.length && da.every((byte, i) => byte === db[i]);
-}
-
 function serializeDecoderConfig(
   config: VideoDecoderConfig,
   fallbackWidth: number,
@@ -81,21 +58,7 @@ export interface VideoEncoderWrapperOptions {
   onDecoderConfig: (config: SerializedDecoderConfig) => Promise<void>;
   /** Called if the encoder encounters a hardware error. */
   onError: (err: Error) => void;
-  /** Called each time a requested keyframe did not come out and is encoded again. */
-  onKeyframeRetry?: (retry: KeyframeRetry) => void;
 }
-
-export type KeyframeProblem = 'delta' | 'missing';
-
-export interface KeyframeRetry {
-  timestampMicros: number;
-  /** 'delta': encoded as a delta frame; 'missing': a later frame came out first. */
-  problem: KeyframeProblem;
-  attempt: number;
-}
-
-/** Tries at a keyframe before the export fails. */
-const MAX_KEYFRAME_ATTEMPTS = 3;
 
 export interface CreateEncoderResult {
   wrapper: VideoEncoderWrapper;
@@ -126,20 +89,10 @@ export class VideoEncoderWrapper {
   private batchWriteError: Error | null = null;
   private pendingBatchWrites = 0;
   private muxerInitPromise: Promise<void> | null = null;
-  // A requested keyframe not yet seen in the output, and the frames from it
-  // on, kept until it is (see submit and checkKeyframe).
-  private awaitingKeyframe: number | null = null;
-  private heldFrames: Array<{ frame: VideoFrame; isKeyFrame: boolean }> = [];
-  private keyframeAttempts = 0;
-  private retryingKeyframe = false;
-  private keyframeRetryRequested: KeyframeProblem | null = null;
-  private flushRequested = false;
+  // The muxer is being set up from the first keyframe; see handleOutput.
+  private muxerInitializing = false;
 
-  private constructor(
-    encoder: VideoEncoder,
-    opts: VideoEncoderWrapperOptions,
-    private readonly config: VideoEncoderConfig,
-  ) {
+  private constructor(encoder: VideoEncoder, opts: VideoEncoderWrapperOptions) {
     this.encoder = encoder;
     this.opts = opts;
     this.keyframeInterval = Math.round(opts.fps) * 2; // 2-second GOP
@@ -187,11 +140,7 @@ export class VideoEncoderWrapper {
       error: (err) => wrapper.handleError(err),
     });
     realEncoder.configure(resolvedConfig.config as VideoEncoderConfig);
-    wrapper = new VideoEncoderWrapper(
-      realEncoder,
-      opts,
-      resolvedConfig.config as VideoEncoderConfig,
-    );
+    wrapper = new VideoEncoderWrapper(realEncoder, opts);
 
     const { codec, hardwareAcceleration, bitrate, latencyMode } =
       resolvedConfig.config as VideoEncoderConfig;
@@ -203,11 +152,6 @@ export class VideoEncoderWrapper {
   }
 
   private handleOutput(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): void {
-    if (!this.checkKeyframe(chunk)) {
-      // The keyframe did not come out; it and the frames after it are being
-      // encoded again (retryKeyframe reset the count of pending encodes).
-      return;
-    }
     // Decrement unconditionally — every encodeFrame() increments pendingEncodes once.
     // Moving this to the top ensures flush() never deadlocks in the buffered/lazy path.
     this.pendingEncodes -= 1;
@@ -230,6 +174,10 @@ export class VideoEncoderWrapper {
         this.opts.height,
       );
       this.muxerReady = true;
+      // Until the muxer is set up, frames wait in pendingChunks: sent on the
+      // batch timer they could reach it before this keyframe (seen on slow
+      // machines), and a muxer or chunk must start on a keyframe.
+      this.muxerInitializing = true;
       // Fire initMuxer, then flush everything in the correct decode order.
       this.muxerInitPromise = this.opts
         .onDecoderConfig(serializedDc)
@@ -237,6 +185,7 @@ export class VideoEncoderWrapper {
           // The encoder can produce chunks while this async IPC call is
           // in-flight. Because muxerReady was set synchronously above, those
           // chunks are in pendingChunks and belong after the triggering keyframe.
+          this.muxerInitializing = false;
           const buffered = this.bufferedBeforeMuxer;
           this.bufferedBeforeMuxer = [];
 
@@ -256,6 +205,7 @@ export class VideoEncoderWrapper {
           this.batchWriteError = err instanceof Error ? err : new Error(String(err));
         })
         .finally(() => {
+          this.muxerInitializing = false;
           this.resolveFlushIfDone();
         });
       return;
@@ -296,18 +246,15 @@ export class VideoEncoderWrapper {
 
   private handleError(err: DOMException): void {
     this.faulted = true;
-    this.releaseHeldFrames();
     this.opts.onError(new Error(`VideoEncoder error: ${err.message}`));
-    // Outputs will not come any more: let a flush or capacity wait return, so
-    // the caller sees the error instead of waiting.
-    const resolvers = this.flushResolvers;
-    this.flushResolvers = [];
-    resolvers.forEach((resolve) => resolve());
-    this.notifyEncoderDrainWaiters();
   }
 
   private addToBatch(chunk: SerializedChunk): void {
     this.pendingChunks.push(chunk);
+    if (this.muxerInitializing) {
+      // Sent with the first keyframe once the muxer is set up.
+      return;
+    }
     if (this.pendingChunks.length >= ENCODED_CHUNK_BATCH_SIZE) {
       void this.flushBatch();
     } else if (this.batchTimer === null) {
@@ -356,7 +303,13 @@ export class VideoEncoderWrapper {
     if (this.faulted) {
       throw new Error('VideoEncoder is in an error state — export aborted');
     }
-    this.submit(new VideoFrame(source, { timestamp: timestampMicros }), isKeyFrame);
+    this.pendingEncodes += 1;
+    const frame = new VideoFrame(source, { timestamp: timestampMicros });
+    try {
+      this.encoder.encode(frame, { keyFrame: isKeyFrame });
+    } finally {
+      frame.close();
+    }
   }
 
   /**
@@ -373,6 +326,7 @@ export class VideoEncoderWrapper {
     if (this.faulted) {
       throw new Error('VideoEncoder is in an error state — export aborted');
     }
+    this.pendingEncodes += 1;
     const frame = new VideoFrame(pixels, {
       format: 'NV12',
       codedWidth: layout.width,
@@ -389,7 +343,11 @@ export class VideoEncoderWrapper {
         fullRange: true,
       },
     });
-    this.submit(frame, isKeyFrame);
+    try {
+      this.encoder.encode(frame, { keyFrame: isKeyFrame });
+    } finally {
+      frame.close();
+    }
   }
 
   /**
@@ -411,6 +369,7 @@ export class VideoEncoderWrapper {
     if (this.faulted) {
       throw new Error('VideoEncoder is in an error state — export aborted');
     }
+    this.pendingEncodes += 1;
     const frame = new VideoFrame(pixels, {
       format: 'RGBA',
       codedWidth: width,
@@ -427,125 +386,11 @@ export class VideoEncoderWrapper {
         fullRange: true,
       },
     });
-    this.submit(frame, isKeyFrame);
-  }
-
-  /**
-   * Encodes `frame` and closes it. While a requested keyframe is unconfirmed,
-   * a reference to it and every frame after it is kept, so they can be encoded
-   * again if the keyframe does not come out (see checkKeyframe).
-   */
-  private submit(frame: VideoFrame, isKeyFrame: boolean): void {
-    if (isKeyFrame && this.awaitingKeyframe === null) {
-      this.awaitingKeyframe = frame.timestamp;
-      this.keyframeAttempts = 0;
-    }
-    if (this.awaitingKeyframe !== null) {
-      this.heldFrames.push({ frame: frame.clone(), isKeyFrame });
-    }
-    this.pendingEncodes += 1;
     try {
       this.encoder.encode(frame, { keyFrame: isKeyFrame });
     } finally {
       frame.close();
     }
-  }
-
-  /**
-   * Checks an output against the keyframe being waited for. Returns false
-   * when the output must be dropped because the keyframe did not come out:
-   * it was encoded as a delta frame, or a later frame arrived first (it was
-   * dropped). Windows' software H.264 encoder has been seen to do both.
-   */
-  private checkKeyframe(chunk: EncodedVideoChunk): boolean {
-    const expected = this.awaitingKeyframe;
-    if (expected === null || chunk.timestamp < expected) {
-      return true;
-    }
-    if (chunk.timestamp === expected && chunk.type === 'key') {
-      this.confirmKeyframe();
-      return true;
-    }
-    this.retryKeyframe(chunk.timestamp === expected ? 'delta' : 'missing');
-    return false;
-  }
-
-  /** Releases the frames held for the confirmed keyframe, up to the next one. */
-  private confirmKeyframe(): void {
-    const next = this.heldFrames.findIndex((held, index) => index > 0 && held.isKeyFrame);
-    const released = next < 0 ? this.heldFrames : this.heldFrames.slice(0, next);
-    for (const held of released) {
-      held.frame.close();
-    }
-    this.heldFrames = next < 0 ? [] : this.heldFrames.slice(next);
-    this.awaitingKeyframe = this.heldFrames[0]?.frame.timestamp ?? null;
-    this.keyframeAttempts = 0;
-  }
-
-  /**
-   * Restarts the encoder and encodes the held frames again from the
-   * keyframe, discarding what it had not output yet. Gives up after
-   * MAX_KEYFRAME_ATTEMPTS.
-   */
-  private retryKeyframe(problem: KeyframeProblem): void {
-    if (this.retryingKeyframe) {
-      // An output while re-encoding (only with a synchronous encoder): again.
-      this.keyframeRetryRequested = problem;
-      return;
-    }
-    this.retryingKeyframe = true;
-    try {
-      let next: KeyframeProblem | null = problem;
-      while (next !== null && this.awaitingKeyframe !== null && !this.faulted) {
-        this.keyframeRetryRequested = null;
-        this.keyframeAttempts += 1;
-        this.opts.onKeyframeRetry?.({
-          timestampMicros: this.awaitingKeyframe,
-          problem: next,
-          attempt: this.keyframeAttempts,
-        });
-        if (this.keyframeAttempts > MAX_KEYFRAME_ATTEMPTS) {
-          this.releaseHeldFrames();
-          this.handleError(
-            new DOMException(
-              `the encoder did not produce a keyframe at ${this.awaitingKeyframe} µs ` +
-                `after ${MAX_KEYFRAME_ATTEMPTS} attempts`,
-              'EncodingError',
-            ),
-          );
-          return;
-        }
-        // Discards every frame it has not output yet; they are all held.
-        this.encoder.reset();
-        this.encoder.configure(this.config);
-        this.pendingEncodes = 0;
-        const frames = [...this.heldFrames];
-        frames.forEach((held, index) => {
-          this.pendingEncodes += 1;
-          const copy = held.frame.clone();
-          try {
-            this.encoder.encode(copy, { keyFrame: index === 0 || held.isKeyFrame });
-          } finally {
-            copy.close();
-          }
-        });
-        if (this.flushRequested) {
-          // The reset dropped a flush in progress; its outputs still need it.
-          this.encoder.flush().catch(() => undefined);
-        }
-        next = this.keyframeRetryRequested;
-      }
-    } finally {
-      this.retryingKeyframe = false;
-    }
-  }
-
-  private releaseHeldFrames(): void {
-    for (const held of this.heldFrames) {
-      held.frame.close();
-    }
-    this.heldFrames = [];
-    this.awaitingKeyframe = null;
   }
 
   /** Mark muxer as ready (used when decoderConfig was obtained from isConfigSupported pre-flight). */
@@ -575,20 +420,13 @@ export class VideoEncoderWrapper {
     if (this.faulted) {
       return;
     }
-    this.flushRequested = true;
-    try {
-      if (this.pendingEncodes > 0) {
-        await new Promise<void>((resolve) => {
-          this.flushResolvers.push(resolve);
-          // A keyframe retry resets the encoder, which rejects this flush;
-          // the retry flushes again (retryKeyframe).
-          this.encoder.flush().catch(() => undefined);
-        });
-      } else {
-        await this.encoder.flush();
-      }
-    } finally {
-      this.flushRequested = false;
+    if (this.pendingEncodes > 0) {
+      await new Promise<void>((resolve) => {
+        this.flushResolvers.push(resolve);
+        void this.encoder.flush();
+      });
+    } else {
+      await this.encoder.flush();
     }
     await this.muxerInitPromise;
     await this.flushBatch();
@@ -611,7 +449,7 @@ export class VideoEncoderWrapper {
    */
   async waitForEncoderCapacity(maxPendingEncodes: number): Promise<void> {
     let consecutiveTimeouts = 0;
-    while (this.pendingEncodes > maxPendingEncodes && !this.faulted) {
+    while (this.pendingEncodes > maxPendingEncodes) {
       const drained = await new Promise<boolean>((resolve) => {
         const timer = setTimeout(() => resolve(false), 2_000);
         this.encoderDrainResolvers.push(() => {
@@ -646,7 +484,6 @@ export class VideoEncoderWrapper {
       clearTimeout(this.batchTimer);
     }
     this.encoder.close();
-    this.releaseHeldFrames();
     // Unblock any waitForEncoderCapacity calls so the frame loop can exit.
     this.notifyEncoderDrainWaiters();
   }
