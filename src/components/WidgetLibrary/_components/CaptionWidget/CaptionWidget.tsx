@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -34,6 +35,8 @@ import {
   IconInfo,
   IconMicrophoneOff,
   IconPencil,
+  IconPlayerPauseFilled,
+  IconScissors,
   IconTextBold,
   IconTextItalic,
   IconX,
@@ -47,6 +50,27 @@ import {
 import { cn, formatTime } from 'src/lib/utils';
 import { WidgetEnabledGate } from '../WidgetEnabledGate';
 import type { CaptionPosition, CaptionSegment, CaptionWord, WhisperModel } from 'src/types/index';
+import {
+  mapTimelineTimeToSource,
+  resolveTimelineCuts,
+  sumTimeRanges,
+  type TimeRange,
+} from 'src/lib/helpers/segments';
+import {
+  DEFAULT_MIN_SILENCE,
+  DEFAULT_SILENCE_PAD,
+  flattenTranscript,
+  getActivityTimes,
+  getWordCutRanges,
+  getWordKey,
+  getWordRangeKeys,
+  getWordTimelineSpan,
+  isWordOnTimeline,
+  planCleanup,
+} from 'src/lib/captions/transcriptEdit';
+import { cutTimelineRanges } from './cutTimelineRanges';
+import { TranscriptCleanupCard, type CleanupSettings } from './TranscriptCleanupCard';
+import { TranscriptSelectionBar } from './TranscriptSelectionBar';
 
 const WHISPER_MODELS: { value: WhisperModel; label: string; sizeMb: number; quality: string }[] = [
   { value: 'tiny', label: 'Tiny', sizeMb: 39, quality: 'Fastest' },
@@ -87,6 +111,18 @@ const DEFAULT_CAPTION_APPEARANCE = {
 
 type TranscribeStage = 'model-load' | 'transcribing';
 
+/** Modifier keys of a word click or key press, for selecting words. */
+type WordClickModifiers = Pick<ReactMouseEvent, 'shiftKey' | 'metaKey' | 'ctrlKey'>;
+
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
+const EMPTY_PAUSES: ReadonlyMap<string, number> = new Map();
+
+const DEFAULT_CLEANUP_SETTINGS: CleanupSettings = {
+  fillers: true,
+  silences: true,
+  minSilence: DEFAULT_MIN_SILENCE,
+};
+
 const LiveBadge = () => {
   const { t } = useTranslation('captions');
   return (
@@ -123,17 +159,34 @@ const CaptionSegmentCard = ({
   segment,
   index,
   isActive,
-  currentTime,
+  sourceTime,
+  timelineSpan,
+  cutKeys,
+  selectedKeys,
+  fillerKeys,
+  pausesBefore,
   onDelete,
-  onSeekToWord,
+  onCutLine,
+  onWordClick,
   onEditConfirm,
 }: {
   segment: CaptionSegment;
   index: number;
   isActive: boolean;
-  currentTime: number;
+  /** Playhead position in source time, or null when the playhead is on no clip. */
+  sourceTime: number | null;
+  /** Where the line's remaining words play on the timeline; null once all are cut. */
+  timelineSpan: TimeRange | null;
+  /** Words already cut from the video. */
+  cutKeys: ReadonlySet<string>;
+  selectedKeys: ReadonlySet<string>;
+  /** Clean-up preview: filler words that would be cut. */
+  fillerKeys: ReadonlySet<string>;
+  /** Clean-up preview: pause length that would be cut before a word. */
+  pausesBefore: ReadonlyMap<string, number>;
   onDelete: () => void;
-  onSeekToWord: (start: number) => void;
+  onCutLine: () => void;
+  onWordClick: (index: number, modifiers: WordClickModifiers) => void;
   onEditConfirm: (id: string, newText: string) => void;
 }) => {
   const { t } = useTranslation('captions');
@@ -181,9 +234,11 @@ const CaptionSegmentCard = ({
     setIsEditing(false);
   };
 
-  const activeWordIndex = isEditing
-    ? -1
-    : segment.words.findIndex((w) => currentTime >= w.start && currentTime < w.end);
+  const activeWordIndex =
+    isEditing || sourceTime === null
+      ? -1
+      : segment.words.findIndex((w) => sourceTime >= w.start && sourceTime < w.end);
+  const isLineCut = timelineSpan === null;
 
   return (
     <ContextMenu>
@@ -210,8 +265,14 @@ const CaptionSegmentCard = ({
                 {t('line', { index: index + 1 })}
               </span>
               {isActive && !isEditing && <LiveBadge />}
-              <span className="ml-auto font-mono text-xs text-sf-muted ml-auto">
-                {formatTime(segment.start)} → {formatTime(segment.end)}
+              <span
+                className={cn(
+                  'ml-auto font-mono text-xs text-sf-muted',
+                  isLineCut && 'line-through opacity-50',
+                )}
+              >
+                {formatTime(timelineSpan?.start ?? segment.start)} →{' '}
+                {formatTime(timelineSpan?.end ?? segment.end)}
               </span>
             </div>
 
@@ -295,28 +356,53 @@ const CaptionSegmentCard = ({
               className="relative cursor-text px-3 pb-3 text-sm leading-relaxed text-sf-secondary"
               onDoubleClick={() => setIsEditing(true)}
             >
-              {segment.words.map((word: CaptionWord, i: number) => (
-                <span
-                  key={i}
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSeekToWord(word.start);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      onSeekToWord(word.start);
-                    }
-                  }}
-                  className={cn(
-                    'cursor-pointer rounded transition-colors duration-100 hover:text-sf-primary',
-                    i === activeWordIndex ? 'font-medium text-primary' : '',
-                  )}
-                >
-                  {word.word}{' '}
-                </span>
-              ))}
+              {segment.words.map((word: CaptionWord, i: number) => {
+                const key = getWordKey(segment.id, i);
+                const isCut = cutKeys.has(key);
+                const isSelected = selectedKeys.has(key);
+                const isFiller = fillerKeys.has(key);
+                const pause = pausesBefore.get(key);
+                return (
+                  <Fragment key={i}>
+                    {pause !== undefined && (
+                      <span
+                        aria-label={t('pauseChip', { duration: formatTime(pause) })}
+                        className="mr-1 inline-flex items-center gap-0.5 rounded bg-primary/15 px-1 align-middle font-mono text-[10px] leading-4 text-primary"
+                      >
+                        <IconPlayerPauseFilled size={9} />
+                        {formatTime(pause)}
+                      </span>
+                    )}
+                    <span
+                      role="button"
+                      tabIndex={isCut ? -1 : 0}
+                      aria-pressed={isSelected}
+                      title={isCut ? t('wordWasCut') : undefined}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onWordClick(i, e);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onWordClick(i, e);
+                        }
+                      }}
+                      className={cn(
+                        'rounded transition-colors duration-100',
+                        isCut
+                          ? 'cursor-default text-sf-muted/50 line-through'
+                          : 'cursor-pointer hover:text-sf-primary',
+                        i === activeWordIndex && !isCut ? 'font-medium text-primary' : '',
+                        isSelected && 'bg-primary/25 text-sf-primary',
+                        isFiller && 'bg-primary/15 text-primary line-through decoration-primary/70',
+                      )}
+                    >
+                      {word.word}
+                    </span>{' '}
+                  </Fragment>
+                );
+              })}
               <span className="pointer-events-auto absolute bottom-2 right-2 opacity-0 transition-opacity duration-150 group-hover:opacity-50">
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -332,6 +418,9 @@ const CaptionSegmentCard = ({
                     <div className="flex flex-col gap-0.5">
                       <span>{t('doubleClickToEdit')}</span>
                       <span>{t('rightClickToDelete')}</span>
+                      <span>
+                        {segment.edited ? t('editedLineNoWordCut') : t('shiftClickToSelect')}
+                      </span>
                     </div>
                   </TooltipContent>
                 </Tooltip>
@@ -341,6 +430,10 @@ const CaptionSegmentCard = ({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem disabled={isLineCut} onClick={onCutLine}>
+          <IconScissors size={14} />
+          {t('cutLine')}
+        </ContextMenuItem>
         <ContextMenuItem
           className="text-red-300 focus:bg-red-500/15 focus:text-red-100"
           onClick={onDelete}
@@ -362,6 +455,7 @@ export const CaptionWidget = () => {
     currentTime,
     requestSeekTo,
     currentProjectId,
+    mediaSegments,
   } = useStore(
     useShallow((state) => ({
       recordingResult: state.recordingResult,
@@ -371,6 +465,7 @@ export const CaptionWidget = () => {
       currentTime: state.currentTime,
       requestSeekTo: state.requestSeekTo,
       currentProjectId: state.currentProjectId,
+      mediaSegments: state.mediaSegments,
     })),
   );
 
@@ -391,8 +486,194 @@ export const CaptionWidget = () => {
 
   const hasAudio = !!recordingResult?.audioPath;
 
+  // ── Edit by transcript ──────────────────────────────────────────────────
+  // Caption words are in source time; the playhead and cuts are in timeline time.
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(EMPTY_KEYS);
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [cleanupSettings, setCleanupSettings] = useState(DEFAULT_CLEANUP_SETTINGS);
+  const [prevSegments, setPrevSegments] = useState(captions.segments);
+
+  // A new transcript (or undo/redo of a caption edit) invalidates word selections.
+  if (captions.segments !== prevSegments) {
+    setPrevSegments(captions.segments);
+    setSelectedKeys(EMPTY_KEYS);
+    setAnchorKey(null);
+  }
+
+  const sourceTime = mapTimelineTimeToSource(mediaSegments, currentTime);
+  const words = useMemo(() => flattenTranscript(captions.segments), [captions.segments]);
+  const cutKeys = useMemo(
+    () => new Set(words.filter((w) => !isWordOnTimeline(mediaSegments, w)).map((w) => w.key)),
+    [words, mediaSegments],
+  );
+  const lineSpans = useMemo(() => {
+    const spans = new Map<string, TimeRange | null>();
+    for (const seg of captions.segments) {
+      const kept = seg.words
+        .map((w) => getWordTimelineSpan(mediaSegments, w))
+        .filter((span): span is TimeRange => span !== null);
+      spans.set(
+        seg.id,
+        kept.length > 0 ? { start: kept[0].start, end: kept[kept.length - 1].end } : null,
+      );
+    }
+    return spans;
+  }, [captions.segments, mediaSegments]);
+
+  const activityTimes = useMemo(() => getActivityTimes(recordingResult), [recordingResult]);
+  const cleanupPlan = useMemo(
+    () =>
+      cleanupOpen
+        ? planCleanup(captions.segments, mediaSegments, {
+            language: captions.language,
+            fillers: cleanupSettings.fillers,
+            silences: cleanupSettings.silences,
+            minSilence: cleanupSettings.minSilence,
+            silencePad: DEFAULT_SILENCE_PAD,
+            activityTimes,
+          })
+        : null,
+    [
+      cleanupOpen,
+      captions.segments,
+      captions.language,
+      mediaSegments,
+      cleanupSettings,
+      activityTimes,
+    ],
+  );
+  const previewFillerKeys = useMemo(
+    () =>
+      cleanupPlan
+        ? new Set(cleanupPlan.cuts.filter((c) => c.kind === 'filler').map((c) => c.wordKey))
+        : EMPTY_KEYS,
+    [cleanupPlan],
+  );
+  const previewPauses = useMemo(
+    () =>
+      cleanupPlan
+        ? new Map(
+            cleanupPlan.cuts
+              .filter((c) => c.kind === 'silence')
+              .map((c) => [c.wordKey, c.duration] as const),
+          )
+        : EMPTY_PAUSES,
+    [cleanupPlan],
+  );
+
+  const selectionRanges = useMemo(
+    () => getWordCutRanges(words, mediaSegments, selectedKeys),
+    [words, mediaSegments, selectedKeys],
+  );
+  const selectionDuration = sumTimeRanges(resolveTimelineCuts(mediaSegments, selectionRanges));
+
+  const clearSelection = () => {
+    setSelectedKeys(EMPTY_KEYS);
+  };
+
+  const handleWordClick = (seg: CaptionSegment, index: number, modifiers: WordClickModifiers) => {
+    const key = getWordKey(seg.id, index);
+    if (cutKeys.has(key)) {
+      return;
+    }
+    const selectable = (k: string) => {
+      const word = words.find((w) => w.key === k);
+      return !!word && !word.edited && !cutKeys.has(k);
+    };
+
+    if (modifiers.shiftKey || modifiers.metaKey || modifiers.ctrlKey) {
+      if (!selectable(key)) {
+        return;
+      }
+      if (modifiers.shiftKey && anchorKey) {
+        setSelectedKeys(new Set(getWordRangeKeys(words, anchorKey, key).filter(selectable)));
+      } else {
+        const next = new Set(selectedKeys);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        setSelectedKeys(next);
+        setAnchorKey(key);
+      }
+      return;
+    }
+
+    setSelectedKeys(EMPTY_KEYS);
+    setAnchorKey(key);
+    const span = getWordTimelineSpan(mediaSegments, seg.words[index]);
+    if (span) {
+      requestSeekTo(span.start);
+    }
+  };
+
+  const handleCutSelection = () => {
+    if (selectedKeys.size === 0) {
+      return;
+    }
+    const removed = cutTimelineRanges('Cut words', selectionRanges);
+    if (removed) {
+      trackEvent('transcript_words_cut', {
+        word_count: selectedKeys.size,
+        seconds: Math.round(sumTimeRanges(removed) * 10) / 10,
+      });
+    }
+    clearSelection();
+  };
+
+  const handleCutLine = (seg: CaptionSegment) => {
+    const keys = new Set(seg.words.map((_, i) => getWordKey(seg.id, i)));
+    const removed = cutTimelineRanges(
+      'Cut caption line',
+      getWordCutRanges(words, mediaSegments, keys),
+    );
+    if (removed) {
+      trackEvent('transcript_line_cut', {
+        seconds: Math.round(sumTimeRanges(removed) * 10) / 10,
+      });
+    }
+    clearSelection();
+  };
+
+  const handleApplyCleanup = () => {
+    if (!cleanupPlan || cleanupPlan.ranges.length === 0) {
+      return;
+    }
+    const removed = cutTimelineRanges('Remove filler words and pauses', cleanupPlan.ranges);
+    if (removed) {
+      trackEvent('transcript_cleanup_applied', {
+        filler_count: cleanupPlan.cuts.filter((c) => c.kind === 'filler').length,
+        pause_count: cleanupPlan.cuts.filter((c) => c.kind === 'silence').length,
+        min_pause_seconds: cleanupSettings.minSilence,
+        seconds: Math.round(sumTimeRanges(removed) * 10) / 10,
+      });
+    }
+    setCleanupOpen(false);
+    clearSelection();
+  };
+
+  const handleTranscriptKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('textarea, input')) {
+      return;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedKeys.size > 0) {
+      // Keep the timeline's own Delete shortcut from also deleting its selected clip.
+      e.preventDefault();
+      e.stopPropagation();
+      handleCutSelection();
+    } else if (e.key === 'Escape' && selectedKeys.size > 0) {
+      e.stopPropagation();
+      clearSelection();
+    }
+  };
+
   const activeSegmentId =
-    captions.segments.find((s) => currentTime >= s.start && currentTime <= s.end)?.id ?? null;
+    sourceTime === null
+      ? null
+      : (captions.segments.find((s) => sourceTime >= s.start && sourceTime <= s.end)?.id ?? null);
 
   useEffect(() => {
     if (!activeSegmentId) {
@@ -636,8 +917,23 @@ export const CaptionWidget = () => {
           )}
         </div>
 
-        {/* Scrollable area: appearance card + segment list */}
+        {/* Scrollable area: clean-up, appearance card + segment list */}
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-3 pb-6">
+          {captions.segments.length > 0 && (
+            <TranscriptCleanupCard
+              open={cleanupOpen}
+              plan={cleanupPlan}
+              settings={cleanupSettings}
+              onOpen={() => {
+                setCleanupOpen(true);
+                clearSelection();
+              }}
+              onClose={() => setCleanupOpen(false)}
+              onSettingsChange={setCleanupSettings}
+              onApply={handleApplyCleanup}
+            />
+          )}
+
           {/* Appearance card — only when transcription exists */}
           {captions.segments.length > 0 && (
             <div
@@ -910,7 +1206,15 @@ export const CaptionWidget = () => {
           )}
 
           {/* Segment list */}
-          <div className="space-y-1.5">
+          {selectedKeys.size > 0 && (
+            <TranscriptSelectionBar
+              count={selectedKeys.size}
+              duration={selectionDuration}
+              onCut={handleCutSelection}
+              onClear={clearSelection}
+            />
+          )}
+          <div className="space-y-1.5" onKeyDown={handleTranscriptKeyDown}>
             <AnimatePresence initial={false}>
               {captions.segments.map((seg, index) => (
                 <motion.div
@@ -927,9 +1231,15 @@ export const CaptionWidget = () => {
                     segment={seg}
                     index={index}
                     isActive={activeSegmentId === seg.id}
-                    currentTime={currentTime}
+                    sourceTime={sourceTime}
+                    timelineSpan={lineSpans.get(seg.id) ?? null}
+                    cutKeys={cutKeys}
+                    selectedKeys={selectedKeys}
+                    fillerKeys={previewFillerKeys}
+                    pausesBefore={previewPauses}
                     onDelete={() => handleDeleteSegment(seg.id)}
-                    onSeekToWord={(start) => requestSeekTo(start)}
+                    onCutLine={() => handleCutLine(seg)}
+                    onWordClick={(index, modifiers) => handleWordClick(seg, index, modifiers)}
                     onEditConfirm={handleEditSegment}
                   />
                 </motion.div>
