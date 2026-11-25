@@ -13,6 +13,7 @@ import { teleprompterBridge } from './modules/teleprompter/bridge';
 import { sceneOverlayBridge } from './modules/scene-overlay/bridge';
 import { cameraPreviewBridge } from './modules/camera-preview/bridge';
 import { areaSelectorBridge } from './modules/area-selector/bridge';
+import { displayPickerBridge } from './modules/display-picker/bridge';
 import { importBridge } from './modules/import/bridge';
 import { directorBridge } from './modules/director/bridge';
 import { featuresBridge } from './modules/features/bridge';
@@ -36,6 +37,7 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...sceneOverlayBridge,
   ...cameraPreviewBridge,
   ...areaSelectorBridge,
+  ...displayPickerBridge,
   ...importBridge,
   ...directorBridge,
   ...featuresBridge,

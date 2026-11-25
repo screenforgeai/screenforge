@@ -166,96 +166,75 @@ describe('sources service', () => {
     expect(electronMock.desktopCapturerGetSources).toHaveBeenCalledTimes(1);
   });
 
-  describe('screens on Windows with two monitors', () => {
-    // Windows numbers screen sources by order; only display_id names the monitor.
+  describe('two monitors on Windows', () => {
+    // Windows numbers screen sources by position; only display_id names the monitor.
     const laptop = {
       id: 2528732444,
       label: 'Built-in Display',
       size: { width: 1440, height: 900 },
     };
     const external = { id: 1234567, label: '', size: { width: 2560, height: 1440 } };
-    const thumbnail = (name: string) => ({ toDataURL: () => `data:image/png;base64,${name}` });
 
     beforeEach(() => {
       Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
       electronMock.getAllDisplays.mockReturnValue([external, laptop]);
       electronMock.getPrimaryDisplay.mockReturnValue(laptop);
       electronMock.desktopCapturerGetSources.mockResolvedValue([
-        {
-          id: 'screen:0:0',
-          name: 'Screen 1',
-          display_id: String(laptop.id),
-          thumbnail: thumbnail('laptop'),
-          appIcon: null,
-        },
-        {
-          id: 'screen:1:0',
-          name: 'Screen 2',
-          display_id: String(external.id),
-          thumbnail: thumbnail('external'),
-          appIcon: null,
-        },
+        { id: 'screen:0:0', name: 'Screen 1', display_id: String(laptop.id) },
+        { id: 'screen:1:0', name: 'Screen 2', display_id: String(external.id) },
       ]);
     });
 
-    it('lists each screen with the display it shows', async () => {
-      const { getScreenSources } = await loadSourcesModule();
+    it('lists the displays in OS order without capturing anything', async () => {
+      const { getDisplays } = await loadSourcesModule();
 
-      const screens = await getScreenSources();
-
-      expect(screens).toEqual([
-        expect.objectContaining({
-          id: 'screen:0:0',
-          displayId: String(laptop.id),
-          displayLabel: 'Built-in Display',
-          displaySize: { width: 1440, height: 900 },
+      expect(getDisplays()).toEqual([
+        { id: external.id, label: null, width: 2560, height: 1440, isPrimary: false },
+        {
+          id: laptop.id,
+          label: 'Built-in Display',
+          width: 1440,
+          height: 900,
           isPrimary: true,
-          thumbnail: 'data:image/png;base64,laptop',
-        }),
-        expect.objectContaining({
-          id: 'screen:1:0',
-          displayId: String(external.id),
-          displayLabel: undefined,
-          displaySize: { width: 2560, height: 1440 },
-          isPrimary: false,
-        }),
+        },
       ]);
+      expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
+    });
+
+    it("finds a display's screen source by display_id, not by the number in its id", async () => {
+      const { getScreenSourceForDisplay } = await loadSourcesModule();
+
+      await expect(getScreenSourceForDisplay(external.id)).resolves.toBe('screen:1:0');
+      await expect(getScreenSourceForDisplay(laptop.id)).resolves.toBe('screen:0:0');
       expect(electronMock.desktopCapturerGetSources).toHaveBeenCalledWith(
-        expect.objectContaining({ types: ['screen'] }),
+        expect.objectContaining({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }),
       );
     });
 
-    it('remembers which display a listed screen source shows', async () => {
-      const { getScreenSources, getDisplayIdForSource } = await loadSourcesModule();
+    it('remembers which display each screen source shows, for the recording', async () => {
+      const { getScreenSourceForDisplay, getDisplayIdForSource } = await loadSourcesModule();
 
       expect(getDisplayIdForSource('screen:1:0')).toBeNull();
-      await getScreenSources();
+      await getScreenSourceForDisplay(laptop.id);
 
       expect(getDisplayIdForSource('screen:0:0')).toBe(String(laptop.id));
       expect(getDisplayIdForSource('screen:1:0')).toBe(String(external.id));
       expect(getDisplayIdForSource('screen:7:0')).toBeNull();
     });
 
-    it('counts the displays without listing the screens', async () => {
-      const { getDisplayCount } = await loadSourcesModule();
+    it('finds no source for a display no screen shows, or when listing fails', async () => {
+      const { getScreenSourceForDisplay } = await loadSourcesModule();
 
-      expect(getDisplayCount()).toBe(2);
-      expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
-    });
-
-    it('keeps the last screens when listing them fails', async () => {
-      const { getScreenSources } = await loadSourcesModule();
-      const first = await getScreenSources();
+      await expect(getScreenSourceForDisplay(42)).resolves.toBeNull();
       electronMock.desktopCapturerGetSources.mockRejectedValueOnce(new Error('boom'));
-
-      await expect(getScreenSources()).resolves.toEqual(first);
+      await expect(getScreenSourceForDisplay(laptop.id)).resolves.toBeNull();
     });
   });
 
-  it('lists no screens on macOS until Screen Recording is allowed', async () => {
-    const { getScreenSources } = await loadSourcesModule();
+  it('finds no screen source on macOS until Screen Recording is allowed', async () => {
+    const { getScreenSourceForDisplay } = await loadSourcesModule();
 
-    await expect(getScreenSources()).resolves.toEqual([]);
+    await expect(getScreenSourceForDisplay(1)).resolves.toBeNull();
     expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
   });
 
@@ -296,12 +275,10 @@ describe('sources service', () => {
       expect(childProcessMock.execFile).not.toHaveBeenCalled();
     });
 
-    it('lists only the synthetic screen: the monitor is picked in the share dialog', async () => {
-      const { getScreenSources } = await loadSourcesModule();
+    it('finds no screen source: the monitor is picked in the share dialog', async () => {
+      const { getScreenSourceForDisplay } = await loadSourcesModule();
 
-      await expect(getScreenSources()).resolves.toEqual([
-        expect.objectContaining({ id: 'screen:wayland' }),
-      ]);
+      await expect(getScreenSourceForDisplay(1)).resolves.toBeNull();
       expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
     });
   });

@@ -1598,9 +1598,8 @@ export async function startRecording(
     );
   }
 
-  // The area selector only opens on the primary display, so an area is always
-  // in the primary display's coordinates — record that display, whichever
-  // screen source the toolbar happened to pass.
+  // An area is in the coordinates of the display it was drawn on (cropArea.display) —
+  // record that display, whichever screen source the toolbar happened to pass.
   const isAreaCapture = Boolean(cropArea) && !isWindowCapture;
   const listedDisplay =
     isAreaCapture || isWindowCapture ? null : findListedDisplayForSource(sourceId);

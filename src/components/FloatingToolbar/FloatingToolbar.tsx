@@ -44,6 +44,7 @@ import {
 } from '../../lib/ui';
 import type {
   DesktopSource,
+  DisplayPickerPurpose,
   CursorEvent,
   CaptureBackend,
   SystemAudioSupport,
@@ -58,8 +59,6 @@ import { displaySurfaceOf } from '../../lib/recording/captureSource';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
 import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
-import { FloatingToolbarDisplayPicker } from './_components/FloatingToolbarDisplayPicker';
-import { listChoosableScreens, resolveChosenScreen } from '../../lib/recording/displayChoice';
 
 type SourceTab = 'display' | 'window' | 'area';
 type RecordState = 'idle' | 'countdown' | 'recording' | 'paused';
@@ -167,7 +166,7 @@ function resolveSourceIdForTab(
   tab: SourceTab,
   selectedSource: DesktopSource | null,
   sources: DesktopSource[],
-  /** The monitor chosen in the Display menu, when several are attached. */
+  /** The screen source of the monitor picked on its overlay, when several are attached. */
   chosenScreenId: string | null = null,
 ): string | null {
   if (tab === 'display') {
@@ -345,13 +344,10 @@ export const FloatingToolbar = () => {
   const [sources, setSources] = useState<DesktopSource[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [selectedSource, setSelectedSource] = useState<DesktopSource | null>(null);
-  // Several monitors (macOS, Windows, X11): the screens to choose from in the Display menu. Wayland
-  // picks the monitor in the system share dialog instead.
-  const [screens, setScreens] = useState<DesktopSource[]>([]);
-  const [screensLoading, setScreensLoading] = useState(false);
-  const [chosenScreenId, setChosenScreenId] = useState<string | null>(null);
-  const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
-  const displayCountRef = useRef(0);
+  // Several monitors (macOS, Windows, X11): Record and Screenshot ask which one, on an overlay
+  // over each. Wayland asks in the system share dialog instead.
+  /** The display picked for the recording about to start. */
+  const recordDisplayIdRef = useRef<number | null>(null);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
@@ -499,50 +495,43 @@ export const FloatingToolbar = () => {
     [sources],
   );
 
-  const chosenScreen = useMemo(
-    () => resolveChosenScreen(screens, chosenScreenId),
-    [screens, chosenScreenId],
-  );
-  const choosesDisplay = !portalCapture && screens.length > 1;
-
   /**
-   * Lists the screens to choose from, only when several displays are attached: listing them
-   * captures each one for its thumbnail, which a single monitor has no need for.
+   * Several monitors: covers each with an overlay to click the one to capture. Its id; null when
+   * cancelled; undefined when there is nothing to pick (one monitor, or Wayland). The displays are
+   * read now (cheap: nothing is captured), as a monitor may have been plugged in or out since the
+   * toolbar opened.
    */
-  const refreshScreens = useCallback(async () => {
-    const count = await window.screenforge.getDisplayCount().catch(() => 1);
-    displayCountRef.current = count;
-    if (count < 2) {
-      setScreens([]);
-      return;
+  const pickDisplayToCapture = async (
+    purpose: DisplayPickerPurpose,
+  ): Promise<number | null | undefined> => {
+    if (captureBackendRef.current === 'wayland-portal') {
+      return undefined;
     }
-    setScreensLoading(true);
+    const displays = await window.screenforge.getDisplays().catch(() => []);
+    if (displays.length < 2) {
+      return undefined;
+    }
     try {
-      setScreens(listChoosableScreens(await window.screenforge.getScreenSources()));
+      return await window.screenforge.pickDisplay(purpose);
     } catch (err) {
-      console.error('[display] could not list the screens:', err);
-    } finally {
-      setScreensLoading(false);
+      console.error('[display] the display picker failed:', err);
+      return null;
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    void refreshScreens();
-    // The toolbar is shown again rather than remounted: a monitor may have been plugged in or
-    // out meanwhile. Only a changed count lists the screens again.
-    const handleFocus = () => {
-      void window.screenforge
-        .getDisplayCount()
-        .then((count) => {
-          if (count !== displayCountRef.current) {
-            void refreshScreens();
-          }
-        })
-        .catch(() => undefined);
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [refreshScreens]);
+  /** The screen source that shows a picked display, or null to fall back to the usual source. */
+  const resolveScreenSourceIdForDisplay = async (
+    displayId: number | null | undefined,
+  ): Promise<string | null> => {
+    if (displayId === null || displayId === undefined) {
+      return null;
+    }
+    const sourceId = await window.screenforge
+      .getScreenSourceForDisplay(displayId)
+      .catch(() => null);
+    logToolbarDiagnostic('toolbar.display.resolved', { displayId, sourceId });
+    return sourceId;
+  };
 
   const duplicateWindowAppCounts = useMemo(
     () =>
@@ -1043,9 +1032,13 @@ export const FloatingToolbar = () => {
     // Wayland: a window is picked in the share dialog, so there is no window: source id; the
     // portal stream itself is the capture.
     const pickWindowInDialog = captureBackendRef.current === 'wayland-portal' && tab === 'window';
+    const chosenScreenId =
+      tab === 'display' && !pickWindowInDialog
+        ? await resolveScreenSourceIdForDisplay(recordDisplayIdRef.current)
+        : null;
     const sourceId = pickWindowInDialog
       ? resolveSourceIdForTab('display', null, sources)
-      : resolveSourceIdForTab(tab, selectedSource, sources, chosenScreen?.id ?? null);
+      : resolveSourceIdForTab(tab, selectedSource, sources, chosenScreenId);
     if (!sourceId) {
       discardWaylandPortalCapture();
       window.screenforge.systemWarning(tab === 'window' ? t('chooseWindow') : t('noDisplaySource'));
@@ -1211,11 +1204,19 @@ export const FloatingToolbar = () => {
       await takePhoto({ kind: 'window', sourceId: selectedSource.id });
       return;
     }
+    const displayId = await pickDisplayToCapture('screenshot');
+    if (displayId === null) {
+      return;
+    }
     await takePhoto({
       kind: 'display',
       sourceId:
-        resolveSourceIdForTab('display', selectedSource, sources, chosenScreen?.id ?? null) ??
-        'screen:0',
+        resolveSourceIdForTab(
+          'display',
+          selectedSource,
+          sources,
+          await resolveScreenSourceIdForDisplay(displayId),
+        ) ?? 'screen:0',
     });
   }
 
@@ -1230,7 +1231,12 @@ export const FloatingToolbar = () => {
     if (!(await ensureScreenshotPermissions())) {
       return;
     }
-    const area = await window.screenforge.openAreaSelector('screenshot');
+    const displayId = await pickDisplayToCapture('area');
+    if (displayId === null) {
+      setTab('display');
+      return;
+    }
+    const area = await window.screenforge.openAreaSelector('screenshot', displayId ?? null);
     if (!area) {
       setTab('display');
       return;
@@ -1268,10 +1274,16 @@ export const FloatingToolbar = () => {
         return;
       }
 
-      const area =
-        captureBackendRef.current === 'wayland-portal'
-          ? await pickWaylandArea()
-          : await window.screenforge.openAreaSelector();
+      let area: SelectedArea | null;
+      if (captureBackendRef.current === 'wayland-portal') {
+        area = await pickWaylandArea();
+      } else {
+        const displayId = await pickDisplayToCapture('area');
+        area =
+          displayId === null
+            ? null
+            : await window.screenforge.openAreaSelector('record', displayId ?? null);
+      }
       if (!area) {
         setTab('display');
         return;
@@ -1320,6 +1332,14 @@ export const FloatingToolbar = () => {
         !(await pickWaylandShare(tab === 'window' ? 'window' : 'screen'))
       ) {
         return;
+      }
+      recordDisplayIdRef.current = null;
+      if (tab === 'display') {
+        const displayId = await pickDisplayToCapture('record');
+        if (displayId === null) {
+          return;
+        }
+        recordDisplayIdRef.current = displayId ?? null;
       }
 
       setCountdown(3);
@@ -1926,12 +1946,7 @@ export const FloatingToolbar = () => {
     cameraDevices[0] ??
     null;
   const overlayActive =
-    isDragging ||
-    windowMenuOpen ||
-    displayMenuOpen ||
-    micMenuOpen ||
-    cameraMenuOpen ||
-    moreMenuOpen;
+    isDragging || windowMenuOpen || micMenuOpen || cameraMenuOpen || moreMenuOpen;
   const isPaused = recordState === 'paused';
 
   const setToolbarMouseInteractivity = useCallback((interactive: boolean) => {
@@ -1967,14 +1982,7 @@ export const FloatingToolbar = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [
-    windowMenuOpen,
-    displayMenuOpen,
-    micMenuOpen,
-    cameraMenuOpen,
-    overlayActive,
-    setToolbarMouseInteractivity,
-  ]);
+  }, [windowMenuOpen, micMenuOpen, cameraMenuOpen, overlayActive, setToolbarMouseInteractivity]);
 
   useEffect(() => {
     if (!IS_LINUX || layout !== 'overlay') {
@@ -2294,44 +2302,22 @@ export const FloatingToolbar = () => {
 
                   {/* Source tabs */}
                   <div className="flex items-center gap-0.5 rounded-full bg-sf-bg p-1">
-                    {choosesDisplay ? (
-                      <FloatingToolbarDisplayPicker
-                        screens={screens}
-                        chosenScreen={chosenScreen}
-                        loading={screensLoading}
-                        buttonClassName={`${toolbarButtonCls} ${tabCls(tab === 'display')}`}
-                        onMenuOpenChange={(open) => {
-                          setDisplayMenuOpen(open);
-                          if (open) {
-                            void refreshScreens();
-                          }
-                        }}
-                        onSelectTab={() => handleTabChange('display')}
-                        onChooseScreen={(screen) => {
-                          setChosenScreenId(screen.id);
-                          handleTabChange('display');
-                        }}
-                        popSide={popSide}
-                        avoidCollisions={!asWindow}
-                      />
-                    ) : (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t('display')}
-                            onClick={() => handleTabChange('display')}
-                            className={`${toolbarButtonCls} ${tabCls(tab === 'display')}`}
-                          >
-                            <IconDeviceDesktop size={16} />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side={popSide} avoidCollisions={!asWindow}>
-                          {t('display')}
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={t('display')}
+                          onClick={() => handleTabChange('display')}
+                          className={`${toolbarButtonCls} ${tabCls(tab === 'display')}`}
+                        >
+                          <IconDeviceDesktop size={16} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side={popSide} avoidCollisions={!asWindow}>
+                        {t('display')}
+                      </TooltipContent>
+                    </Tooltip>
 
                     {portalCapture ? (
                       // Wayland: no list to show (apps cannot see other apps' windows there);

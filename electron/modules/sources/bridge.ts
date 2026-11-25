@@ -1,13 +1,19 @@
 import { CH } from '../../channels';
 import { createInvokeBridge, createVoidSubscription } from '../../lib/ipc-renderer';
-import type { AreaSelectorStillRequest, DesktopSource } from '../../../src/types/index';
+import type {
+  AreaSelectorStillRequest,
+  DesktopSource,
+  DisplayInfo,
+} from '../../../src/types/index';
 
 export const sourcesBridge = {
   getSources: createInvokeBridge<[], DesktopSource[]>(CH.sources.GET),
-  /** Just the screens, each with the display it shows, to choose which monitor to record. */
-  getScreenSources: createInvokeBridge<[], DesktopSource[]>(CH.sources.GET_SCREENS),
-  /** How many displays are attached. Cheap: it lists no screens, so it can be asked on mount. */
-  getDisplayCount: createInvokeBridge<[], number>(CH.sources.DISPLAY_COUNT),
+  /** The attached displays, in OS order. Cheap: it captures nothing, so it can be asked often. */
+  getDisplays: createInvokeBridge<[], DisplayInfo[]>(CH.sources.DISPLAYS),
+  /** The screen source that shows a display, or null when the screens can't be listed. */
+  getScreenSourceForDisplay: createInvokeBridge<[displayId: number], string | null>(
+    CH.sources.SOURCE_FOR_DISPLAY,
+  ),
   /**
    * Wayland: what the next screen-share dialog asks for, a screen or a window. Awaited, so it is
    * stored before the share request that reads it.

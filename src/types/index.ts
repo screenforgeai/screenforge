@@ -96,12 +96,32 @@ export interface DesktopSource {
   windowTitle?: string;
   /** Screen sources: the id of the display it shows (Electron's `Display.id`), as a string. */
   displayId?: string;
-  /** Screen sources: the display's name from the OS (e.g. "DELL U2720Q"), when it gives one. */
-  displayLabel?: string;
-  /** Screen sources: the display's size in DIPs. */
-  displaySize?: { width: number; height: number };
-  /** Screen sources: whether it is the main display. */
-  isPrimary?: boolean;
+}
+
+/** An attached display, as the OS describes it. */
+export interface DisplayInfo {
+  /** Electron's `Display.id`. */
+  id: number;
+  /** The display's name from the OS (e.g. "DELL U2720Q"), when it gives one. */
+  label: string | null;
+  /** Its size in DIPs. */
+  width: number;
+  height: number;
+  /** Whether it is the main display. */
+  isPrimary: boolean;
+}
+
+/** What the display is picked for: its overlays name the action. */
+export type DisplayPickerPurpose = 'record' | 'screenshot' | 'area';
+
+/** What the display picker overlay on one monitor shows about it. */
+export interface DisplayPickerTarget {
+  display: DisplayInfo;
+  /** Its number in the picker (1-based, OS order), also the key that picks it. */
+  number: number;
+  /** How many displays the picker covers. */
+  count: number;
+  purpose: DisplayPickerPurpose;
 }
 
 export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
@@ -835,8 +855,20 @@ export interface ScreenforgeAPI {
   relaunchApp: () => void;
   openSystemSettings: (permission: StartupPermission) => void;
   getSources: () => Promise<DesktopSource[]>;
-  getScreenSources: () => Promise<DesktopSource[]>;
-  getDisplayCount: () => Promise<number>;
+  /** The attached displays, in OS order. Cheap: it captures nothing. */
+  getDisplays: () => Promise<DisplayInfo[]>;
+  /** The screen source that shows a display, or null when the screens can't be listed. */
+  getScreenSourceForDisplay: (displayId: number) => Promise<string | null>;
+  /**
+   * Several monitors: covers each with an overlay to click the one to record or screenshot. The
+   * display picked, or null when cancelled.
+   */
+  pickDisplay: (purpose: DisplayPickerPurpose) => Promise<number | null>;
+  /** Display picker overlay: the monitor this overlay covers. */
+  getDisplayPickerTarget: () => Promise<DisplayPickerTarget | null>;
+  /** Display picker overlay: picks this overlay's monitor, or the one with that number. */
+  confirmDisplayPick: (number?: number) => Promise<void>;
+  cancelDisplayPick: () => void;
   /** Wayland: what the next screen-share dialog asks for, a screen or a window. */
   setShareKind: (kind: 'screen' | 'window') => Promise<void>;
   pickScreen: () => Promise<'picked' | 'cancelled' | 'unavailable'>;
@@ -1065,8 +1097,14 @@ export interface ScreenforgeAPI {
   cancelAreaSelection: () => void;
   /** Wayland: the still the open area selector draws on, if any. */
   getAreaSelectorStill: () => Promise<AreaSelectorStill | null>;
-  /** `purpose` picks the confirm button: record (default) or take a screenshot. */
-  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
+  /**
+   * `purpose` picks the confirm button: record (default) or take a screenshot. It opens on the
+   * display with `displayId` (picked on its overlay), else on the main display.
+   */
+  openAreaSelector: (
+    purpose?: AreaSelectorPurpose,
+    displayId?: number | null,
+  ) => Promise<SelectedArea | null>;
   /** Wayland: draw a recording area on a still of the screen picked in the share dialog. */
   selectAreaOnStill: (still: AreaSelectorStillRequest) => Promise<SelectedArea | null>;
   getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;

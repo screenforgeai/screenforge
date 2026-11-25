@@ -19,6 +19,7 @@ import {
   SCREENSHOT_FAILED_MESSAGE,
   captureAndOpenEditor,
   isAreaScreenshotInFlight,
+  selectAreaOnPickedDisplay,
   takeAreaScreenshot,
   takePickedAreaScreenshot,
   type AreaScreenshotDeps,
@@ -202,6 +203,36 @@ describe('takeAreaScreenshot', () => {
     finishSelection(null);
     await run;
     expect(isAreaScreenshotInFlight()).toBe(false);
+  });
+});
+
+describe('selectAreaOnPickedDisplay', () => {
+  const setup = (displayCount: number, picked: number | null) => ({
+    displayCount: () => displayCount,
+    pickDisplay: vi.fn().mockResolvedValue(picked),
+    selectArea: vi.fn().mockResolvedValue(area),
+  });
+
+  it('draws on the main display, asking nothing, with one monitor', async () => {
+    const deps = setup(1, 2);
+
+    await expect(selectAreaOnPickedDisplay(deps)).resolves.toBe(area);
+    expect(deps.pickDisplay).not.toHaveBeenCalled();
+    expect(deps.selectArea).toHaveBeenCalledWith(null);
+  });
+
+  it('asks which monitor first with several, then draws on the one picked', async () => {
+    const deps = setup(2, 2);
+
+    await expect(selectAreaOnPickedDisplay(deps)).resolves.toBe(area);
+    expect(deps.selectArea).toHaveBeenCalledWith(2);
+  });
+
+  it('opens no area selector when the monitor overlays are cancelled', async () => {
+    const deps = setup(2, null);
+
+    await expect(selectAreaOnPickedDisplay(deps)).resolves.toBeNull();
+    expect(deps.selectArea).not.toHaveBeenCalled();
   });
 });
 
