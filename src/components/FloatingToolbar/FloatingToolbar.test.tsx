@@ -1360,7 +1360,10 @@ describe('FloatingToolbar recording widget', () => {
       render(<FloatingToolbar />);
       await waitFor(() => expect(screenforge.getCaptureShortcuts).toHaveBeenCalled());
       fireEvent.focus(screen.getByRole('button', { name: 'Screenshot' }));
-      expect(await screen.findAllByText('Alt+Shift+S')).not.toHaveLength(0);
+      // The tooltip opens after its delay; on a busy runner that takes longer than findAll's 1s.
+      expect(
+        await screen.findAllByText('Alt+Shift+S', undefined, { timeout: ASYNC_UI_TIMEOUT_MS }),
+      ).not.toHaveLength(0);
     });
 
     it('captures the display, asking only for screen access', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from 'src/lib/ui';
 import { formatDisplaySize } from 'src/lib/recording/displayChoice';
@@ -24,6 +24,9 @@ export const DisplayPicker = () => {
   const { t } = useTranslation('toolbar');
   const [target, setTarget] = useState<DisplayPickerTarget | null>(null);
   const [hovered, setHovered] = useState(false);
+  // How many displays the number keys can pick: set with the target, so a key pressed as soon
+  // as it arrives is not missed while the listener below would be re-registered.
+  const displayCountRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +34,7 @@ export const DisplayPicker = () => {
       .getDisplayPickerTarget()
       .then((value) => {
         if (!cancelled) {
+          displayCountRef.current = value?.count ?? 0;
           setTarget(value);
         }
       })
@@ -55,13 +59,13 @@ export const DisplayPicker = () => {
         return;
       }
       const number = Number.parseInt(event.key, 10);
-      if (target && Number.isInteger(number) && number >= 1 && number <= target.count) {
+      if (Number.isInteger(number) && number >= 1 && number <= displayCountRef.current) {
         void window.screenforge.confirmDisplayPick(number);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [pick, target]);
+  }, [pick]);
 
   if (!target) {
     return null;
