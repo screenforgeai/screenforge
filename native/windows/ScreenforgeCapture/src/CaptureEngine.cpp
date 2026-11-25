@@ -8,6 +8,8 @@
 #include <mfobjects.h>
 #include <stdexcept>
 #include <thread>
+#include <utility>
+#include <vector>
 
 // IDirect3DDxgiInterfaceAccess is the correct interop path for WGC surfaces.
 // Declared inline to avoid SDK include-path dependencies.
@@ -207,6 +209,70 @@ HRESULT CaptureEngine::InitD3D() {
     return hr;
 }
 
+// ── Monitor selection ────────────────────────────────────────────────────────
+
+namespace {
+
+// Physical-pixel rectangles of every monitor, in EnumDisplayMonitors order.
+// This process is not DPI aware, so the enumeration runs per-monitor aware:
+// otherwise GetMonitorInfo reports rectangles scaled by the system DPI, which
+// would not match the physical bounds Electron passes in.
+std::vector<std::pair<HMONITOR, RECT>> ListMonitors() {
+    std::vector<std::pair<HMONITOR, RECT>> monitors;
+    DPI_AWARENESS_CONTEXT previous =
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hmon, HDC, LPRECT, LPARAM lp) -> BOOL {
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        if (GetMonitorInfoW(hmon, &mi)) {
+            reinterpret_cast<std::vector<std::pair<HMONITOR, RECT>>*>(lp)->emplace_back(
+                hmon, mi.rcMonitor);
+        }
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&monitors));
+    if (previous) SetThreadDpiAwarenessContext(previous);
+    return monitors;
+}
+
+} // namespace
+
+HMONITOR CaptureEngine::FindMonitorByBounds(const RECT& wanted) {
+    // Electron's dipToScreenRect gives the monitor's exact physical origin, but
+    // at fractional scales its size can be a pixel or two over (it rounds up).
+    // Two monitors never share an origin, so an origin match with a size within
+    // that slack is the same monitor.
+    constexpr LONG kSizeSlack = 2;
+    const auto monitors = ListMonitors();
+    const std::pair<HMONITOR, RECT>* exact = nullptr;
+    const std::pair<HMONITOR, RECT>* closeMatch = nullptr;
+    int closeMatches = 0;
+    for (const auto& monitor : monitors) {
+        const RECT& r = monitor.second;
+        LogFmt("[CaptureEngine] monitor %ld,%ld %ldx%ld\n",
+               r.left, r.top, r.right - r.left, r.bottom - r.top);
+        if (EqualRect(&r, &wanted)) {
+            exact = &monitor;
+        } else if (r.left == wanted.left && r.top == wanted.top &&
+                   std::abs((r.right - r.left) - (wanted.right - wanted.left)) <= kSizeSlack &&
+                   std::abs((r.bottom - r.top) - (wanted.bottom - wanted.top)) <= kSizeSlack) {
+            closeMatch = &monitor;
+            ++closeMatches;
+        }
+    }
+    const auto* match = exact ? exact : (closeMatches == 1 ? closeMatch : nullptr);
+    if (!match) return nullptr;
+    const RECT& r = match->second;
+    LogFmt("[CaptureEngine] recording the monitor at %ld,%ld %ldx%ld\n",
+           r.left, r.top, r.right - r.left, r.bottom - r.top);
+    return match->first;
+}
+
+HMONITOR CaptureEngine::FindMonitorByIndex(int index) {
+    const auto monitors = ListMonitors();
+    if (index < 0 || index >= static_cast<int>(monitors.size())) return nullptr;
+    return monitors[static_cast<size_t>(index)].first;
+}
+
 // ── WGC capture item ──────────────────────────────────────────────────────────
 
 HRESULT CaptureEngine::BuildCaptureItem(
@@ -231,45 +297,28 @@ HRESULT CaptureEngine::BuildCaptureItem(
         return S_OK;
     }
 
-    // Display capture: enumerate monitors, pick by index or ID.
-    struct MonitorEnum {
-        int        targetIndex = 0;
-        UINT32     targetId    = 0;
-        bool       hasId       = false;
-        int        current     = 0;
-        HMONITOR   found       = nullptr;
-    } ctx;
-    ctx.targetIndex = m_cfg.displayIndex;
-    ctx.targetId    = m_cfg.displayId;
-    ctx.hasId       = m_cfg.hasDisplayId;
-
-    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR hmon, HDC, LPRECT, LPARAM lp) -> BOOL {
-        auto* e = reinterpret_cast<MonitorEnum*>(lp);
-        if (e->hasId) {
-            MONITORINFOEX mi{};
-            mi.cbSize = sizeof(mi);
-            GetMonitorInfo(hmon, &mi);
-            DISPLAY_DEVICE dd{};
-            dd.cb = sizeof(dd);
-            // Match by index as fallback — WGC display ID matching is not directly
-            // available through EnumDisplayMonitors; use index ordering instead.
+    // Display capture. With --display-bounds the monitor is the one whose
+    // rectangle those bounds are; otherwise it is picked by enumeration index.
+    HMONITOR monitor = nullptr;
+    if (m_cfg.hasDisplayBounds) {
+        monitor = FindMonitorByBounds(m_cfg.displayBounds);
+        if (!monitor) {
+            const RECT& b = m_cfg.displayBounds;
+            LogFmt("[CaptureEngine] no monitor at %ld,%ld %ldx%ld; not recording another one\n",
+                   b.left, b.top, b.right - b.left, b.bottom - b.top);
+            return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
         }
-        if (e->current == e->targetIndex) {
-            e->found = hmon;
-            return FALSE; // stop
+    } else {
+        monitor = FindMonitorByIndex(m_cfg.displayIndex);
+        if (!monitor) {
+            // Fall back to primary monitor.
+            monitor = MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
         }
-        e->current++;
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&ctx));
-
-    if (!ctx.found) {
-        // Fall back to primary monitor.
-        ctx.found = MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
     }
 
     try {
         winrt::check_hresult(interop->CreateForMonitor(
-            ctx.found,
+            monitor,
             winrt::guid_of<winrt::Windows::Graphics::Capture::GraphicsCaptureItem>(),
             winrt::put_abi(itemOut)));
     } catch (winrt::hresult_error const& e) {

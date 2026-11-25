@@ -47,6 +47,7 @@ import { probeExportSource } from '../export/service';
 import { computeFallbackCaptureBitrate, formatFFmpegBitrate } from './captureQuality';
 import {
   buildH264EncodeArgs,
+  buildNativeCaptureArgs,
   buildSegmentConcatArgs,
   buildSegmentConcatList,
   buildWaylandTranscodeArgs,
@@ -821,19 +822,17 @@ async function startNativeCapture(
   const displayIndex = resolveDisplayIndex(display);
   const displayId = sourceDisplayId ?? resolveDisplayId(display);
 
-  const args: string[] = ['--output', outPath, '--fps', '60'];
-  if (sourceWindowId !== null) {
-    args.push('--window-id', String(sourceWindowId));
-  } else {
-    args.push('--display', String(displayIndex));
-  }
-  if (displayId !== null && sourceWindowId === null) {
-    args.push('--display-id', String(displayId));
-  }
-
-  if (toolbarWindowTitleForCapture && sourceWindowId === null) {
-    args.push('--exclude-window-title', toolbarWindowTitleForCapture);
-  }
+  const args = buildNativeCaptureArgs({
+    platform: process.platform,
+    outPath,
+    display,
+    displayIndex,
+    displayId,
+    windowId: sourceWindowId,
+    excludeWindowTitle: toolbarWindowTitleForCapture,
+    dipToScreenRect:
+      process.platform === 'win32' ? (rect) => screen.dipToScreenRect(null, rect) : undefined,
+  });
 
   log.info(
     '[recording:native] resolved display:',
@@ -841,6 +840,7 @@ async function startNativeCapture(
     `sourceIdDisplay=${sourceDisplayId ?? 'n/a'}`,
     `index=${displayIndex}`,
     `bounds=${display.bounds.width}x${display.bounds.height}@${display.bounds.x},${display.bounds.y}`,
+    `args=${args.slice(2).join(' ')}`,
   );
   log.info('[recording:native] spawning helper:', path.basename(helperPath));
 

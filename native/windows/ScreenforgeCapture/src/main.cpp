@@ -233,10 +233,25 @@ struct Args {
     int         displayIndex     = 0;
     UINT32      displayId        = 0;
     bool        hasDisplayId     = false;
+    RECT        displayBounds    = {};
+    bool        hasDisplayBounds = false;
+    std::wstring badDisplayBounds;
     UINT64      windowId         = 0;
     bool        hasWindowId      = false;
     std::wstring excludeTitle;
 };
+
+// "x,y,w,h" in physical pixels (x and y may be negative) -> RECT.
+static bool ParseDisplayBounds(const std::wstring& text, RECT& out) {
+    long x = 0, y = 0, w = 0, h = 0;
+    wchar_t trailing = 0;
+    if (swscanf_s(text.c_str(), L"%ld,%ld,%ld,%ld%lc", &x, &y, &w, &h, &trailing, 1) != 4) {
+        return false;
+    }
+    if (w <= 0 || h <= 0) return false;
+    out = { x, y, x + w, y + h };
+    return true;
+}
 
 static Args ParseArgs(int argc, wchar_t* argv[]) {
     Args a;
@@ -261,6 +276,10 @@ static Args ParseArgs(int argc, wchar_t* argv[]) {
         } else if (arg == L"--display-id") {
             a.displayId    = static_cast<UINT32>(std::stoul(WideToUtf8(next())));
             a.hasDisplayId = true;
+        } else if (arg == L"--display-bounds") {
+            std::wstring value = next();
+            a.hasDisplayBounds = ParseDisplayBounds(value, a.displayBounds);
+            if (!a.hasDisplayBounds) a.badDisplayBounds = value.empty() ? L"(missing)" : value;
         } else if (arg == L"--window-id") {
             a.windowId    = std::stoull(WideToUtf8(next()));
             a.hasWindowId = true;
@@ -310,12 +329,19 @@ int wmain(int argc, wchar_t* argv[]) {
         fprintf(stderr, "ScreenforgeCapture: --output is required\n");
         return 1;
     }
+    if (!args.badDisplayBounds.empty()) {
+        fprintf(stderr, "ScreenforgeCapture: --display-bounds must be x,y,width,height, got %ls\n",
+                args.badDisplayBounds.c_str());
+        return 1;
+    }
 
     // Build config
     CaptureConfig cfg;
     cfg.displayIndex  = args.displayIndex;
     cfg.displayId     = args.displayId;
     cfg.hasDisplayId  = args.hasDisplayId;
+    cfg.displayBounds    = args.displayBounds;
+    cfg.hasDisplayBounds = args.hasDisplayBounds;
     cfg.windowId      = args.windowId;
     cfg.hasWindowId   = args.hasWindowId;
     cfg.excludeTitle  = args.excludeTitle;

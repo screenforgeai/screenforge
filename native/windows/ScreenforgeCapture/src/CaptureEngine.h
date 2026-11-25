@@ -34,6 +34,10 @@ struct CaptureConfig {
     int         displayIndex   = 0;
     UINT32      displayId      = 0;
     bool        hasDisplayId   = false;
+    // The monitor's rectangle in physical pixels (--display-bounds). When set,
+    // the monitor is chosen by it, not by displayIndex.
+    RECT        displayBounds  = {};
+    bool        hasDisplayBounds = false;
     UINT64      windowId       = 0;
     bool        hasWindowId    = false;
     std::wstring excludeTitle;
@@ -59,6 +63,8 @@ public:
 private:
     // ── D3D / WGC ─────────────────────────────────────────────────────────────
     HRESULT InitD3D();
+    static HMONITOR FindMonitorByBounds(const RECT& physicalBounds);
+    static HMONITOR FindMonitorByIndex(int index);
     HRESULT BuildCaptureItem(
         winrt::Windows::Graphics::Capture::GraphicsCaptureItem& itemOut);
     HRESULT SetupFramePool(
