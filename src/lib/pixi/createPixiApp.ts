@@ -1,4 +1,4 @@
-import { Application, Container } from 'pixi.js';
+import { Application, Container, Ticker } from 'pixi.js';
 import type { PixiScene } from './types';
 
 // Preview renders at CSS pixel density (1:1) so the RAF loop stays smooth even
@@ -80,8 +80,23 @@ export async function createPreviewPixiApp(canvas: HTMLCanvasElement): Promise<P
     autoStart: false,
   });
 
+  // Pixi's system ticker runs its own requestAnimationFrame loop at display rate
+  // for as long as it has listeners, and every renderer adds two: pointer-event
+  // polling and the scheduler behind texture garbage collection. That kept the
+  // page drawing frames while the paused preview slept. The preview uses no Pixi
+  // pointer events, so the ticker stops here and the preview's own frame loop
+  // steps it (stepPixiSystemTicker): garbage collection runs whenever it draws.
+  // The export window has its own Pixi, and its own ticker.
+  Ticker.system.autoStart = false;
+  Ticker.system.stop();
+
   const containers = buildSceneGraph(app);
   return { app, ...containers, sourceWidth: 1280, sourceHeight: 800, renderScale: 1 };
+}
+
+/** Runs Pixi's system ticker for one preview frame (see createPreviewPixiApp). */
+export function stepPixiSystemTicker(now: number): void {
+  Ticker.system.update(now);
 }
 
 /**

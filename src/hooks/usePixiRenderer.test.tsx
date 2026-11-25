@@ -9,11 +9,13 @@ import { usePixiRenderer } from './usePixiRenderer';
 const pixi = vi.hoisted(() => ({
   createPreviewPixiApp: vi.fn(),
   setupPixiPipeline: vi.fn(),
+  stepPixiSystemTicker: vi.fn(),
 }));
 
 vi.mock('../lib/pixi/createPixiApp', () => ({
   createPreviewPixiApp: pixi.createPreviewPixiApp,
   getPreviewRendererResolution: () => 1,
+  stepPixiSystemTicker: pixi.stepPixiSystemTicker,
 }));
 
 vi.mock('../lib/pixi/pipeline', () => ({
@@ -258,6 +260,22 @@ describe('usePixiRenderer', () => {
       advance(2_000);
       expect(scene.app.renderer.render).not.toHaveBeenCalled();
       expect(frames).toHaveLength(0);
+    });
+
+    it("steps Pixi's system ticker with each drawn frame, and not while settled", async () => {
+      const { scene } = await mountPreview(true);
+      pixi.stepPixiSystemTicker.mockClear();
+      scene.app.renderer.render.mockClear();
+      advance(200);
+      expect(pixi.stepPixiSystemTicker.mock.calls.length).toBeGreaterThan(0);
+      expect(pixi.stepPixiSystemTicker).toHaveBeenCalledTimes(
+        scene.app.renderer.render.mock.calls.length,
+      );
+
+      advance(2_000);
+      pixi.stepPixiSystemTicker.mockClear();
+      advance(1_000);
+      expect(pixi.stepPixiSystemTicker).not.toHaveBeenCalled();
     });
 
     it('wakes for an edit made while paused', async () => {

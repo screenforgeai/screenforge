@@ -1,5 +1,6 @@
+import { Ticker } from 'pixi.js';
 import { describe, expect, it, vi } from 'vitest';
-import { createExportPixiApp, createPreviewPixiApp } from './createPixiApp';
+import { createExportPixiApp, createPreviewPixiApp, stepPixiSystemTicker } from './createPixiApp';
 
 const inits = vi.hoisted(() => [] as Record<string, unknown>[]);
 
@@ -24,5 +25,23 @@ describe('Pixi apps', () => {
     for (const options of inits) {
       expect(options.antialias).toBe(true);
     }
+  });
+
+  it("stops Pixi's system ticker for the preview, so only the preview's own loop steps it", async () => {
+    Ticker.system.autoStart = true;
+    Ticker.system.start();
+    await createPreviewPixiApp(document.createElement('canvas'));
+
+    expect(Ticker.system.started).toBe(false);
+    expect(Ticker.system.autoStart).toBe(false);
+
+    // A listener added later (as each renderer does) must not restart it.
+    const listener = vi.fn();
+    Ticker.system.add(listener);
+    expect(Ticker.system.started).toBe(false);
+
+    stepPixiSystemTicker(performance.now() + 16);
+    expect(listener).toHaveBeenCalledTimes(1);
+    Ticker.system.remove(listener);
   });
 });

@@ -9,7 +9,11 @@ import {
   playCursorClickSound,
   type ClickSoundHit,
 } from '../lib/effects/cursor/audio';
-import { createPreviewPixiApp, getPreviewRendererResolution } from '../lib/pixi/createPixiApp';
+import {
+  createPreviewPixiApp,
+  getPreviewRendererResolution,
+  stepPixiSystemTicker,
+} from '../lib/pixi/createPixiApp';
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
 import { registerPreviewFrameRenderer } from '../lib/pixi/previewThumbnail';
 import { trackVideoFrames } from '../lib/pixi/videoFrames';
@@ -432,6 +436,7 @@ export const usePixiRenderer = (
       });
 
       scene.app.renderer.render(scene.app.stage);
+      stepPixiSystemTicker(now);
 
       // Paused, effects can keep moving on their own (the zoom camera's follow eases
       // for seconds after a seek): stay awake until they come to rest.
