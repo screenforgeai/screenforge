@@ -30,8 +30,15 @@ export function registerAreaSelectorChannels(
     getAreaSelectorStill(),
   );
 
-  handleChannel<[unknown], SelectedArea | null>(CH.areaSelector.OPEN, (purpose) =>
-    openAreaSelector(preloadPath, loadURL, purpose === 'screenshot' ? 'screenshot' : 'record'),
+  handleChannel<[unknown, unknown], SelectedArea | null>(
+    CH.areaSelector.OPEN,
+    (purpose, displayId) =>
+      openAreaSelector(
+        preloadPath,
+        loadURL,
+        purpose === 'screenshot' ? 'screenshot' : 'record',
+        typeof displayId === 'number' && Number.isFinite(displayId) ? displayId : null,
+      ),
   );
 
   handleChannel<[unknown], SelectedArea | null>(CH.areaSelector.OPEN_ON_STILL, async (value) => {

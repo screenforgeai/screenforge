@@ -338,3 +338,51 @@ export function buildWaylandTranscodeArgs(
     outPath,
   ];
 }
+
+/**
+ * Command line for the native capture helper (ScreenforgeCapture, macOS and
+ * Windows). A window is named by its id. A display is named by its index in
+ * screen.getAllDisplays() (`--display`) and its id (`--display-id`, the
+ * CGDirectDisplayID the macOS helper matches on). On Windows it is also named by
+ * its bounds in physical pixels (`--display-bounds x,y,w,h`): the Windows helper
+ * has no use for the id, and its monitor enumeration order need not match
+ * Electron's display order (the main display is not always the leftmost), so it
+ * records the monitor whose rectangle these bounds are, and nothing otherwise.
+ */
+export function buildNativeCaptureArgs(options: {
+  platform: NodeJS.Platform;
+  outPath: string;
+  display: { bounds: CaptureBounds };
+  displayIndex: number;
+  displayId: number | null;
+  windowId: number | null;
+  excludeWindowTitle?: string | null;
+  /** Electron's screen.dipToScreenRect, needed on Windows. */
+  dipToScreenRect?: (rect: CaptureBounds) => CaptureBounds;
+}): string[] {
+  const { platform, outPath, display, displayIndex, displayId, windowId } = options;
+  const args = ['--output', outPath, '--fps', '60'];
+
+  if (windowId !== null) {
+    args.push('--window-id', String(windowId));
+  } else {
+    args.push('--display', String(displayIndex));
+    if (displayId !== null) {
+      args.push('--display-id', String(displayId));
+    }
+    if (platform === 'win32') {
+      if (!options.dipToScreenRect) {
+        throw new Error('dipToScreenRect is required to name a display on Windows');
+      }
+      const physical = options.dipToScreenRect(display.bounds);
+      const parts = [physical.x, physical.y, physical.width, physical.height].map(Math.round);
+      args.push('--display-bounds', parts.join(','));
+    }
+  }
+
+  if (options.excludeWindowTitle && windowId === null) {
+    args.push('--exclude-window-title', options.excludeWindowTitle);
+  }
+
+  return args;
+}

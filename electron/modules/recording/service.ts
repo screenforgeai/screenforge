@@ -38,11 +38,16 @@ import {
 } from '../../lib/linux-capture';
 import { prepareRecordingStartPermissionsIfNeeded } from '../app/service';
 import { createNativeCursorPointMapper } from './utils/cursor-point-mapper';
-import { getMacWindowMetadata, parseWindowIdFromSourceId } from '../sources/service';
+import {
+  getDisplayIdForSource,
+  getMacWindowMetadata,
+  parseWindowIdFromSourceId,
+} from '../sources/service';
 import { probeExportSource } from '../export/service';
 import { computeFallbackCaptureBitrate, formatFFmpegBitrate } from './captureQuality';
 import {
   buildH264EncodeArgs,
+  buildNativeCaptureArgs,
   buildSegmentConcatArgs,
   buildSegmentConcatList,
   buildWaylandTranscodeArgs,
@@ -357,6 +362,22 @@ export function setToolbarWindowTitle(title: string): void {
 }
 
 // ── Display resolution ────────────────────────────────────────────────────────
+
+/**
+ * The display a listed screen source shows, by the display id it was listed with. A screen
+ * source's own id only names its display on macOS; on Windows it is the screen's position.
+ */
+function findListedDisplayForSource(sourceId: string): Electron.Display | null {
+  const displayId = getDisplayIdForSource(sourceId);
+  if (!displayId) {
+    return null;
+  }
+  const display = screen.getAllDisplays().find((candidate) => String(candidate.id) === displayId);
+  if (!display) {
+    log.warn('[recording] the display of the chosen screen is gone:', { sourceId, displayId });
+  }
+  return display ?? null;
+}
 
 function resolveDisplayForSource(sourceId: string): Electron.Display {
   const displays = screen.getAllDisplays();
@@ -801,19 +822,17 @@ async function startNativeCapture(
   const displayIndex = resolveDisplayIndex(display);
   const displayId = sourceDisplayId ?? resolveDisplayId(display);
 
-  const args: string[] = ['--output', outPath, '--fps', '60'];
-  if (sourceWindowId !== null) {
-    args.push('--window-id', String(sourceWindowId));
-  } else {
-    args.push('--display', String(displayIndex));
-  }
-  if (displayId !== null && sourceWindowId === null) {
-    args.push('--display-id', String(displayId));
-  }
-
-  if (toolbarWindowTitleForCapture && sourceWindowId === null) {
-    args.push('--exclude-window-title', toolbarWindowTitleForCapture);
-  }
+  const args = buildNativeCaptureArgs({
+    platform: process.platform,
+    outPath,
+    display,
+    displayIndex,
+    displayId,
+    windowId: sourceWindowId,
+    excludeWindowTitle: toolbarWindowTitleForCapture,
+    dipToScreenRect:
+      process.platform === 'win32' ? (rect) => screen.dipToScreenRect(null, rect) : undefined,
+  });
 
   log.info(
     '[recording:native] resolved display:',
@@ -821,6 +840,7 @@ async function startNativeCapture(
     `sourceIdDisplay=${sourceDisplayId ?? 'n/a'}`,
     `index=${displayIndex}`,
     `bounds=${display.bounds.width}x${display.bounds.height}@${display.bounds.x},${display.bounds.y}`,
+    `args=${args.slice(2).join(' ')}`,
   );
   log.info('[recording:native] spawning helper:', path.basename(helperPath));
 
@@ -1578,16 +1598,16 @@ export async function startRecording(
     );
   }
 
-  // The area selector only opens on the primary display, so an area is always
-  // in the primary display's coordinates — record that display, whichever
-  // screen source the toolbar happened to pass.
+  // An area is in the coordinates of the display it was drawn on (cropArea.display) —
+  // record that display, whichever screen source the toolbar happened to pass.
   const isAreaCapture = Boolean(cropArea) && !isWindowCapture;
+  const listedDisplay =
+    isAreaCapture || isWindowCapture ? null : findListedDisplayForSource(sourceId);
   let display = isAreaCapture
     ? resolveAreaDisplay(cropArea?.display)
-    : resolveDisplayForSource(sourceId);
-  const sourceDisplayId = isAreaCapture
-    ? resolveDisplayId(display)
-    : parseDisplayIdFromSource(sourceId);
+    : (listedDisplay ?? resolveDisplayForSource(sourceId));
+  const sourceDisplayId =
+    isAreaCapture || listedDisplay ? resolveDisplayId(display) : parseDisplayIdFromSource(sourceId);
   const sourceWindowId = parseWindowIdFromSourceId(sourceId);
   if (isAreaCapture) {
     activeCropDisplay = { bounds: { ...display.bounds }, scaleFactor: display.scaleFactor };

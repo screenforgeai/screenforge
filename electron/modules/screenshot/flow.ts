@@ -93,6 +93,27 @@ export type AreaScreenshotDeps = ScreenshotWindows & {
 
 export type AreaScreenshotResult = 'taken' | 'cancelled' | 'skipped' | 'failed';
 
+/**
+ * Opens the area selector for a screenshot started outside the toolbar (shortcut, menu bar):
+ * with several monitors it first asks which one on an overlay over each, so the area can be drawn
+ * on any of them. Null when either step is cancelled.
+ */
+export async function selectAreaOnPickedDisplay(deps: {
+  displayCount: () => number;
+  pickDisplay: () => Promise<number | null>;
+  selectArea: (displayId: number | null) => Promise<SelectedArea | null>;
+}): Promise<SelectedArea | null> {
+  if (deps.displayCount() < 2) {
+    return deps.selectArea(null);
+  }
+  const displayId = await deps.pickDisplay();
+  if (displayId === null) {
+    log.info('[screenshot] no display picked; cancelled');
+    return null;
+  }
+  return deps.selectArea(displayId);
+}
+
 let areaScreenshotInFlight = false;
 
 /** True from the shortcut press until the screenshot opens, is cancelled or fails. */

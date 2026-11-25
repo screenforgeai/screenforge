@@ -1,6 +1,6 @@
 import { CH } from '../../channels';
 import { handleChannel } from '../../lib/ipc-main';
-import { getSources } from './service';
+import { getDisplays, getScreenSourceForDisplay, getSources } from './service';
 import { setShareKind, type ShareKind } from './share-kind';
 import {
   endWaylandShare,
@@ -12,6 +12,12 @@ import { isWaylandSession } from '../../lib/linux-capture';
 
 export function registerSourcesChannels(): void {
   handleChannel(CH.sources.GET, () => getSources());
+  handleChannel(CH.sources.DISPLAYS, () => getDisplays());
+  handleChannel<[unknown], string | null>(CH.sources.SOURCE_FOR_DISPLAY, (displayId) =>
+    typeof displayId === 'number' && Number.isFinite(displayId)
+      ? getScreenSourceForDisplay(displayId)
+      : Promise.resolve(null),
+  );
   handleChannel<[ShareKind], void>(CH.sources.SET_SHARE_KIND, (kind) => setShareKind(kind));
   handleChannel<[], ScreenPick>(CH.sources.PICK_SCREEN, () =>
     process.platform === 'linux' && isWaylandSession()

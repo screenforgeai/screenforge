@@ -59,6 +59,8 @@ import { registerTeleprompterChannels } from './modules/teleprompter/channel';
 import { registerSceneOverlayChannels } from './modules/scene-overlay/channel';
 import { registerCameraPreviewChannels } from './modules/camera-preview/channel';
 import { registerAreaSelectorChannels } from './modules/area-selector/channel';
+import { registerDisplayPickerChannels } from './modules/display-picker/channel';
+import { openDisplayPicker } from './modules/display-picker/service';
 import { registerImportChannels } from './modules/import/channel';
 import { registerScreenshotChannels } from './modules/screenshot/channel';
 import { pickAndImportVideo } from './modules/import/service';
@@ -69,6 +71,7 @@ import {
 } from './modules/area-selector/service';
 import {
   isAreaScreenshotInFlight,
+  selectAreaOnPickedDisplay,
   takeAreaScreenshot,
   takePickedAreaScreenshot,
 } from './modules/screenshot/flow';
@@ -591,6 +594,7 @@ app.on('ready', async () => {
     loadURL,
   });
   registerAreaSelectorChannels(PRELOAD_PATH, loadURL);
+  registerDisplayPickerChannels(PRELOAD_PATH, loadURL);
   registerImportChannels();
   registerFeatureChannels();
   registerDirectorChannels();
@@ -735,7 +739,13 @@ app.on('ready', async () => {
           })
         : takeAreaScreenshot({
             ...deps,
-            selectArea: () => openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot'),
+            selectArea: () =>
+              selectAreaOnPickedDisplay({
+                displayCount: () => screen.getAllDisplays().length,
+                pickDisplay: () => openDisplayPicker(PRELOAD_PATH, loadURL, 'area'),
+                selectArea: (displayId) =>
+                  openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot', displayId),
+              }),
           });
     void taken.then((result) => {
       if (result === 'taken') {

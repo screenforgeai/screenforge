@@ -1,8 +1,8 @@
-import { app, desktopCapturer, systemPreferences } from 'electron';
+import { app, desktopCapturer, screen, systemPreferences } from 'electron';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import type { DesktopCapturerSource } from 'electron';
-import type { DesktopSource, StartupPermissionStatus } from '../../../src/types/index';
+import type { DesktopSource, DisplayInfo, StartupPermissionStatus } from '../../../src/types/index';
 import log from '../../lib/logger';
 import { shouldUseNativeCapture } from '../../lib/macos-native-capture';
 import { isWaylandSession } from '../../lib/linux-capture';
@@ -37,6 +37,9 @@ const IRRELEVANT_WINDOW_TITLE_PATTERNS = [
 const IRRELEVANT_APP_NAME_PATTERNS = [/^screenforge$/i, /^screenforgecapture$/i];
 
 let cachedSources: DesktopSource[] = [];
+// The display each screen source last listed shows. A screen source's id does not name its display
+// on every platform (on Windows it is not Electron's display id), but `display_id` does.
+const displayIdBySourceId = new Map<string, string>();
 
 export function getNativeHelperPath(): string {
   if (process.platform === 'win32') {
@@ -178,6 +181,77 @@ function isIrrelevantWindowSource(source: DesktopSource): boolean {
   );
 }
 
+/** A screen source's display, from what it says it shows. Remembered for the recording. */
+function describeScreen(source: DesktopCapturerSource): Pick<DesktopSource, 'displayId'> {
+  const displayId = cleanWindowText(source.display_id);
+  if (!displayId) {
+    return {};
+  }
+  displayIdBySourceId.set(source.id, displayId);
+  return { displayId };
+}
+
+/**
+ * The attached displays, in the order the OS lists them. Cheap: it captures nothing, so it can be
+ * asked whenever the toolbar is shown.
+ */
+export function getDisplays(): DisplayInfo[] {
+  try {
+    const primaryId = screen.getPrimaryDisplay().id;
+    return screen.getAllDisplays().map((display) => ({
+      id: display.id,
+      label: cleanWindowText(display.label) ?? null,
+      width: display.size.width,
+      height: display.size.height,
+      isPrimary: display.id === primaryId,
+    }));
+  } catch (error) {
+    log.warn('[sources] could not read the displays:', error);
+    return [];
+  }
+}
+
+/**
+ * The screen source that shows a display (Electron's `Display.id`), matched by desktopCapturer's
+ * `display_id`: the number in a screen source's id is not the display's id on every platform (on
+ * Windows it is the screen's position). Null when the screens can't be listed (macOS without
+ * Screen Recording, Wayland) or none shows that display.
+ */
+export async function getScreenSourceForDisplay(displayId: number): Promise<string | null> {
+  if (process.platform === 'linux' && isWaylandSession()) {
+    return null;
+  }
+  try {
+    if (!(await canListScreens())) {
+      return null;
+    }
+    const rawSources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 0, height: 0 },
+      fetchWindowIcons: false,
+    });
+    rawSources.forEach((source) => describeScreen(source));
+    const match = rawSources.find(
+      (source) => cleanWindowText(source.display_id) === String(displayId),
+    );
+    if (!match) {
+      log.warn('[sources] no screen source shows the display:', {
+        displayId,
+        sources: rawSources.map((source) => ({ id: source.id, displayId: source.display_id })),
+      });
+    }
+    return match?.id ?? null;
+  } catch (error) {
+    log.warn('[sources] could not list the screens:', error);
+    return null;
+  }
+}
+
+/** The display a screen source shows (Electron's `Display.id`), if it was listed. */
+export function getDisplayIdForSource(sourceId: string): string | null {
+  return displayIdBySourceId.get(sourceId) ?? null;
+}
+
 function toDesktopSource(
   source: DesktopCapturerSource,
   metadataByWindowId: Map<number, MacWindowMetadata>,
@@ -194,6 +268,7 @@ function toDesktopSource(
     appIcon: source.appIcon?.toDataURL() ?? null,
     appName,
     windowTitle: source.id.startsWith('window') ? windowTitle : undefined,
+    ...(source.id.startsWith('screen:') && describeScreen(source)),
   };
 
   return isIrrelevantWindowSource(desktopSource) ? null : desktopSource;
@@ -259,31 +334,27 @@ export async function getMacWindowMetadata(): Promise<Map<number, MacWindowMetad
   });
 }
 
+const WAYLAND_SCREEN_SOURCE: DesktopSource = {
+  id: 'screen:wayland',
+  name: 'Entire screen',
+  thumbnail: null,
+  appIcon: null,
+};
+
 async function fetchSources(): Promise<DesktopSource[]> {
   // Wayland: desktopCapturer.getSources() opens the xdg-desktop-portal picker
   // dialog, so enumerating for thumbnails would interrupt the user every
   // refresh. Return a single synthetic display source instead — the real
   // screen/window choice happens in the portal dialog when recording starts.
   if (process.platform === 'linux' && isWaylandSession()) {
-    return [
-      {
-        id: 'screen:wayland',
-        name: 'Entire screen',
-        thumbnail: null,
-        appIcon: null,
-      },
-    ];
+    return [WAYLAND_SCREEN_SOURCE];
   }
 
-  if (process.platform === 'darwin') {
-    const screenPermissionStatus = await getMacScreenPermissionStatus();
-    if (screenPermissionStatus !== 'granted') {
-      log.info('[sources] screen permission missing; returning cached sources only', {
-        screenPermissionStatus,
-        cachedCount: cachedSources.length,
-      });
-      return getCachedSources();
-    }
+  if (!(await canListScreens())) {
+    log.info('[sources] screen permission missing; returning cached sources only', {
+      cachedCount: cachedSources.length,
+    });
+    return getCachedSources();
   }
 
   // Linux reaching this point is always X11 (Wayland returned earlier); window
@@ -302,6 +373,14 @@ async function fetchSources(): Promise<DesktopSource[]> {
   return rawSources
     .map((source) => toDesktopSource(source, metadataByWindowId))
     .filter((source): source is DesktopSource => source !== null);
+}
+
+/** macOS lists no screens until Screen Recording is allowed; elsewhere they always can be. */
+async function canListScreens(): Promise<boolean> {
+  if (process.platform !== 'darwin') {
+    return true;
+  }
+  return (await getMacScreenPermissionStatus()) === 'granted';
 }
 
 export async function initializeSources(): Promise<void> {

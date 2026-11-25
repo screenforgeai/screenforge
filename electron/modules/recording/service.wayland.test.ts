@@ -109,6 +109,7 @@ vi.mock('../app/service', () => ({
 vi.mock('../sources/service', () => ({
   getMacWindowMetadata: vi.fn().mockResolvedValue(new Map()),
   parseWindowIdFromSourceId: vi.fn(() => null),
+  getDisplayIdForSource: vi.fn(() => null),
 }));
 
 vi.mock('../export/service', () => ({
