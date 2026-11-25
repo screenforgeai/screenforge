@@ -1274,6 +1274,34 @@ describe('FloatingToolbar recording widget', () => {
       expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0:0', null);
     });
 
+    it('keeps the first display when both presses finish before the next render', async () => {
+      let pickFirst: (id: number) => void = () => undefined;
+      let pickSecond: (id: number) => void = () => undefined;
+      screenforge.pickDisplay
+        .mockImplementationOnce(() => new Promise<number>((resolve) => (pickFirst = resolve)))
+        .mockImplementationOnce(() => new Promise<number>((resolve) => (pickSecond = resolve)));
+      await renderWithDisplays();
+      await pressRecord();
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(1), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(2), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+
+      // Both picks land in the same tick: neither preparation sees a render in between.
+      await act(async () => {
+        pickFirst(external.id);
+        pickSecond(builtIn.id);
+      });
+      await finishCountdown();
+      await waitForRecordingState();
+
+      expect(screenforge.startRecording).toHaveBeenCalledTimes(1);
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0:0', null);
+    });
+
     it('records again after a pick was cancelled', async () => {
       screenforge.pickDisplay.mockResolvedValueOnce(null).mockResolvedValueOnce(builtIn.id);
       await renderWithDisplays();
@@ -1359,11 +1387,17 @@ describe('FloatingToolbar recording widget', () => {
     it('names the global shortcut in the Screenshot tooltip', async () => {
       render(<FloatingToolbar />);
       await waitFor(() => expect(screenforge.getCaptureShortcuts).toHaveBeenCalled());
-      fireEvent.focus(screen.getByRole('button', { name: 'Screenshot' }));
-      // The tooltip opens after its delay; on a busy runner that takes longer than findAll's 1s.
-      expect(
-        await screen.findAllByText('Alt+Shift+S', undefined, { timeout: ASYNC_UI_TIMEOUT_MS }),
-      ).not.toHaveLength(0);
+      // The shortcut reaches the tooltip after the toolbar mounts, and a focus that lands before
+      // it can leave the tooltip closed: focus again until it shows.
+      await waitFor(
+        () => {
+          const button = screen.getByRole('button', { name: 'Screenshot' });
+          fireEvent.blur(button);
+          fireEvent.focus(button);
+          expect(screen.getAllByText('Alt+Shift+S')).not.toHaveLength(0);
+        },
+        { timeout: 4000 },
+      );
     });
 
     it('captures the display, asking only for screen access', async () => {

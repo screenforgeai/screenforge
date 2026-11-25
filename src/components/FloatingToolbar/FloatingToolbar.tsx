@@ -1364,6 +1364,9 @@ export const FloatingToolbar = () => {
         return;
       }
       recordDisplayIdRef.current = pickedDisplayId;
+      // Now, not when the effect syncing it runs after the render: a preparation finishing in the
+      // same tick must already see this countdown.
+      recordStateRef.current = 'countdown';
       setCountdown(3);
       setRecordState('countdown');
     } finally {
