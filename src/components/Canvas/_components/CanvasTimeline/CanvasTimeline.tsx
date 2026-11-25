@@ -77,6 +77,7 @@ import { resolveTimelineAudioPath } from '../../../../lib/recording/audioSource'
 import { defaultCinematicZoomClip, defaultZoomClip } from '../../../../lib/effects/zoom';
 import { IconAiMagic, IconPlayerRecord, IconVideo, IconZoom } from '../../../../lib/icons';
 import { trackEvent } from '../../../../lib/analytics';
+import { getTimelineWrapperStyle } from './timelineWrapperStyle';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -2280,12 +2281,12 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
   return (
     <div
       className="flex flex-col shrink-0 select-none border-t border-sf-border sf-timeline-wrapper"
-      style={{
-        height: focusMode ? TL_H_MIN : tlHeight,
-        maxHeight: focusMode ? TL_H_MIN : effectiveTimelineMax,
-        background: '#0d0d0f',
-        transition: 'height 0.2s ease, max-height 0.2s ease',
-      }}
+      style={getTimelineWrapperStyle({
+        focusMode,
+        height: tlHeight,
+        maxHeight: effectiveTimelineMax,
+        minHeight: TL_H_MIN,
+      })}
     >
       <ResizeHandle onMouseDown={handleResizeMouseDown} />
 
