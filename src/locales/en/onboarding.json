@@ -41,6 +41,7 @@
   "language_desc": "Matches your system",
   "usage_name": "Share usage data",
   "usage_desc": "Usage events and error reports",
+  "prefs_saveFailed": "Couldn't save your preferences. Try again.",
   "record_title": "Record your first video",
   "record_desc": "Pick a display, window or area, then press Record. Zooms are added for you.",
   "record_ffmpegDesc": "Screenforge needs FFmpeg to save videos. This only happens once.",

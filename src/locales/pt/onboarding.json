@@ -41,6 +41,7 @@
   "language_desc": "O mesmo do seu sistema",
   "usage_name": "Compartilhar dados de uso",
   "usage_desc": "Eventos de uso e relatórios de erros",
+  "prefs_saveFailed": "Não foi possível salvar suas preferências. Tente novamente.",
   "record_title": "Grave seu primeiro vídeo",
   "record_desc": "Escolha uma tela, janela ou área e aperte Gravar. Os zooms são adicionados para você.",
   "record_ffmpegDesc": "O Screenforge precisa do FFmpeg para salvar vídeos. Isso só acontece uma vez.",

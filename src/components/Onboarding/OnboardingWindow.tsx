@@ -28,7 +28,7 @@ import {
   isValidEmail,
 } from '../../lib/onboarding/flow';
 import type { OnboardingOutcome, OnboardingStep } from '../../lib/onboarding/flow';
-import type { DirectorAccountState, StartupPermissionMap } from '../../types';
+import type { DirectorAccountState, OnboardingState, StartupPermissionMap } from '../../types';
 import { OnboardingHero } from './OnboardingHero';
 import { useTravellingDot } from './useTravellingDot';
 import './onboarding.css';
@@ -93,6 +93,7 @@ export const OnboardingWindow = () => {
   const systemLanguage = useMemo(() => toSupportedLanguage(detectBrowserLanguage()), []);
   const [language, setLanguage] = useState(() => toSupportedLanguage(i18n.language || 'en'));
   const [usage, setUsage] = useState(true);
+  const [prefsSaveFailed, setPrefsSaveFailed] = useState(false);
 
   // FFmpeg, on the last step and only when it's missing
   const [ffmpeg, setFfmpeg] = useState<FfmpegState>('unknown');
@@ -108,42 +109,59 @@ export const OnboardingWindow = () => {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([
-      api.getOnboardingState(),
-      api.getSettings(),
-      api.getDirectorAccount().catch(() => SIGNED_OUT),
-    ])
-      .then(([state, settings, account]) => {
-        if (cancelled) {
-          return;
+    const load = async () => {
+      // The platform and resume step decide the route, so they load on their own (tried twice).
+      let state: OnboardingState | null = null;
+      for (let attempt = 1; attempt <= 2 && !state; attempt += 1) {
+        try {
+          state = await api.getOnboardingState();
+        } catch (error) {
+          api.writeDiagnosticLog('onboarding.state-failed', { attempt, message: String(error) });
         }
-        setPlatform(state.platform);
-        if (state.resumeStep) {
-          setStep(state.resumeStep);
-          setRelaunched(true);
-        }
+      }
+      if (cancelled) {
+        return;
+      }
+      if (!state) {
+        // Without them setup can't pick its steps; the editor still asks for access when recording.
+        api.finishOnboarding('editor');
+        return;
+      }
+      setPlatform(state.platform);
+      if (state.resumeStep) {
+        setStep(state.resumeStep);
+        setRelaunched(true);
+      }
+
+      // Pre-filling is a nicety: a failed read leaves the fields empty.
+      const [settings, account] = await Promise.all([
+        api.getSettings().catch((error: unknown) => {
+          api.writeDiagnosticLog('onboarding.settings-failed', { message: String(error) });
+          return null;
+        }),
+        api.getDirectorAccount().catch(() => SIGNED_OUT),
+      ]);
+      if (cancelled) {
+        return;
+      }
+      if (settings) {
         setName(settings.profile.name);
-        if (settings.profile.email) {
-          setEmail(settings.profile.email);
-        } else if (account.status === 'signed-in') {
-          setEmail(account.user.email);
-          setFromDirector(true);
-        }
         setProductUpdates(settings.productUpdates ?? false);
         setUsage(settings.telemetryEnabled);
-        trackEvent('onboarding_step_viewed', {
-          step: state.resumeStep ?? 'welcome',
-          resumed: Boolean(state.resumeStep),
-        });
-      })
-      .catch((error: unknown) => {
-        api.writeDiagnosticLog('onboarding.load-failed', { message: String(error) });
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setReady(true);
-        }
+      }
+      if (settings?.profile.email) {
+        setEmail(settings.profile.email);
+      } else if (account.status === 'signed-in') {
+        setEmail(account.user.email);
+        setFromDirector(true);
+      }
+      trackEvent('onboarding_step_viewed', {
+        step: state.resumeStep ?? 'welcome',
+        resumed: Boolean(state.resumeStep),
       });
+      setReady(true);
+    };
+    void load();
     return () => {
       cancelled = true;
     };
@@ -209,16 +227,17 @@ export const OnboardingWindow = () => {
     setSaving(true);
     try {
       await Promise.all([api.saveSettings({ profile, productUpdates }), wait(MIN_SAVE_MS)]);
+      // Reported only once it's actually saved.
+      identifyUser(profile);
+      trackEvent('onboarding_profile_saved', {
+        has_name: Boolean(profile.name),
+        product_updates: productUpdates,
+        from_director: fromDirector,
+      });
     } catch (error) {
       // Never blocks the flow; the profile can be set again in Settings.
       api.writeDiagnosticLog('onboarding.profile-save-failed', { message: String(error) });
     }
-    identifyUser(profile);
-    trackEvent('onboarding_profile_saved', {
-      has_name: Boolean(profile.name),
-      product_updates: productUpdates,
-      from_director: fromDirector,
-    });
     setSaving(false);
     goNext();
   };
@@ -229,9 +248,16 @@ export const OnboardingWindow = () => {
   };
 
   // ── Permissions ──
+  // Each read starts a helper process on macOS; only the latest one started may update the view.
+  const permissionRead = useRef(0);
   const refreshPermissions = useCallback(async () => {
+    permissionRead.current += 1;
+    const read = permissionRead.current;
     try {
-      setPermissions(await api.getStartupPermissionStatuses());
+      const next = await api.getStartupPermissionStatuses();
+      if (read === permissionRead.current) {
+        setPermissions(next);
+      }
     } catch {
       // Keep the last known state.
     }
@@ -303,10 +329,15 @@ export const OnboardingWindow = () => {
 
   const savePreferences = async () => {
     setSaving(true);
+    setPrefsSaveFailed(false);
     try {
       await api.saveSettings({ language, telemetryEnabled: usage });
     } catch (error) {
+      // Usage sharing is a privacy choice: don't move on until it's saved.
       api.writeDiagnosticLog('onboarding.preferences-save-failed', { message: String(error) });
+      setPrefsSaveFailed(true);
+      setSaving(false);
+      return;
     }
     trackEvent('onboarding_preferences_saved', { language, telemetry_enabled: usage });
     setSaving(false);
@@ -393,6 +424,10 @@ export const OnboardingWindow = () => {
   // Enter presses the main button; Esc goes back a step.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Not before setup has loaded, and not while an input method is composing text.
+      if (!ready || event.isComposing || event.keyCode === 229) {
+        return;
+      }
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (event.key === 'Escape') {
         if (index > 0 && !saving && !relaunching) {
@@ -543,7 +578,15 @@ export const OnboardingWindow = () => {
               {t('allow')}
             </button>
           ),
-          pending: <span className="ob-state">{t('needsReopen')}</span>,
+          // Granted, waiting for the restart. Not reported granted yet: keep a way to turn it on.
+          pending:
+            permissions?.screen === 'granted' ? (
+              <span className="ob-state">{t('needsReopen')}</span>
+            ) : (
+              <button type="button" className="ob-pill" onClick={openScreenSettings}>
+                {t('openSettings')}
+              </button>
+            ),
           granted,
           denied: (
             <button type="button" className="ob-pill" onClick={openScreenSettings}>
@@ -623,6 +666,7 @@ export const OnboardingWindow = () => {
                   className="ob-select"
                   aria-label={t('language_name')}
                   value={language}
+                  disabled={saving}
                   onChange={(event) => changeLanguage(event.target.value)}
                 >
                   {SUPPORTED_LANGUAGES.map((option) => (
@@ -644,12 +688,19 @@ export const OnboardingWindow = () => {
                   className="ob-switch"
                   aria-checked={usage}
                   aria-label={t('usage_name')}
+                  disabled={saving}
                   onClick={() => setUsage((value) => !value)}
                 >
                   <i />
                 </button>
               </div>
             </div>
+            {prefsSaveFailed && (
+              <p className="ob-row-sub ob-error" role="alert">
+                <IconAlertCircle size={16} />
+                {t('prefs_saveFailed')}
+              </p>
+            )}
           </>
         );
       case 'first-recording': {
@@ -673,13 +724,14 @@ export const OnboardingWindow = () => {
                 <div className="ob-row">
                   <IconDownload size={18} />
                   <div className="ob-row-text ob-row-stack">
-                    <span className="ob-row-name">
+                    <span className="ob-row-name" id={id('ob-ffmpeg-label')}>
                       {failed ? t('ffmpeg_failed') : t('ffmpeg_installing')}
                     </span>
                     <div
                       className="ob-progress"
                       data-tone={failed ? 'error' : undefined}
                       role="progressbar"
+                      aria-labelledby={id('ob-ffmpeg-label')}
                       aria-valuenow={percent}
                       aria-valuemin={0}
                       aria-valuemax={100}
@@ -796,7 +848,8 @@ export const OnboardingWindow = () => {
           type="button"
           data-testid="onboarding-primary"
           className="ob-cta"
-          disabled={footer.disabled}
+          // Busy counts as disabled too, so a second Enter or click can't start it again.
+          disabled={footer.disabled || footer.busy}
           aria-busy={footer.busy || undefined}
           onClick={footer.onClick}
         >

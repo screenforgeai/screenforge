@@ -41,6 +41,7 @@
   "language_desc": "시스템 언어와 같음",
   "usage_name": "사용 데이터 공유",
   "usage_desc": "사용 이벤트와 오류 보고서",
+  "prefs_saveFailed": "설정을 저장하지 못했습니다. 다시 시도하세요.",
   "record_title": "첫 영상 녹화하기",
   "record_desc": "디스플레이, 창 또는 영역을 고른 뒤 녹화를 누르세요. 줌은 자동으로 추가됩니다.",
   "record_ffmpegDesc": "영상을 저장하려면 FFmpeg가 필요합니다. 설치는 한 번만 하면 됩니다.",

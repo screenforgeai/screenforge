@@ -41,6 +41,7 @@
   "language_desc": "Celle de votre système",
   "usage_name": "Partager les données d'utilisation",
   "usage_desc": "Événements d'utilisation et rapports d'erreur",
+  "prefs_saveFailed": "Impossible d'enregistrer vos préférences. Réessayez.",
   "record_title": "Enregistrez votre première vidéo",
   "record_desc": "Choisissez un écran, une fenêtre ou une zone, puis appuyez sur Enregistrer. Les zooms sont ajoutés pour vous.",
   "record_ffmpegDesc": "Screenforge a besoin de FFmpeg pour enregistrer les vidéos. Cela n'arrive qu'une fois.",

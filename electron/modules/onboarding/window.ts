@@ -22,8 +22,8 @@ let launchResumeStep: OnboardingResumeStep | null = null;
 let settleOutcome: ((outcome: OnboardingOutcome) => void) | null = null;
 // Set when the window saves a step to resume at: it is about to quit and reopen, not finish.
 let resumePending = false;
-// Set once the window finished itself (its completion is already recorded).
-let finished = false;
+// The completion write the window started when it finished itself, if any.
+let finishing: Promise<void> | null = null;
 
 export function getOnboardingLaunchResumeStep(): OnboardingResumeStep | null {
   return launchResumeStep;
@@ -37,7 +37,7 @@ export function markOnboardingResumePending(): void {
 export function runOnboardingWindow(deps: OnboardingWindowDeps): Promise<OnboardingOutcome> {
   launchResumeStep = deps.resumeStep;
   resumePending = false;
-  finished = false;
+  finishing = null;
 
   return new Promise<OnboardingOutcome>((resolve) => {
     let settled = false;
@@ -76,16 +76,19 @@ export function runOnboardingWindow(deps: OnboardingWindowDeps): Promise<Onboard
     });
     win.on('closed', () => {
       onboardingWindow = null;
-      // Finished from the window (already recorded), or quitting to reopen.
-      if (finished || resumePending) {
+      if (resumePending) {
         settleOutcome?.('editor');
         return;
       }
-      // Closed from the system (⌘W, Alt+F4) counts as done. Recorded before the editor
-      // starts, so the editor's own settings writes can't bring the old record back.
-      void completeOnboarding()
-        .catch((error) => log.warn('[onboarding] could not record completion', error))
-        .finally(() => settleOutcome?.('editor'));
+      // Either the window's own completion write, or (closed from the system: ⌘W, Alt+F4)
+      // a new one. The editor starts only after it lands, so its own settings writes
+      // can't bring the old record back.
+      const completion =
+        finishing ??
+        completeOnboarding().catch((error) =>
+          log.warn('[onboarding] could not record completion', error),
+        );
+      void completion.finally(() => settleOutcome?.('editor'));
     });
 
     deps.loadURL(win, 'onboarding');
@@ -106,12 +109,13 @@ export function resizeOnboardingWindow(height: number): void {
 }
 
 export async function finishOnboardingWindow(outcome: OnboardingOutcome): Promise<void> {
-  finished = true;
-  try {
-    await completeOnboarding();
-  } catch (error) {
-    log.warn('[onboarding] could not record completion', error);
+  if (finishing) {
+    return;
   }
+  finishing = completeOnboarding().catch((error) =>
+    log.warn('[onboarding] could not record completion', error),
+  );
+  await finishing;
   log.info('[onboarding] finished', { outcome });
   settleOutcome?.(outcome);
   if (onboardingWindow && !onboardingWindow.isDestroyed()) {

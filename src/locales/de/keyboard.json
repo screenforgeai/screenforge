@@ -1,1 +1,8 @@
-{ "header": "Tastatur", "noRecordingSelected": "Keine Aufnahme ausgewählt.", "noKeyboardData": "Keine Tastatureingaben gefunden.", "noShortcuts": "Keine Tastaturkürzel für diese Aufnahme gefunden.", "size": "Größe", "background": "Hintergrund" }
+{
+  "header": "Tastatur",
+  "noRecordingSelected": "Keine Aufnahme ausgewählt.",
+  "noKeyboardData": "Keine Tastatureingaben gefunden.",
+  "noShortcuts": "Keine Tastaturkürzel für diese Aufnahme gefunden.",
+  "size": "Größe",
+  "background": "Hintergrund"
+}

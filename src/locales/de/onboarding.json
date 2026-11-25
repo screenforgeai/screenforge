@@ -41,6 +41,7 @@
   "language_desc": "Wie Ihr System",
   "usage_name": "Nutzungsdaten teilen",
   "usage_desc": "Nutzungsereignisse und Fehlerberichte",
+  "prefs_saveFailed": "Ihre Einstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut.",
   "record_title": "Ihr erstes Video aufnehmen",
   "record_desc": "Wählen Sie einen Bildschirm, ein Fenster oder einen Bereich und klicken Sie auf Aufnehmen. Zooms werden automatisch hinzugefügt.",
   "record_ffmpegDesc": "Screenforge braucht FFmpeg, um Videos zu speichern. Das passiert nur einmal.",

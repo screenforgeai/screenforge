@@ -19,6 +19,7 @@ const makeApi = ({
   ffmpegAvailable = true,
   productUpdates = undefined as boolean | undefined,
   resumeSaveFails = false,
+  saveFails = false,
 } = {}) => ({
   getOnboardingState: vi.fn().mockResolvedValue({ platform, resumeStep }),
   getSettings: vi.fn().mockResolvedValue({
@@ -27,15 +28,18 @@ const makeApi = ({
     telemetryEnabled: true,
     productUpdates,
   }),
-  saveSettings: vi.fn().mockResolvedValue({}),
+  saveSettings: saveFails
+    ? vi.fn().mockRejectedValue(new Error('disk full'))
+    : vi.fn().mockResolvedValue({}),
   getDirectorAccount: vi.fn().mockResolvedValue(account),
   identifyUser: vi.fn(),
   trackEvent: vi.fn(),
   getStartupPermissionStatuses: vi.fn().mockResolvedValue(permissions),
   requestOnboardingPermission: vi.fn().mockResolvedValue('not-determined'),
   openSystemSettings: vi.fn(),
+  // Fails the first time only, so a retry can succeed.
   setOnboardingResumeStep: resumeSaveFails
-    ? vi.fn().mockRejectedValue(new Error('disk full'))
+    ? vi.fn().mockRejectedValueOnce(new Error('disk full')).mockResolvedValue(undefined)
     : vi.fn().mockResolvedValue(undefined),
   relaunchApp: vi.fn(),
   checkFFmpegStatus: vi.fn().mockResolvedValue({ available: ffmpegAvailable }),
@@ -118,8 +122,19 @@ describe('OnboardingWindow', () => {
 
   it('keeps the product updates choice saved before the quit and reopen', async () => {
     const user = userEvent.setup();
-    mount({ productUpdates: true });
-    await user.click(await screen.findByTestId('onboarding-primary'));
+    mount({
+      platform: 'darwin',
+      resumeStep: 'permissions',
+      productUpdates: true,
+      permissions: {
+        screen: 'granted',
+        microphone: 'granted',
+        camera: 'granted',
+        accessibility: 'granted',
+      },
+    });
+    await screen.findByRole('heading', { name: 'Welcome back' });
+    await user.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(await screen.findByLabelText('Email me product updates and tips')).toBeChecked();
   });
@@ -137,9 +152,7 @@ describe('OnboardingWindow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Skip for now' }));
     expect(await screen.findByRole('heading', { name: 'Make it yours' })).toBeInTheDocument();
-    expect(api.saveSettings).not.toHaveBeenCalledWith(
-      expect.objectContaining({ profile: expect.anything() }),
-    );
+    expect(api.saveSettings).not.toHaveBeenCalled();
   });
 
   it('fills in the email from a Screenforge Director sign-in', async () => {
@@ -174,7 +187,8 @@ describe('OnboardingWindow', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Allow' })[0]);
     expect(api.requestOnboardingPermission).toHaveBeenCalledWith('screen');
-    expect(await screen.findByText('Needs reopen')).toBeInTheDocument();
+    // macOS hasn't reported the grant yet: keep a way to turn it on, and offer the restart.
+    expect(await screen.findByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
     expect(primary()).toHaveTextContent('Quit and reopen');
 
     await user.click(primary());
@@ -188,13 +202,31 @@ describe('OnboardingWindow', () => {
     await user.click(await screen.findByTestId('onboarding-primary'));
     await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
     await user.click((await screen.findAllByRole('button', { name: 'Allow' }))[0]);
-    await screen.findByText('Needs reopen');
+    await waitFor(() => expect(primary()).toHaveTextContent('Quit and reopen'));
 
     await user.click(primary());
-    await waitFor(() => expect(api.setOnboardingResumeStep).toHaveBeenCalled());
+    await waitFor(() => expect(api.setOnboardingResumeStep).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(primary()).toBeEnabled());
     expect(api.relaunchApp).not.toHaveBeenCalled();
-    expect(primary()).toHaveTextContent('Quit and reopen');
+
+    await user.click(primary());
+    await waitFor(() => expect(api.relaunchApp).toHaveBeenCalledTimes(1));
+    expect(api.setOnboardingResumeStep).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays on Preferences when they could not be saved', async () => {
+    const user = userEvent.setup();
+    mount({ saveFails: true });
+    await user.click(await screen.findByTestId('onboarding-primary'));
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await screen.findByRole('heading', { name: 'Make it yours' });
+
+    await user.click(primary());
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Couldn't save your preferences. Try again.",
+    );
+    expect(screen.getByRole('heading', { name: 'Make it yours' })).toBeInTheDocument();
+    expect(primary()).toBeEnabled();
   });
 
   it('welcomes the user back after the relaunch', async () => {

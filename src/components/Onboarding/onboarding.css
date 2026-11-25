@@ -714,6 +714,17 @@
   background-color: var(--ob-line-lt);
 }
 
+.ob-select:disabled,
+.ob-switch:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.ob-error {
+  margin: 0;
+  justify-content: center;
+}
+
 .ob-switch {
   width: 40px;
   height: 24px;
@@ -923,7 +934,8 @@
   height: 44px;
   border: 0;
   border-radius: 999px;
-  background: var(--ob-brand);
+  /* A step darker than the brand token so white text passes 4.5:1 (5.1:1 here). */
+  background: color-mix(in srgb, var(--ob-brand) 93%, #000);
   color: #fff;
   font-weight: 500;
   transition:
@@ -933,7 +945,7 @@
 }
 
 .ob-cta:hover {
-  background: color-mix(in srgb, var(--ob-brand) 90%, #000);
+  background: color-mix(in srgb, var(--ob-brand) 85%, #000);
 }
 
 .ob-cta:active {
@@ -946,7 +958,9 @@
   pointer-events: none;
 }
 
-.ob-cta[aria-busy='true'] {
+.ob-cta[aria-busy='true'],
+.ob-cta[aria-busy='true']:disabled {
+  opacity: 1;
   pointer-events: none;
 }
 

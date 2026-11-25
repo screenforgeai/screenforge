@@ -48,8 +48,9 @@ export function registerOnboardingChannels(): void {
     if (!RESUME_STEPS.has(step)) {
       return;
     }
-    markOnboardingResumePending();
+    // Marked only once saved: a failed save leaves a later close counting as done.
     await setOnboardingResumeStep(step);
+    markOnboardingResumePending();
   });
 
   handleChannel<[OnboardingPermission], StartupPermissionStatus>(
