@@ -24,7 +24,11 @@ export const ActivityIndicator = ({
           : 'pointer-events-none -translate-y-1 opacity-0 delay-0',
       )}
     >
-      <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
+      {/* Hidden, it stays mounted for the fade but stops spinning: an endless
+          animation keeps the page drawing frames even at opacity 0. */}
+      <Spinner
+        className={cn('size-3.5 text-sf-border fill-sf-primary', !visible && 'animate-none')}
+      />
       <span>{label}</span>
     </div>
   );
