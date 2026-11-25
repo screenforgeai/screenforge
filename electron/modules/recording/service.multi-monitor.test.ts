@@ -56,6 +56,10 @@ const childProcessMock = vi.hoisted(() => ({
   execFile: vi.fn(),
 }));
 
+const sourcesMock = vi.hoisted(() => ({
+  getDisplayIdForSource: vi.fn<[string], string | null>(() => null),
+}));
+
 const ffmpegRunnerMock = vi.hoisted(() => ({
   runFFmpeg: vi.fn(),
 }));
@@ -107,6 +111,7 @@ vi.mock('../app/service', () => ({
 vi.mock('../sources/service', () => ({
   getMacWindowMetadata: vi.fn().mockResolvedValue(new Map()),
   parseWindowIdFromSourceId: vi.fn(() => null),
+  getDisplayIdForSource: sourcesMock.getDisplayIdForSource,
 }));
 
 vi.mock('../export/service', () => ({
@@ -211,6 +216,7 @@ describe('recording service: multiple monitors', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    sourcesMock.getDisplayIdForSource.mockReset().mockReturnValue(null);
     electronMock.screen.reset();
     electronMock.state.displays = [leftMonitor, primaryMonitor];
     electronMock.state.primary = primaryMonitor;
@@ -245,6 +251,44 @@ describe('recording service: multiple monitors', () => {
 
   afterAll(() => {
     setPlatform(originalPlatform);
+  });
+
+  describe('display recording', () => {
+    it('records the monitor the chosen screen shows, whatever its position in the source id', async () => {
+      const { startRecording, discardRecording } = await import('./service');
+      // Windows-style ids number screens by order; display_id names the monitor.
+      sourcesMock.getDisplayIdForSource.mockImplementation((sourceId) =>
+        sourceId === 'screen:0:0' ? String(primaryMonitor.id) : String(leftMonitor.id),
+      );
+
+      await startRecording('screen:0:0');
+
+      const args = captureProcs[0].args;
+      expect(argAfter(args, '-video_size')).toBe('2560x1440');
+      expect(argAfter(args, '-i')).toBe(':0+1920,0');
+
+      await discardRecording();
+    });
+
+    it('records the second monitor when it is chosen', async () => {
+      const { startRecording, stopRecording } = await import('./service');
+      sourcesMock.getDisplayIdForSource.mockReturnValue(String(leftMonitor.id));
+
+      await startRecording('screen:1:0');
+      const result = await stopRecording();
+
+      expect(argAfter(captureProcs[0].args, '-i')).toBe(':0+0,0');
+      expect(result.recordingArea).toEqual({ x: 0, y: 0, width: 1920, height: 1080 });
+    });
+
+    it('falls back to the source id when the screen was never listed', async () => {
+      const { startRecording, discardRecording } = await import('./service');
+
+      await startRecording('screen:1');
+
+      expect(argAfter(captureProcs[0].args, '-i')).toBe(':0+1920,0');
+      await discardRecording();
+    });
   });
 
   describe('area recording', () => {

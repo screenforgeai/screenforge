@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CaptureBackend } from '../../types/index';
+import type { CaptureBackend, DesktopSource } from '../../types/index';
 
 // framer-motion's AnimatePresence exit animations never complete under jsdom
 // fake timers, leaving the recording controls unmounted. Replace motion
@@ -12,6 +12,29 @@ vi.mock('src/lib/recording/streamStill', () => ({
     width: 2560,
     height: 1440,
   }),
+}));
+
+// Radix menus don't open under this file's harness; the picker has its own test. This stand-in
+// lists the screens as buttons so the toolbar's handling of the choice can be tested.
+vi.mock('./_components/FloatingToolbarDisplayPicker', () => ({
+  FloatingToolbarDisplayPicker: ({
+    screens,
+    onSelectTab,
+    onChooseScreen,
+  }: {
+    screens: Array<{ id: string }>;
+    onSelectTab: () => void;
+    onChooseScreen: (screen: { id: string }) => void;
+  }) => (
+    <div>
+      <button type="button" aria-label="Display" aria-haspopup="menu" onClick={onSelectTab} />
+      {screens.map((source) => (
+        <button key={source.id} type="button" onClick={() => onChooseScreen(source)}>
+          {`Choose ${source.id}`}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock('framer-motion', () => {
@@ -200,6 +223,8 @@ function createScreenforgeMock(backend: CaptureBackend) {
     closeCameraPreview: vi.fn(),
     openAreaSelector: vi.fn().mockResolvedValue(null),
     getSources: vi.fn().mockResolvedValue([]),
+    getScreenSources: vi.fn().mockResolvedValue([]),
+    getDisplayCount: vi.fn().mockResolvedValue(1),
     getStartupPermissionStatuses: vi.fn().mockResolvedValue({
       screen: 'granted',
       microphone: 'granted',
@@ -1097,6 +1122,104 @@ describe('FloatingToolbar recording widget', () => {
       expect(recorder.state).toBe('inactive');
       expect(portalTrack.stop).toHaveBeenCalled();
       expect(screenforge.recordingFinished).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('several monitors (macOS, Windows, Linux X11)', () => {
+    // Listed in OS order: the external monitor first, the main display second.
+    const external: DesktopSource = {
+      id: 'screen:0:0',
+      name: 'Screen 1',
+      thumbnail: null,
+      appIcon: null,
+      displayId: '11',
+      displaySize: { width: 2560, height: 1440 },
+      isPrimary: false,
+    };
+    const builtIn: DesktopSource = {
+      id: 'screen:1:0',
+      name: 'Screen 2',
+      thumbnail: null,
+      appIcon: null,
+      displayId: '22',
+      displayLabel: 'Built-in Retina Display',
+      displaySize: { width: 1512, height: 982 },
+      isPrimary: true,
+    };
+
+    beforeEach(() => {
+      installMocks('native');
+      screenforge.getDisplayCount.mockResolvedValue(2);
+      screenforge.getScreenSources.mockResolvedValue([external, builtIn]);
+    });
+
+    const renderWithScreens = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getScreenSources).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Display' })).toHaveAttribute(
+          'aria-haspopup',
+          'menu',
+        ),
+      );
+    };
+
+    // The Display menu itself is covered by FloatingToolbarDisplayPicker.test.tsx; here a stand-in
+    // picker chooses the monitor.
+    const chooseScreen = (id: string) => {
+      fireEvent.click(screen.getByRole('button', { name: `Choose ${id}` }));
+    };
+
+    /** Record on the toolbar already shown, through the countdown. */
+    const recordShownToolbar = async () => {
+      const appendModeCalls = screenforge.getAppendMode.mock.calls.length;
+      await waitFor(
+        () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+          expect(screenforge.getAppendMode.mock.calls.length).toBeGreaterThan(appendModeCalls);
+        },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+      await finishCountdown();
+      await waitForRecordingState();
+    };
+
+    it('records the main display until another is chosen', async () => {
+      await renderWithScreens();
+      await recordShownToolbar();
+
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:1:0', null);
+    });
+
+    it('records the monitor chosen in the Display menu', async () => {
+      await renderWithScreens();
+      chooseScreen('screen:0:0');
+      await recordShownToolbar();
+
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0:0', null);
+    });
+
+    it('takes a screenshot of the chosen monitor', async () => {
+      await renderWithScreens();
+      chooseScreen('screen:0:0');
+      fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+
+      await waitFor(() =>
+        expect(screenforge.captureScreenshot).toHaveBeenCalledWith({
+          kind: 'display',
+          sourceId: 'screen:0:0',
+        }),
+      );
+    });
+
+    it('lists no screens, and shows no menu, with a single monitor', async () => {
+      screenforge.getDisplayCount.mockResolvedValue(1);
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screenforge.getDisplayCount).toHaveBeenCalled());
+
+      expect(screenforge.getScreenSources).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Display' })).not.toHaveAttribute('aria-haspopup');
     });
   });
 

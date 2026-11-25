@@ -94,6 +94,14 @@ export interface DesktopSource {
   appIcon: string | null;
   appName?: string;
   windowTitle?: string;
+  /** Screen sources: the id of the display it shows (Electron's `Display.id`), as a string. */
+  displayId?: string;
+  /** Screen sources: the display's name from the OS (e.g. "DELL U2720Q"), when it gives one. */
+  displayLabel?: string;
+  /** Screen sources: the display's size in DIPs. */
+  displaySize?: { width: number; height: number };
+  /** Screen sources: whether it is the main display. */
+  isPrimary?: boolean;
 }
 
 export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
@@ -827,6 +835,8 @@ export interface ScreenforgeAPI {
   relaunchApp: () => void;
   openSystemSettings: (permission: StartupPermission) => void;
   getSources: () => Promise<DesktopSource[]>;
+  getScreenSources: () => Promise<DesktopSource[]>;
+  getDisplayCount: () => Promise<number>;
   /** Wayland: what the next screen-share dialog asks for, a screen or a window. */
   setShareKind: (kind: 'screen' | 'window') => Promise<void>;
   pickScreen: () => Promise<'picked' | 'cancelled' | 'unavailable'>;

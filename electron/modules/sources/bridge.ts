@@ -4,6 +4,10 @@ import type { AreaSelectorStillRequest, DesktopSource } from '../../../src/types
 
 export const sourcesBridge = {
   getSources: createInvokeBridge<[], DesktopSource[]>(CH.sources.GET),
+  /** Just the screens, each with the display it shows, to choose which monitor to record. */
+  getScreenSources: createInvokeBridge<[], DesktopSource[]>(CH.sources.GET_SCREENS),
+  /** How many displays are attached. Cheap: it lists no screens, so it can be asked on mount. */
+  getDisplayCount: createInvokeBridge<[], number>(CH.sources.DISPLAY_COUNT),
   /**
    * Wayland: what the next screen-share dialog asks for, a screen or a window. Awaited, so it is
    * stored before the share request that reads it.

@@ -6,6 +6,8 @@
 export const CH = {
   sources: {
     GET: 'sources:get',
+    GET_SCREENS: 'sources:get-screens',
+    DISPLAY_COUNT: 'sources:display-count',
     SET_SHARE_KIND: 'sources:set-share-kind',
     PICK_SCREEN: 'sources:pick-screen',
     SCREEN_STILL: 'sources:screen-still',

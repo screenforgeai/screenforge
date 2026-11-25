@@ -9,6 +9,8 @@ const electronMock = vi.hoisted(() => ({
   },
   desktopCapturerGetSources: vi.fn(),
   getMediaAccessStatus: vi.fn(),
+  getAllDisplays: vi.fn(() => [] as unknown[]),
+  getPrimaryDisplay: vi.fn(() => ({ id: -1 })),
 }));
 
 const childProcessMock = vi.hoisted(() => ({
@@ -28,6 +30,10 @@ vi.mock('electron', () => ({
   },
   systemPreferences: {
     getMediaAccessStatus: electronMock.getMediaAccessStatus,
+  },
+  screen: {
+    getAllDisplays: electronMock.getAllDisplays,
+    getPrimaryDisplay: electronMock.getPrimaryDisplay,
   },
 }));
 
@@ -160,6 +166,99 @@ describe('sources service', () => {
     expect(electronMock.desktopCapturerGetSources).toHaveBeenCalledTimes(1);
   });
 
+  describe('screens on Windows with two monitors', () => {
+    // Windows numbers screen sources by order; only display_id names the monitor.
+    const laptop = {
+      id: 2528732444,
+      label: 'Built-in Display',
+      size: { width: 1440, height: 900 },
+    };
+    const external = { id: 1234567, label: '', size: { width: 2560, height: 1440 } };
+    const thumbnail = (name: string) => ({ toDataURL: () => `data:image/png;base64,${name}` });
+
+    beforeEach(() => {
+      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+      electronMock.getAllDisplays.mockReturnValue([external, laptop]);
+      electronMock.getPrimaryDisplay.mockReturnValue(laptop);
+      electronMock.desktopCapturerGetSources.mockResolvedValue([
+        {
+          id: 'screen:0:0',
+          name: 'Screen 1',
+          display_id: String(laptop.id),
+          thumbnail: thumbnail('laptop'),
+          appIcon: null,
+        },
+        {
+          id: 'screen:1:0',
+          name: 'Screen 2',
+          display_id: String(external.id),
+          thumbnail: thumbnail('external'),
+          appIcon: null,
+        },
+      ]);
+    });
+
+    it('lists each screen with the display it shows', async () => {
+      const { getScreenSources } = await loadSourcesModule();
+
+      const screens = await getScreenSources();
+
+      expect(screens).toEqual([
+        expect.objectContaining({
+          id: 'screen:0:0',
+          displayId: String(laptop.id),
+          displayLabel: 'Built-in Display',
+          displaySize: { width: 1440, height: 900 },
+          isPrimary: true,
+          thumbnail: 'data:image/png;base64,laptop',
+        }),
+        expect.objectContaining({
+          id: 'screen:1:0',
+          displayId: String(external.id),
+          displayLabel: undefined,
+          displaySize: { width: 2560, height: 1440 },
+          isPrimary: false,
+        }),
+      ]);
+      expect(electronMock.desktopCapturerGetSources).toHaveBeenCalledWith(
+        expect.objectContaining({ types: ['screen'] }),
+      );
+    });
+
+    it('remembers which display a listed screen source shows', async () => {
+      const { getScreenSources, getDisplayIdForSource } = await loadSourcesModule();
+
+      expect(getDisplayIdForSource('screen:1:0')).toBeNull();
+      await getScreenSources();
+
+      expect(getDisplayIdForSource('screen:0:0')).toBe(String(laptop.id));
+      expect(getDisplayIdForSource('screen:1:0')).toBe(String(external.id));
+      expect(getDisplayIdForSource('screen:7:0')).toBeNull();
+    });
+
+    it('counts the displays without listing the screens', async () => {
+      const { getDisplayCount } = await loadSourcesModule();
+
+      expect(getDisplayCount()).toBe(2);
+      expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
+    });
+
+    it('keeps the last screens when listing them fails', async () => {
+      const { getScreenSources } = await loadSourcesModule();
+      const first = await getScreenSources();
+      electronMock.desktopCapturerGetSources.mockRejectedValueOnce(new Error('boom'));
+
+      await expect(getScreenSources()).resolves.toEqual(first);
+    });
+  });
+
+  it('lists no screens on macOS until Screen Recording is allowed', async () => {
+    const { getScreenSources } = await loadSourcesModule();
+
+    await expect(getScreenSources()).resolves.toEqual([]);
+    expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
+  });
+
   describe('on Linux Wayland', () => {
     const savedSessionType = process.env.XDG_SESSION_TYPE;
 
@@ -195,6 +294,15 @@ describe('sources service', () => {
       // Wayland — enumerating must never call it.
       expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
       expect(childProcessMock.execFile).not.toHaveBeenCalled();
+    });
+
+    it('lists only the synthetic screen: the monitor is picked in the share dialog', async () => {
+      const { getScreenSources } = await loadSourcesModule();
+
+      await expect(getScreenSources()).resolves.toEqual([
+        expect.objectContaining({ id: 'screen:wayland' }),
+      ]);
+      expect(electronMock.desktopCapturerGetSources).not.toHaveBeenCalled();
     });
   });
 
