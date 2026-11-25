@@ -311,7 +311,7 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
             )}
 
             {isEditing && (
-              <div className="pointer-events-none absolute left-2.5 top-2.5 rounded-full border border-white/7 bg-[#141418]/72 px-2.5 py-1 text-xs font-medium tracking-[0.12em] text-white/78 shadow-[0_1px_1px_rgba(8,8,10,0.18),0_8px_18px_rgba(8,8,10,0.16)] backdrop-blur-md transition-all duration-150">
+              <div className="pointer-events-none absolute left-2.5 top-2.5 rounded-full border border-white/7 bg-sf-panel/85 px-2.5 py-1 text-xs font-medium tracking-[0.12em] text-white/78 shadow-[0_1px_1px_rgba(8,8,10,0.18),0_8px_18px_rgba(8,8,10,0.16)] transition-all duration-150">
                 {mask.type === 'blur' ? 'Blur' : 'Mask'}
               </div>
             )}

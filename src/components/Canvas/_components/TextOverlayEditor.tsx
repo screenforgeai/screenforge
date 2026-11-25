@@ -385,7 +385,7 @@ export const TextOverlayEditor = ({ containerRef, canvasRef }: Props) => {
             {/* Label badge */}
             {isSelected && (
               <div
-                className="pointer-events-none absolute -top-6 left-0 whitespace-nowrap rounded-full border border-white/[0.07] bg-[#141418]/[0.82] px-2 py-0.5 text-[10px] font-medium tracking-[0.1em] text-white/70 backdrop-blur-md"
+                className="pointer-events-none absolute -top-6 left-0 whitespace-nowrap rounded-full border border-white/[0.07] bg-sf-panel/90 px-2 py-0.5 text-[10px] font-medium tracking-[0.1em] text-white/70"
                 style={{ maxWidth: pw }}
               >
                 {label}

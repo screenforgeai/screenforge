@@ -388,7 +388,7 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => void handleCapture()}
-                        className="cursor-pointer flex items-center justify-center size-9 rounded-md border border-white/[0.12] bg-black/45 backdrop-blur-sm text-white/60 hover:text-white/90 hover:bg-black/60 transition-colors focus-visible:outline-none active:scale-95"
+                        className="cursor-pointer flex items-center justify-center size-9 rounded-md border border-white/[0.12] bg-black/60 text-white/60 hover:text-white/90 hover:bg-black/70 transition-colors focus-visible:outline-none active:scale-95"
                         aria-label={t('captureFrame')}
                       >
                         <IconCamera size={16} />
@@ -401,7 +401,7 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
             </AnimatePresence>
             {metadataDimensions && metadataDimensions.filePath === recordingResult.filePath && (
               <div className="pointer-events-none absolute bottom-2 right-2 z-10">
-                <div className="flex items-center gap-1 rounded border border-white/[0.07] bg-black/40 px-1.5 py-[3px] backdrop-blur-sm">
+                <div className="flex items-center gap-1 rounded border border-white/[0.07] bg-black/55 px-1.5 py-[3px]">
                   <span className="tabular-nums text-xs leading-none tracking-[0.02em] text-white/40">
                     {metadataDimensions.width}&thinsp;×&thinsp;{metadataDimensions.height}
                   </span>
@@ -412,7 +412,7 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="flex items-center gap-1 rounded border border-white/[0.07] bg-black/40 px-1.5 py-[3px] backdrop-blur-sm cursor-default focus-visible:outline-none"
+                    className="flex items-center gap-1 rounded border border-white/[0.07] bg-black/55 px-1.5 py-[3px] cursor-default focus-visible:outline-none"
                     aria-label={t('previewQualityInfo')}
                   >
                     <IconInfo size={12} color="rgba(255,255,255,0.35)" stroke={1.8} />
