@@ -20,6 +20,7 @@ import { shareBridge } from './modules/share/bridge';
 import { whatsNewBridge } from './modules/whats-new/bridge';
 import { screenshotBridge } from './modules/screenshot/bridge';
 import { captureShortcutsBridge } from './modules/capture-shortcuts/bridge';
+import { onboardingBridge } from './modules/onboarding/bridge';
 
 contextBridge.exposeInMainWorld('screenforge', {
   ...sourcesBridge,
@@ -43,5 +44,6 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...whatsNewBridge,
   ...screenshotBridge,
   ...captureShortcutsBridge,
+  ...onboardingBridge,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 });

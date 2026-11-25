@@ -97,4 +97,44 @@ describe('settings service', () => {
   it('leaves lastSeenVersion out until one has been recorded', async () => {
     expect(await getSettings()).not.toHaveProperty('lastSeenVersion');
   });
+
+  it('leaves onboarding and productUpdates out until they are recorded', async () => {
+    const settings = await getSettings();
+    expect(settings).not.toHaveProperty('onboarding');
+    expect(settings).not.toHaveProperty('productUpdates');
+  });
+
+  it('keeps the onboarding record and product updates choice across unrelated saves', async () => {
+    await saveSettings({ onboarding: { completed: false, resumeStep: 'permissions' } });
+    await saveSettings({ productUpdates: true });
+    await saveSettings({ language: 'de' });
+
+    expect(await getSettings()).toMatchObject({
+      language: 'de',
+      onboarding: { completed: false, resumeStep: 'permissions' },
+      productUpdates: true,
+    });
+    expect(getSettingsSync()).toMatchObject({ productUpdates: true });
+  });
+
+  it('drops a resume step once onboarding is completed', async () => {
+    await saveSettings({ onboarding: { completed: false, resumeStep: 'permissions' } });
+    await saveSettings({ onboarding: { completed: true } });
+
+    expect((await getSettings()).onboarding).toEqual({ completed: true });
+  });
+
+  it('ignores a malformed onboarding record or product updates value in the file', async () => {
+    fs.writeFileSync(
+      path.join(userData, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completed: 'yes', resumeStep: 'elsewhere' },
+        productUpdates: 1,
+      }),
+    );
+
+    const settings = await getSettings();
+    expect(settings).not.toHaveProperty('onboarding');
+    expect(settings).not.toHaveProperty('productUpdates');
+  });
 });

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { app } from 'electron';
+import type { OnboardingRecord } from '../../../src/lib/onboarding/decision';
 import { setTelemetryEnabled } from '../../lib/telemetry';
 import { refreshFeatureFlags } from '../features/service';
 
@@ -12,6 +13,10 @@ export interface AppSettings {
   telemetryEnabled: boolean;
   /** Version whose release notes were last offered in "What's new"; absent before the first check. */
   lastSeenVersion?: string;
+  /** First-run onboarding: done, or the step to reopen at; absent before it first ran. */
+  onboarding?: OnboardingRecord;
+  /** "Email me product updates and tips", ticked in onboarding; absent until answered. */
+  productUpdates?: boolean;
 }
 
 const DEFAULTS: AppSettings = {
@@ -31,12 +36,39 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
-function withLastSeenVersion(settings: AppSettings, value: unknown): AppSettings {
-  return isNonEmptyString(value) ? { ...settings, lastSeenVersion: value } : settings;
+function toOnboardingRecord(value: unknown): OnboardingRecord | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  const { completed, resumeStep } = value as Record<string, unknown>;
+  if (!isBoolean(completed)) {
+    return undefined;
+  }
+  // A finished onboarding has nothing to resume.
+  return !completed && resumeStep === 'permissions' ? { completed, resumeStep } : { completed };
+}
+
+/** Adds the optional fields that hold a valid value; leaves the rest out. */
+function withOptionalFields(
+  settings: AppSettings,
+  values: { lastSeenVersion?: unknown; onboarding?: unknown; productUpdates?: unknown },
+): AppSettings {
+  const next: AppSettings = { ...settings };
+  if (isNonEmptyString(values.lastSeenVersion)) {
+    next.lastSeenVersion = values.lastSeenVersion;
+  }
+  const onboarding = toOnboardingRecord(values.onboarding);
+  if (onboarding) {
+    next.onboarding = onboarding;
+  }
+  if (isBoolean(values.productUpdates)) {
+    next.productUpdates = values.productUpdates;
+  }
+  return next;
 }
 
 function withDefaults(parsed: Partial<AppSettings>): AppSettings {
-  return withLastSeenVersion(
+  return withOptionalFields(
     {
       profile: { ...DEFAULTS.profile, ...parsed.profile },
       language: parsed.language ?? DEFAULTS.language,
@@ -44,7 +76,7 @@ function withDefaults(parsed: Partial<AppSettings>): AppSettings {
         ? parsed.telemetryEnabled
         : DEFAULTS.telemetryEnabled,
     },
-    parsed.lastSeenVersion,
+    parsed,
   );
 }
 
@@ -68,7 +100,7 @@ export function getSettingsSync(): AppSettings {
 
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings();
-  const next: AppSettings = withLastSeenVersion(
+  const next: AppSettings = withOptionalFields(
     {
       profile: { ...current.profile, ...patch.profile },
       language: patch.language ?? current.language,
@@ -76,7 +108,15 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
         ? patch.telemetryEnabled
         : current.telemetryEnabled,
     },
-    isNonEmptyString(patch.lastSeenVersion) ? patch.lastSeenVersion : current.lastSeenVersion,
+    {
+      lastSeenVersion: isNonEmptyString(patch.lastSeenVersion)
+        ? patch.lastSeenVersion
+        : current.lastSeenVersion,
+      onboarding: toOnboardingRecord(patch.onboarding) ?? current.onboarding,
+      productUpdates: isBoolean(patch.productUpdates)
+        ? patch.productUpdates
+        : current.productUpdates,
+    },
   );
   await fs.writeFile(settingsPath(), JSON.stringify(next), 'utf8');
   if (isBoolean(patch.telemetryEnabled)) {

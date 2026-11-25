@@ -137,6 +137,13 @@ export const CH = {
     GET: 'features:get',
     CHANGED: 'features:changed',
   },
+  onboarding: {
+    GET_STATE: 'onboarding:get-state',
+    SET_RESUME_STEP: 'onboarding:set-resume-step',
+    REQUEST_PERMISSION: 'onboarding:request-permission',
+    RESIZE: 'onboarding:resize',
+    FINISH: 'onboarding:finish',
+  },
   director: {
     GET_ACCOUNT: 'director:get-account',
     SIGN_IN: 'director:sign-in',

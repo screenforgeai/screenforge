@@ -1,6 +1,10 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { HugeiconsProps, IconSvgElement } from '@hugeicons/react';
 import {
+  AlertCircleIcon,
+  Analytics01Icon,
+  DragDropVerticalIcon,
+  UserIcon,
   Sun03Icon,
   Sun01Icon,
   SunCloud02Icon,
@@ -218,3 +222,7 @@ export const IconMinus = createIcon(Remove01Icon, 'IconMinus');
 export const IconFocusPoint = createIcon(CenterFocusIcon, 'IconFocusPoint');
 export const IconSunSoft = createIcon(SunCloud02Icon, 'IconSunSoft');
 export const IconSunCrisp = createIcon(Sun01Icon, 'IconSunCrisp');
+export const IconAlertCircle = createIcon(AlertCircleIcon, 'IconAlertCircle');
+export const IconAnalytics = createIcon(Analytics01Icon, 'IconAnalytics');
+export const IconGrip = createIcon(DragDropVerticalIcon, 'IconGrip');
+export const IconUser = createIcon(UserIcon, 'IconUser');

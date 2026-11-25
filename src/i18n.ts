@@ -28,6 +28,7 @@ import widgets from './locales/en/widgets.json';
 import settings from './locales/en/settings.json';
 import mask from './locales/en/mask.json';
 import screenshot from './locales/en/screenshot.json';
+import onboarding from './locales/en/onboarding.json';
 import motion from './locales/en/motion.json';
 import whatsNew from './locales/en/whatsNew.json';
 
@@ -57,6 +58,7 @@ import settingsEs from './locales/es/settings.json';
 import maskEs from './locales/es/mask.json';
 import whatsNewEs from './locales/es/whatsNew.json';
 import screenshotEs from './locales/es/screenshot.json';
+import onboardingEs from './locales/es/onboarding.json';
 
 // French
 import commonFr from './locales/fr/common.json';
@@ -84,6 +86,7 @@ import settingsFr from './locales/fr/settings.json';
 import maskFr from './locales/fr/mask.json';
 import whatsNewFr from './locales/fr/whatsNew.json';
 import screenshotFr from './locales/fr/screenshot.json';
+import onboardingFr from './locales/fr/onboarding.json';
 
 // German
 import commonDe from './locales/de/common.json';
@@ -111,6 +114,7 @@ import settingsDe from './locales/de/settings.json';
 import maskDe from './locales/de/mask.json';
 import whatsNewDe from './locales/de/whatsNew.json';
 import screenshotDe from './locales/de/screenshot.json';
+import onboardingDe from './locales/de/onboarding.json';
 
 // Japanese
 import commonJa from './locales/ja/common.json';
@@ -138,6 +142,7 @@ import settingsJa from './locales/ja/settings.json';
 import maskJa from './locales/ja/mask.json';
 import whatsNewJa from './locales/ja/whatsNew.json';
 import screenshotJa from './locales/ja/screenshot.json';
+import onboardingJa from './locales/ja/onboarding.json';
 
 // Portuguese
 import commonPt from './locales/pt/common.json';
@@ -165,6 +170,7 @@ import settingsPt from './locales/pt/settings.json';
 import maskPt from './locales/pt/mask.json';
 import whatsNewPt from './locales/pt/whatsNew.json';
 import screenshotPt from './locales/pt/screenshot.json';
+import onboardingPt from './locales/pt/onboarding.json';
 
 // Korean
 import commonKo from './locales/ko/common.json';
@@ -192,6 +198,7 @@ import settingsKo from './locales/ko/settings.json';
 import maskKo from './locales/ko/mask.json';
 import whatsNewKo from './locales/ko/whatsNew.json';
 import screenshotKo from './locales/ko/screenshot.json';
+import onboardingKo from './locales/ko/onboarding.json';
 
 // eslint-disable-next-line import/no-named-as-default-member
 i18n.use(initReactI18next).init({
@@ -224,6 +231,7 @@ i18n.use(initReactI18next).init({
     'motion',
     'whatsNew',
     'screenshot',
+    'onboarding',
   ],
   defaultNS: 'common',
   resources: {
@@ -254,6 +262,7 @@ i18n.use(initReactI18next).init({
       motion,
       whatsNew,
       screenshot,
+      onboarding,
     },
     es: {
       common: commonEs,
@@ -281,6 +290,7 @@ i18n.use(initReactI18next).init({
       mask: maskEs,
       whatsNew: whatsNewEs,
       screenshot: screenshotEs,
+      onboarding: onboardingEs,
     },
     fr: {
       common: commonFr,
@@ -308,6 +318,7 @@ i18n.use(initReactI18next).init({
       mask: maskFr,
       whatsNew: whatsNewFr,
       screenshot: screenshotFr,
+      onboarding: onboardingFr,
     },
     de: {
       common: commonDe,
@@ -335,6 +346,7 @@ i18n.use(initReactI18next).init({
       mask: maskDe,
       whatsNew: whatsNewDe,
       screenshot: screenshotDe,
+      onboarding: onboardingDe,
     },
     ja: {
       common: commonJa,
@@ -362,6 +374,7 @@ i18n.use(initReactI18next).init({
       mask: maskJa,
       whatsNew: whatsNewJa,
       screenshot: screenshotJa,
+      onboarding: onboardingJa,
     },
     pt: {
       common: commonPt,
@@ -389,6 +402,7 @@ i18n.use(initReactI18next).init({
       mask: maskPt,
       whatsNew: whatsNewPt,
       screenshot: screenshotPt,
+      onboarding: onboardingPt,
     },
     ko: {
       common: commonKo,
@@ -416,6 +430,7 @@ i18n.use(initReactI18next).init({
       mask: maskKo,
       whatsNew: whatsNewKo,
       screenshot: screenshotKo,
+      onboarding: onboardingKo,
     },
   },
   interpolation: {

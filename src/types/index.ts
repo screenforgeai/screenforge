@@ -8,6 +8,16 @@ export interface PreloadProgress {
 
 export type StartupPermission = 'screen' | 'microphone' | 'camera' | 'accessibility';
 
+/** The permissions first-run onboarding asks for (macOS). */
+export type OnboardingPermission = 'screen' | 'accessibility';
+
+/** What the first-run window needs from the main process. */
+export type OnboardingState = {
+  platform: string;
+  /** Set when the window reopens after the quit and reopen Screen Recording needs. */
+  resumeStep: 'permissions' | null;
+};
+
 /** An error as it crosses IPC from a renderer: Error instances don't survive structured clone intact. */
 export type SerializedError = {
   name?: string;
@@ -888,6 +898,17 @@ export interface ScreenforgeAPI {
   /** This release's feature flags; off until PostHog says on. */
   getFeatureFlags: () => Promise<FeatureFlags>;
   onFeatureFlagsChanged: (cb: (flags: FeatureFlags) => void) => () => void;
+  /** First-run window only: the platform, and the step to reopen at after a relaunch. */
+  getOnboardingState: () => Promise<OnboardingState>;
+  /** Saved right before the quit and reopen that Screen Recording needs. */
+  setOnboardingResumeStep: (step: 'permissions') => Promise<void>;
+  /** Shows macOS's own prompt; asking again for Accessibility opens System Settings. */
+  requestOnboardingPermission: (
+    permission: OnboardingPermission,
+  ) => Promise<StartupPermissionStatus>;
+  resizeOnboardingWindow: (height: number) => void;
+  /** Closes the first-run window and opens the recording toolbar or the editor. */
+  finishOnboarding: (outcome: 'record' | 'editor') => void;
   getDirectorAccount: () => Promise<DirectorAccountState>;
   /** Opens Director's approval page; resolves once signed in, cancelled or expired. */
   signInToDirector: () => Promise<void>;
@@ -924,6 +945,8 @@ export interface ScreenforgeAPI {
     profile?: { name: string; email: string };
     language?: string;
     telemetryEnabled?: boolean;
+    /** "Email me product updates and tips" from onboarding. */
+    productUpdates?: boolean;
   }) => Promise<{
     profile: { name: string; email: string };
     language: string;

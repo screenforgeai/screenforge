@@ -9,6 +9,7 @@ import ExportWorker from './components/ExportWorker';
 import { Teleprompter } from './components/Teleprompter/Teleprompter';
 import { SceneOverlayWindow } from './components/WidgetLibrary/_components/SceneOverlay';
 import { AreaSelector } from './components/AreaSelector/AreaSelector';
+import { OnboardingWindow } from './components/Onboarding/OnboardingWindow';
 import App from './app';
 import { captureException } from './lib/analytics';
 
@@ -58,6 +59,9 @@ let rootNode: React.ReactNode;
 switch (hash) {
   case 'splash':
     rootNode = <SplashScreen />;
+    break;
+  case 'onboarding':
+    rootNode = <OnboardingWindow />;
     break;
   case 'toolbar':
     rootNode = <FloatingToolbar />;

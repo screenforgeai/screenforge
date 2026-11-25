@@ -2,3 +2,5 @@
 export const SITE_URL = 'https://screenforge.co';
 
 export const CHANGELOG_URL = `${SITE_URL}/changelog`;
+
+export const PRIVACY_POLICY_URL = `${SITE_URL}/privacy-policy`;

@@ -90,6 +90,10 @@ import { registerFeatureChannels } from './modules/features/channel';
 import { initFeatureFlags } from './modules/features/service';
 import { initDirectorAccount } from './modules/director/service';
 import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
+import { registerOnboardingChannels } from './modules/onboarding/channel';
+import { getOnboardingLaunch } from './modules/onboarding/service';
+import { runOnboardingWindow } from './modules/onboarding/window';
+import type { OnboardingOutcome } from '../src/lib/onboarding/flow';
 
 // Before telemetry or anything else writes to userData: tells a fresh
 // install apart from an update for the What's new dialog.
@@ -591,6 +595,7 @@ app.on('ready', async () => {
   registerFeatureChannels();
   registerDirectorChannels();
   registerShareChannels();
+  registerOnboardingChannels();
   void initDirectorAccount();
   registerSceneOverlayChannels({
     preloadPath: PRELOAD_PATH,
@@ -661,16 +666,35 @@ app.on('ready', async () => {
 
   trackEvent('app_launched', { is_packaged: app.isPackaged });
 
-  // Prompt for screen capture and accessibility early so they don't block the user when they click record.
-  void requestMacScreenCaptureAccess();
-  void requestAccessibilityAccess();
+  // First run (or back from the quit and reopen Screen Recording needs): onboarding
+  // before the editor. It asks for screen recording and accessibility itself.
+  const onboarding = await getOnboardingLaunch().catch((error: unknown) => {
+    log.warn('[onboarding] launch check failed', error);
+    return { show: false, resumeStep: null };
+  });
+  let onboardingOutcome: OnboardingOutcome | null = null;
+  if (onboarding.show) {
+    onboardingOutcome = await runOnboardingWindow({
+      preloadPath: PRELOAD_PATH,
+      loadURL,
+      iconPath: APP_ICON_PATH,
+      resumeStep: onboarding.resumeStep,
+    });
+  } else {
+    // Prompt for screen capture and accessibility early so they don't block the user when they click record.
+    void requestMacScreenCaptureAccess();
+    void requestAccessibilityAccess();
+  }
 
   markStartupComplete();
 
   await waitForStartupCompletion();
 
-  mainWindow.show();
-  mainWindow.focus();
+  // "Start recording" goes straight to the toolbar, which hides the editor anyway.
+  if (onboardingOutcome !== 'record') {
+    mainWindow.show();
+    mainWindow.focus();
+  }
 
   const openToolbar = () => {
     // The toolbar would land in the still, or outlive the capture that closes it.
@@ -688,6 +712,9 @@ app.on('ready', async () => {
       toolbarWindow.focus();
     }
   };
+  if (onboardingOutcome === 'record') {
+    openToolbar();
+  }
   const takeScreenshot = (trigger: 'shortcut' | 'menu' | 'toolbar' = 'shortcut') => {
     const deps = {
       getMainWindow: () => mainWindow,
