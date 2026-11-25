@@ -1243,24 +1243,26 @@ describe('FloatingToolbar recording widget', () => {
       expect(screenforge.captureScreenshot).not.toHaveBeenCalled();
     });
 
-    it("keeps a Record press's pick when a second press is cancelled after it", async () => {
+    it("keeps the first press's display when a second press finishes during its countdown", async () => {
       let pickFirst: (id: number) => void = () => undefined;
       screenforge.pickDisplay
         .mockImplementationOnce(() => new Promise<number>((resolve) => (pickFirst = resolve)))
-        .mockResolvedValueOnce(null);
+        // The second press picks the other monitor, but only after the first one's countdown began.
+        .mockResolvedValueOnce(builtIn.id);
       await renderWithDisplays();
       await pressRecord();
       await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(1), {
         timeout: ASYNC_UI_TIMEOUT_MS,
       });
 
-      // A second press, held before its own pick until the first press has picked.
+      // The second press is held before its own pick until the first press has picked.
       let appendModeSecond: (value: boolean) => void = () => undefined;
       screenforge.getAppendMode.mockImplementationOnce(
         () => new Promise<boolean>((resolve) => (appendModeSecond = resolve)),
       );
       fireEvent.click(screen.getByRole('button', { name: 'Record' }));
       await act(async () => pickFirst(external.id));
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
       await act(async () => appendModeSecond(false));
       await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(2), {
         timeout: ASYNC_UI_TIMEOUT_MS,
@@ -1268,7 +1270,22 @@ describe('FloatingToolbar recording widget', () => {
       await finishCountdown();
       await waitForRecordingState();
 
+      expect(screenforge.startRecording).toHaveBeenCalledTimes(1);
       expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0:0', null);
+    });
+
+    it('records again after a pick was cancelled', async () => {
+      screenforge.pickDisplay.mockResolvedValueOnce(null).mockResolvedValueOnce(builtIn.id);
+      await renderWithDisplays();
+      await pressRecord();
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(1), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+      await pressRecord();
+      await finishCountdown();
+      await waitForRecordingState();
+
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:1:0', null);
     });
 
     it('asks which monitor before drawing a recording area, then draws on it', async () => {

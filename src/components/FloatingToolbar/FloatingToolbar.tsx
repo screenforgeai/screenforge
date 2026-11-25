@@ -1355,8 +1355,14 @@ export const FloatingToolbar = () => {
         pickedDisplayId = displayId ?? null;
       }
 
-      // Stored only as its countdown starts, so another Record press still preparing (waiting
-      // for permissions or a pick) can't clear or replace this one's choice.
+      // Another Record press finished preparing first and its countdown is running: that one
+      // records, with its own display. A late finish must not restart it or replace its pick.
+      if (recordStateRef.current !== 'idle') {
+        logToolbarDiagnostic('toolbar.recording.stale-preparation-dropped', {
+          recordState: recordStateRef.current,
+        });
+        return;
+      }
       recordDisplayIdRef.current = pickedDisplayId;
       setCountdown(3);
       setRecordState('countdown');
