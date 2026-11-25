@@ -8,6 +8,7 @@
   "displayPick_screenshot": "Screenshot this display",
   "displayPick_area": "Select an area on this display",
   "displayPick_hint": "Esc to cancel",
+  "displayUnavailable": "The display you picked isn't available anymore. Try again and pick a display.",
   "window": "Window",
   "windowPickOnRecord": "Window: you'll choose the app when recording starts",
   "noWindows_title": "No windows available",

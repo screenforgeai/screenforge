@@ -519,12 +519,17 @@ export const FloatingToolbar = () => {
     }
   };
 
-  /** The screen source that shows a picked display, or null to fall back to the usual source. */
+  /**
+   * The screen source that shows a picked display. Null when one was picked but no screen shows
+   * it any more (unplugged during the countdown, or Screen Recording revoked): the capture then
+   * stops rather than fall back to another monitor. Undefined when no display was picked, where
+   * the usual source applies.
+   */
   const resolveScreenSourceIdForDisplay = async (
     displayId: number | null | undefined,
-  ): Promise<string | null> => {
+  ): Promise<string | null | undefined> => {
     if (displayId === null || displayId === undefined) {
-      return null;
+      return undefined;
     }
     const sourceId = await window.screenforge
       .getScreenSourceForDisplay(displayId)
@@ -1032,13 +1037,19 @@ export const FloatingToolbar = () => {
     // Wayland: a window is picked in the share dialog, so there is no window: source id; the
     // portal stream itself is the capture.
     const pickWindowInDialog = captureBackendRef.current === 'wayland-portal' && tab === 'window';
-    const chosenScreenId =
-      tab === 'display' && !pickWindowInDialog
-        ? await resolveScreenSourceIdForDisplay(recordDisplayIdRef.current)
-        : null;
+    const pickedDisplayId =
+      tab === 'display' && !pickWindowInDialog ? recordDisplayIdRef.current : null;
+    const chosenScreenId = await resolveScreenSourceIdForDisplay(pickedDisplayId);
+    if (chosenScreenId === null) {
+      logToolbarDiagnostic('toolbar.display.unavailable', { displayId: pickedDisplayId });
+      setRecordState('idle');
+      setCountdown(3);
+      window.screenforge.systemWarning(t('displayUnavailable'));
+      return;
+    }
     const sourceId = pickWindowInDialog
       ? resolveSourceIdForTab('display', null, sources)
-      : resolveSourceIdForTab(tab, selectedSource, sources, chosenScreenId);
+      : resolveSourceIdForTab(tab, selectedSource, sources, chosenScreenId ?? null);
     if (!sourceId) {
       discardWaylandPortalCapture();
       window.screenforge.systemWarning(tab === 'window' ? t('chooseWindow') : t('noDisplaySource'));
@@ -1208,15 +1219,17 @@ export const FloatingToolbar = () => {
     if (displayId === null) {
       return;
     }
+    const chosenScreenId = await resolveScreenSourceIdForDisplay(displayId);
+    if (chosenScreenId === null) {
+      logToolbarDiagnostic('toolbar.display.unavailable', { displayId });
+      window.screenforge.systemWarning(t('displayUnavailable'));
+      return;
+    }
     await takePhoto({
       kind: 'display',
       sourceId:
-        resolveSourceIdForTab(
-          'display',
-          selectedSource,
-          sources,
-          await resolveScreenSourceIdForDisplay(displayId),
-        ) ?? 'screen:0',
+        resolveSourceIdForTab('display', selectedSource, sources, chosenScreenId ?? null) ??
+        'screen:0',
     });
   }
 
@@ -1333,15 +1346,18 @@ export const FloatingToolbar = () => {
       ) {
         return;
       }
-      recordDisplayIdRef.current = null;
+      let pickedDisplayId: number | null = null;
       if (tab === 'display') {
         const displayId = await pickDisplayToCapture('record');
         if (displayId === null) {
           return;
         }
-        recordDisplayIdRef.current = displayId ?? null;
+        pickedDisplayId = displayId ?? null;
       }
 
+      // Stored only as its countdown starts, so another Record press still preparing (waiting
+      // for permissions or a pick) can't clear or replace this one's choice.
+      recordDisplayIdRef.current = pickedDisplayId;
       setCountdown(3);
       setRecordState('countdown');
     } finally {

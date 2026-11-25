@@ -118,13 +118,27 @@ export function openDisplayPicker(
       // macOS moves the window after setVisibleOnAllWorkspaces/setAlwaysOnTop: put it back.
       win.setBounds(bounds);
 
-      overlays.set(win.webContents.id, { win, display, number: index + 1 });
-      // Closed from outside (or crashed): the others go too.
-      win.on('closed', () => {
-        if (isOpen()) {
-          finish(null);
+      const webContentsId = win.webContents.id;
+      overlays.set(webContentsId, { win, display, number: index + 1 });
+      // One of this pick's overlays closed from outside, or its page crashed (the window may stay
+      // open, but nothing in it answers clicks or Esc): cancel, and the others go too. Windows
+      // close asynchronously, so a closed event can arrive from an earlier pick's overlay after
+      // a new pick opened: only this pick's own overlays cancel it.
+      const cancelIfCurrent = (reason: string, details?: unknown) => {
+        if (overlays.get(webContentsId)?.win !== win) {
+          return;
         }
-      });
+        log.warn('[display-picker] an overlay went away; cancelled', {
+          reason,
+          displayId: display.id,
+          details,
+        });
+        finish(null);
+      };
+      win.on('closed', () => cancelIfCurrent('closed'));
+      win.webContents.on('render-process-gone', (_event, details) =>
+        cancelIfCurrent('render-process-gone', details),
+      );
       win.once('ready-to-show', () => {
         // Keys go to the monitor the cursor is on.
         if (display.id === cursorDisplayId) {

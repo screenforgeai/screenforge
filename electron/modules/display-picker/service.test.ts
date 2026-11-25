@@ -6,7 +6,7 @@ import type { DisplayInfo } from '../../../src/types/index';
 
 type FakeWindow = EventEmitter & {
   options: { x: number; y: number; width: number; height: number };
-  webContents: { id: number };
+  webContents: EventEmitter & { id: number };
   closed: boolean;
   isDestroyed: () => boolean;
   close: () => void;
@@ -35,7 +35,7 @@ vi.mock('electron', async () => {
   state.screen = screenEmitter;
   class BrowserWindow extends Emitter {
     options: unknown;
-    webContents = { id: state.nextId++ };
+    webContents = Object.assign(new Emitter(), { id: state.nextId++ });
     closed = false;
     show = vi.fn();
     showInactive = vi.fn();
@@ -138,14 +138,16 @@ describe('display picker', () => {
 
   it('puts each overlay back on its own monitor once shown (macOS may move it)', () => {
     void open();
+    // The cursor is on the external monitor, so the laptop's overlay is shown without focus.
     const overlay = overlayOf(laptop);
     overlay.setBounds.mockClear();
     overlay.emit('ready-to-show');
 
-    expect(overlay.show.mock.invocationCallOrder[0] ?? 0).toBeLessThan(
-      overlay.setBounds.mock.invocationCallOrder[0] ?? 0,
-    );
+    expect(overlay.showInactive).toHaveBeenCalledTimes(1);
     expect(overlay.setBounds).toHaveBeenCalledWith(bounds[1]);
+    const [shownAt] = overlay.showInactive.mock.invocationCallOrder;
+    const [placedAt] = overlay.setBounds.mock.invocationCallOrder;
+    expect(shownAt).toBeLessThan(placedAt as number);
     expect(overlay.options).toEqual(expect.objectContaining({ enableLargerThanScreen: true }));
   });
 
@@ -191,6 +193,30 @@ describe('display picker', () => {
     state.windows.at(-1)?.close();
     await expect(second).resolves.toBeNull();
     expect(state.windows.every((win) => win.closed)).toBe(true);
+  });
+
+  it("cancels when an overlay's page crashes, closing every overlay", async () => {
+    const picked = open();
+    overlayOf(external).webContents.emit('render-process-gone', {}, { reason: 'crashed' });
+
+    await expect(picked).resolves.toBeNull();
+    expect(state.windows.every((win) => win.closed)).toBe(true);
+  });
+
+  it("ignores an earlier pick's overlay closing late, after a new pick opened", async () => {
+    const first = open();
+    const earlierOverlay = overlayOf(external);
+    cancelDisplayPick();
+    await expect(first).resolves.toBeNull();
+
+    const second = open();
+    // Windows close asynchronously: the earlier overlay's closed event can come only now.
+    earlierOverlay.emit('closed');
+    earlierOverlay.webContents.emit('render-process-gone', {}, { reason: 'killed' });
+    const current = state.windows.at(-1) as FakeWindow;
+    confirmDisplayPick(current.webContents.id);
+
+    await expect(second).resolves.toBe(2);
   });
 
   it('cancels when a monitor is plugged in or out while picking', async () => {
