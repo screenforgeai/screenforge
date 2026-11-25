@@ -2,15 +2,8 @@ import { createRoot } from 'react-dom/client';
 import './i18n';
 import './i18n.types';
 import './index.css';
-import SplashScreen from './components/SplashScreen';
-import { FloatingToolbar } from './components/FloatingToolbar';
-import { CameraPreviewWindow } from './components/CameraPreview/CameraPreviewWindow';
-import ExportWorker from './components/ExportWorker';
-import { Teleprompter } from './components/Teleprompter/Teleprompter';
-import { SceneOverlayWindow } from './components/WidgetLibrary/_components/SceneOverlay';
-import { AreaSelector } from './components/AreaSelector/AreaSelector';
-import App from './app';
 import { captureException } from './lib/analytics';
+import { loadWindowRoot } from './windowRoots';
 
 const hash = window.location.hash.slice(1); // strip leading #
 
@@ -54,41 +47,7 @@ if (
   document.body.classList.add('transparent-window');
 }
 
-let rootNode: React.ReactNode;
-switch (hash) {
-  case 'splash':
-    rootNode = <SplashScreen />;
-    break;
-  case 'toolbar':
-    rootNode = <FloatingToolbar />;
-    break;
-  case 'export-worker':
-    rootNode = <ExportWorker />;
-    break;
-  case 'teleprompter':
-    rootNode = <Teleprompter />;
-    break;
-  case 'scene-overlay':
-    rootNode = <SceneOverlayWindow />;
-    break;
-  case 'camera-preview':
-    rootNode = <CameraPreviewWindow />;
-    break;
-  case 'area-selector':
-    rootNode = <AreaSelector />;
-    break;
-  case 'area-selector-screenshot':
-    rootNode = <AreaSelector purpose="screenshot" />;
-    break;
-  case 'area-selector-still':
-    rootNode = <AreaSelector purpose="screenshot-still" />;
-    break;
-  case 'area-selector-record-still':
-    rootNode = <AreaSelector purpose="record-still" />;
-    break;
-  default:
-    rootNode = <App />;
-}
-
 const root = createRoot(document.getElementById('root') as HTMLElement);
-root.render(rootNode);
+void loadWindowRoot(hash).then((node) => {
+  root.render(node);
+});
