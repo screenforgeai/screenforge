@@ -7,7 +7,7 @@ import {
   IconZoomScan,
 } from 'src/lib/icons';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { trackEvent } from 'src/lib/analytics';
@@ -20,7 +20,7 @@ import {
   inferZoomDefaultsAtTime,
 } from 'src/lib/effects/zoom';
 import { getZoomCrop, toCropSpaceRecording } from 'src/lib/effects/zoom/crop-space';
-import type { CinematicTiltDirection } from 'src/types/timeline';
+import type { CinematicTiltDirection, ZoomClip } from 'src/types/timeline';
 import {
   Button,
   DropdownMenu,
@@ -42,6 +42,17 @@ import { cn, formatTime } from 'src/lib/utils';
 
 const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 
+const findPlayheadZoomClipId = (clips: readonly ZoomClip[], time: number): string | null =>
+  clips.find((clip) => time >= clip.start && time <= clip.end)?.id ?? null;
+
+/** The position picker follows the playhead, so it alone subscribes to the time. */
+const PlayheadZoomPositionPicker = (
+  props: Omit<ComponentProps<typeof ZoomPositionPicker>, 'videoTime'>,
+) => {
+  const videoTime = useStore((state) => state.currentTime);
+  return <ZoomPositionPicker {...props} videoTime={videoTime} />;
+};
+
 export const ZoomWidget = () => {
   const { t } = useTranslation('zoom');
   const [manualExpandedId, setManualExpandedId] = useState<string | null>(null);
@@ -54,7 +65,7 @@ export const ZoomWidget = () => {
     beginHistoryGroup,
     endHistoryGroup,
     setSelectedClip,
-    currentTime,
+    playheadClipId,
     selectedClip,
     requestSeekTo,
     zoomCrop,
@@ -67,16 +78,15 @@ export const ZoomWidget = () => {
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
       setSelectedClip: state.setSelectedClip,
-      currentTime: state.currentTime,
+      // Only the clip under the playhead, not the time itself: playback updates
+      // currentTime every frame, and the panel only changes when this does.
+      playheadClipId: findPlayheadZoomClipId(state.zoomClips, state.currentTime),
       selectedClip: state.selectedClip,
       requestSeekTo: state.requestSeekTo,
     })),
   );
 
   const expandedId = selectedClip?.effectId === 'zoom' ? selectedClip.id : manualExpandedId;
-  const playheadClipId =
-    zoomClips.find((clip) => currentTime >= clip.start && currentTime <= clip.end)?.id ?? null;
-
   useEffect(() => {
     if (!playheadClipId) {
       return;
@@ -85,6 +95,7 @@ export const ZoomWidget = () => {
   }, [playheadClipId]);
 
   const handleAddZoom = (preset: 'standard' | 'cinematic' = 'standard') => {
+    const { currentTime } = useStore.getState();
     const start = currentTime;
     // Zoom targets are positions in the cropped picture.
     const defaults = inferZoomDefaultsAtTime(
@@ -224,6 +235,7 @@ export const ZoomWidget = () => {
                   aria-expanded={isExpanded}
                   aria-current={isPlayheadActive ? 'true' : undefined}
                   onClick={() => {
+                    const { currentTime } = useStore.getState();
                     const isPlayheadOverClip =
                       currentTime >= clip.start + 0.5 && currentTime <= clip.end;
 
@@ -348,9 +360,8 @@ export const ZoomWidget = () => {
 
                           {clip.mode === 'manual' && recordingResult && (
                             <div className="flex flex-col gap-1.5">
-                              <ZoomPositionPicker
+                              <PlayheadZoomPositionPicker
                                 videoPath={recordingResult.filePath}
-                                videoTime={currentTime}
                                 crop={zoomCrop}
                                 cx={clip.cx}
                                 cy={clip.cy}

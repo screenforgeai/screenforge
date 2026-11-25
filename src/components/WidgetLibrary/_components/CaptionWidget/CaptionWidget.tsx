@@ -123,7 +123,6 @@ const CaptionSegmentCard = ({
   segment,
   index,
   isActive,
-  currentTime,
   onDelete,
   onSeekToWord,
   onEditConfirm,
@@ -131,7 +130,6 @@ const CaptionSegmentCard = ({
   segment: CaptionSegment;
   index: number;
   isActive: boolean;
-  currentTime: number;
   onDelete: () => void;
   onSeekToWord: (start: number) => void;
   onEditConfirm: (id: string, newText: string) => void;
@@ -181,9 +179,13 @@ const CaptionSegmentCard = ({
     setIsEditing(false);
   };
 
-  const activeWordIndex = isEditing
-    ? -1
-    : segment.words.findIndex((w) => currentTime >= w.start && currentTime < w.end);
+  // Each card subscribes to its own highlighted word, so playback re-renders a
+  // card only when that word changes, and never the cards it isn't in.
+  const activeWordIndex = useStore((state) =>
+    isEditing || state.currentTime < segment.start || state.currentTime > segment.end
+      ? -1
+      : segment.words.findIndex((w) => state.currentTime >= w.start && state.currentTime < w.end),
+  );
 
   return (
     <ContextMenu>
@@ -359,7 +361,7 @@ export const CaptionWidget = () => {
     captions,
     setCaptions,
     commitEdit,
-    currentTime,
+    activeSegmentId,
     requestSeekTo,
     currentProjectId,
   } = useStore(
@@ -368,7 +370,12 @@ export const CaptionWidget = () => {
       captions: state.captions,
       setCaptions: state.setCaptions,
       commitEdit: state.commitEdit,
-      currentTime: state.currentTime,
+      // Only the segment under the playhead, not the time itself: playback
+      // updates currentTime every frame, the list only changes with this.
+      activeSegmentId:
+        state.captions.segments.find(
+          (s) => state.currentTime >= s.start && state.currentTime <= s.end,
+        )?.id ?? null,
       requestSeekTo: state.requestSeekTo,
       currentProjectId: state.currentProjectId,
     })),
@@ -390,9 +397,6 @@ export const CaptionWidget = () => {
   const isTranscribingRef = useRef(false);
 
   const hasAudio = !!recordingResult?.audioPath;
-
-  const activeSegmentId =
-    captions.segments.find((s) => currentTime >= s.start && currentTime <= s.end)?.id ?? null;
 
   useEffect(() => {
     if (!activeSegmentId) {
@@ -927,7 +931,6 @@ export const CaptionWidget = () => {
                     segment={seg}
                     index={index}
                     isActive={activeSegmentId === seg.id}
-                    currentTime={currentTime}
                     onDelete={() => handleDeleteSegment(seg.id)}
                     onSeekToWord={(start) => requestSeekTo(start)}
                     onEditConfirm={handleEditSegment}

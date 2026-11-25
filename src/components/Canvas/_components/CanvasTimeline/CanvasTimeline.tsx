@@ -158,7 +158,6 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
     keyboardEnabled,
     canUndo,
     canRedo,
-    currentTime,
     pendingSeekTime,
     pendingPauseSeekTime,
     pendingPlayFromStartToken,
@@ -193,7 +192,10 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       keyboardEnabled: s.keyboard.enabled,
       canUndo: s.canUndo,
       canRedo: s.canRedo,
-      currentTime: s.currentTime,
+      // Not currentTime: playback writes it every frame, and subscribing here
+      // re-rendered the whole timeline (and everything under it) per frame. The
+      // playhead moves imperatively (timelineRef.setTime); handlers read the
+      // time when they run, and PlaybackTimeLabel shows it.
       pendingSeekTime: s.pendingSeekTime,
       pendingPauseSeekTime: s.pendingPauseSeekTime,
       pendingPlayFromStartToken: s.pendingPlayFromStartToken,
@@ -902,7 +904,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
   );
 
   const snapTargets = useMemo(() => {
-    const points = new Set<number>([0, totalDur, currentTime]);
+    const points = new Set<number>([0, totalDur]);
 
     for (const seg of orderedSegments) {
       points.add(seg.timelineStart);
@@ -915,10 +917,12 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
     }
 
     return [...points].sort((a, b) => a - b);
-  }, [currentTime, orderedSegments, totalDur, zoomClips]);
+  }, [orderedSegments, totalDur, zoomClips]);
 
+  // The playhead is a snap target too, read when snapping happens.
   const snapTime = useCallback(
-    (time: number) => getNearestSnap(time, snapTargets, snapThresholdSeconds),
+    (time: number) =>
+      getNearestSnap(time, [...snapTargets, useStore.getState().currentTime], snapThresholdSeconds),
     [snapTargets, snapThresholdSeconds],
   );
 
@@ -1475,6 +1479,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
     if (selectedClip?.effectId === 'text') {
       setSelectedClip(null);
     }
+    const { currentTime } = useStore.getState();
     if (playing) {
       stopRaf();
       syncVideoForTimeline(currentTime, false);
@@ -1486,7 +1491,6 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       playFrom(startTime);
     }
   }, [
-    currentTime,
     playFrom,
     playing,
     selectedClip,
@@ -1661,6 +1665,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         });
 
         // Shift the playhead left if it was past the deleted segment.
+        const { currentTime } = useStore.getState();
         if (willBeFullyRemoved && originalSeg && currentTime > originalSeg.timelineStart) {
           const deletedDuration = originalSeg.timelineEnd - originalSeg.timelineStart;
           const nextTime = Math.max(originalSeg.timelineStart, currentTime - deletedDuration);
@@ -1669,7 +1674,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
         }
       }
     },
-    [audioPath, hasAudioLane, commitEdit, currentTime, orderedSegments, setCurrentTime],
+    [audioPath, hasAudioLane, commitEdit, orderedSegments, setCurrentTime],
   );
 
   const deleteSelectedClip = useCallback(() => {
@@ -1796,25 +1801,29 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
   }, [setSelectedClip]);
 
   const handleShortcutAddZoom = useCallback(
-    () => handleAddZoomAtTime(currentTime, 'standard'),
-    [handleAddZoomAtTime, currentTime],
+    () => handleAddZoomAtTime(useStore.getState().currentTime, 'standard'),
+    [handleAddZoomAtTime],
   );
   const handleShortcutAddCinematicZoom = useCallback(
-    () => handleAddZoomAtTime(currentTime, 'cinematic'),
-    [handleAddZoomAtTime, currentTime],
+    () => handleAddZoomAtTime(useStore.getState().currentTime, 'cinematic'),
+    [handleAddZoomAtTime],
   );
   const handleShortcutAddText = useCallback(
-    () => handleAddTextAtTime(currentTime),
-    [handleAddTextAtTime, currentTime],
+    () => handleAddTextAtTime(useStore.getState().currentTime),
+    [handleAddTextAtTime],
   );
   const handleShortcutAddMask = useCallback(
-    () => handleAddMaskAtTime(currentTime),
-    [handleAddMaskAtTime, currentTime],
+    () => handleAddMaskAtTime(useStore.getState().currentTime),
+    [handleAddMaskAtTime],
+  );
+  const splitAtPlayhead = useCallback(
+    () => splitAtTime(useStore.getState().currentTime),
+    [splitAtTime],
   );
 
   useTimelineGlobalHotkeys({
     onTogglePlay: togglePlay,
-    onSplitAtPlayhead: () => splitAtTime(currentTime),
+    onSplitAtPlayhead: splitAtPlayhead,
     onUndo: undo,
     onRedo: redo,
     onDeleteSelected: deleteSelectedClip,
@@ -2282,14 +2291,13 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
 
       <TimelineToolbar
         playing={playing}
-        currentTime={currentTime}
         totalDur={totalDur}
         scaleWidth={scaleWidth}
         canUndo={canUndo}
         canRedo={canRedo}
         onTogglePlay={togglePlay}
         onStop={handleStop}
-        onSplit={() => splitAtTime(currentTime)}
+        onSplit={splitAtPlayhead}
         onUndo={undo}
         onRedo={redo}
         onZoomIn={() => setScaleWidth((w) => Math.min(SCALE_MAX, w + SCALE_STEP))}

@@ -59,7 +59,7 @@ export const MaskWidget = () => {
   const {
     recordingResult,
     maskClips,
-    currentTime,
+    activeMaskIdsKey,
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
@@ -69,7 +69,12 @@ export const MaskWidget = () => {
     useShallow((state) => ({
       recordingResult: state.recordingResult,
       maskClips: state.maskClips,
-      currentTime: state.currentTime,
+      // The ids of masks under the playhead, as one string so it compares by
+      // value: playback updates currentTime every frame, this rarely changes.
+      activeMaskIdsKey: state.maskClips
+        .filter((m) => state.currentTime >= m.start && state.currentTime < m.end)
+        .map((m) => m.id)
+        .join(','),
       commitEdit: state.commitEdit,
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
@@ -83,8 +88,10 @@ export const MaskWidget = () => {
       ? Math.max(...mediaSegments.map((s) => s.timelineEnd))
       : (recordingResult?.duration ?? 60);
 
+  const activeMaskIds = new Set(activeMaskIdsKey ? activeMaskIdsKey.split(',') : []);
+
   const handleAddMask = () => {
-    const start = currentTime;
+    const start = useStore.getState().currentTime;
     const newMask: MaskClip = {
       id: `mask-${Date.now()}`,
       start,
@@ -156,7 +163,7 @@ export const MaskWidget = () => {
         )}
 
         {maskClips.map((mask, index) => {
-          const isActive = currentTime >= mask.start && currentTime < mask.end;
+          const isActive = activeMaskIds.has(mask.id);
           const isExpanded = expandedId === mask.id;
           const isHighlighted = isExpanded || isActive;
 

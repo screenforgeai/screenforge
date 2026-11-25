@@ -1,3 +1,4 @@
+import { Profiler } from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -98,6 +99,61 @@ describe('ZoomWidget zoom clip controls', () => {
       const clips = useStore.getState().zoomClips;
       expect(clips).toHaveLength(2);
       expect(clips[1].preset).toBe('cinematic');
+    });
+  });
+});
+
+describe('ZoomWidget during playback', () => {
+  it('does not re-render while the playhead stays inside the same clip', () => {
+    act(() => {
+      useStore
+        .getState()
+        .setZoom([
+          defaultZoomClip('zoom-1', 0, 3, 0.5, 0.5, 2),
+          defaultZoomClip('zoom-2', 5, 8, 0.5, 0.5, 2),
+        ]);
+    });
+    let renders = 0;
+    render(
+      <Profiler id="zoom" onRender={() => (renders += 1)}>
+        <ZoomWidget />
+      </Profiler>,
+    );
+    const initialRenders = renders;
+
+    // ~60 playback ticks inside zoom-1, one commit each as during real
+    // playback: nothing the panel shows changes.
+    for (let i = 0; i < 60; i += 1) {
+      act(() => {
+        useStore.getState().setCurrentTime(1 + i / 60);
+      });
+    }
+    expect(renders).toBe(initialRenders);
+
+    // Crossing into zoom-2 moves the "live" highlight, so the panel updates.
+    act(() => {
+      useStore.getState().setCurrentTime(6);
+    });
+    expect(renders).toBeGreaterThan(initialRenders);
+    const liveClip = screen.getByText('5.0s → 8.0s').closest('[aria-current]');
+    expect(liveClip).not.toBeNull();
+  });
+
+  it('adds a zoom at the playhead time read when the button is clicked', async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useStore.getState().setZoom([]);
+    });
+    render(<ZoomWidget />);
+
+    act(() => {
+      useStore.getState().setCurrentTime(7.25);
+    });
+    await user.click(screen.getByRole('button', { name: 'Add zoom' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Standard zoom' }));
+
+    await waitFor(() => {
+      expect(useStore.getState().zoomClips[0]?.start).toBe(7.25);
     });
   });
 });

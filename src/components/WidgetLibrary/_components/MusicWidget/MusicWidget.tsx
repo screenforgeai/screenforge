@@ -32,7 +32,7 @@ export const MusicWidget = () => {
     setSelectedClip,
     beginHistoryGroup,
     endHistoryGroup,
-    currentTime,
+    playheadClipId,
   } = useStore(
     useShallow((s) => ({
       musicClips: s.musicClips,
@@ -44,7 +44,11 @@ export const MusicWidget = () => {
       setSelectedClip: s.setSelectedClip,
       beginHistoryGroup: s.beginHistoryGroup,
       endHistoryGroup: s.endHistoryGroup,
-      currentTime: s.currentTime,
+      // Only the clip under the playhead, not the time itself: playback
+      // updates currentTime every frame, the panel only changes with this.
+      playheadClipId:
+        s.musicClips.find((c) => s.currentTime >= c.timelineStart && s.currentTime <= c.timelineEnd)
+          ?.id ?? null,
     })),
   );
 
@@ -61,10 +65,6 @@ export const MusicWidget = () => {
   const clipRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const expandedId = selectedClip?.effectId === 'music' ? selectedClip.id : null;
-
-  const playheadClipId =
-    musicClips.find((c) => currentTime >= c.timelineStart && currentTime <= c.timelineEnd)?.id ??
-    null;
 
   useEffect(() => {
     if (!playheadClipId) {

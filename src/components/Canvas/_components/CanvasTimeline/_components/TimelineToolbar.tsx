@@ -12,11 +12,11 @@ import type { MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Tooltip, TooltipContent, TooltipTrigger } from '../../../../../lib/ui';
 import { formatTime } from '../../../../../lib/utils';
+import { useStore } from '../../../../../store';
 import { TOOLBAR_H, SCALE_MIN, SCALE_MAX } from '../constants';
 
 interface Props {
   playing: boolean;
-  currentTime: number;
   totalDur: number;
   scaleWidth: number;
   canUndo: boolean;
@@ -30,9 +30,17 @@ interface Props {
   onZoomOut: () => void;
 }
 
+/**
+ * The playhead time. It subscribes to the formatted text on its own, so during
+ * playback only this label re-renders, and only when the shown text changes.
+ */
+const PlaybackTimeLabel = () => {
+  const text = useStore((s) => formatTime(s.currentTime));
+  return <span style={{ color: 'var(--color-primary)' }}>{text}</span>;
+};
+
 export const TimelineToolbar = ({
   playing,
-  currentTime,
   totalDur,
   scaleWidth,
   canUndo,
@@ -130,7 +138,7 @@ export const TimelineToolbar = ({
           className="font-mono tabular-nums ml-2 text-sm text-sf-secondary"
           style={{ letterSpacing: '0.04em' }}
         >
-          <span style={{ color: 'var(--color-primary)' }}>{formatTime(currentTime)}</span>
+          <PlaybackTimeLabel />
           {' / '}
           {formatTime(totalDur)}
         </span>

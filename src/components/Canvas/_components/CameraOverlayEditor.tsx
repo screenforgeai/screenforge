@@ -39,32 +39,45 @@ export const CameraOverlayEditor = ({ containerRef, canvasRef }: Props) => {
     activeWidget,
     recordingResult,
     camera,
-    currentTime,
     zoomClips,
-    cameraClips,
+    activeClip,
+    currentZoomScale,
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
     setActiveWidget,
   } = useStore(
-    useShallow((state) => ({
-      activeWidget: state.activeWidget,
-      recordingResult: state.recordingResult,
-      camera: state.camera,
-      currentTime: state.currentTime,
-      zoomClips: state.zoomClips,
-      cameraClips: state.cameraClips,
-      commitEdit: state.commitEdit,
-      beginHistoryGroup: state.beginHistoryGroup,
-      endHistoryGroup: state.endHistoryGroup,
-      setActiveWidget: state.setActiveWidget,
-    })),
+    useShallow((state) => {
+      // What the overlay draws at the playhead, not the time itself: playback
+      // updates currentTime every frame. The zoom scale only matters while a
+      // picture-in-picture camera is on screen, so only then does it follow
+      // the zoom frame by frame.
+      const clipAtPlayhead = findCameraClipAtTime(state.cameraClips, state.currentTime);
+      const showsPip =
+        Boolean(state.recordingResult?.cameraPath) &&
+        state.camera.enabled &&
+        Boolean(clipAtPlayhead) &&
+        (clipAtPlayhead?.layout ?? 'pip') === 'pip';
+      return {
+        activeWidget: state.activeWidget,
+        recordingResult: state.recordingResult,
+        camera: state.camera,
+        zoomClips: state.zoomClips,
+        activeClip: clipAtPlayhead,
+        currentZoomScale: showsPip
+          ? (interpolateCamera(state.zoomClips, state.currentTime)?.scale ?? 1)
+          : 1,
+        commitEdit: state.commitEdit,
+        beginHistoryGroup: state.beginHistoryGroup,
+        endHistoryGroup: state.endHistoryGroup,
+        setActiveWidget: state.setActiveWidget,
+      };
+    }),
   );
 
   const [box, setBox] = useState({ width: 0, height: 0, canvasWidth: 0, canvasHeight: 0 });
   const [drag, setDrag] = useState<DragState>(null);
   const isEditing = activeWidget === 'camera';
-  const activeClip = findCameraClipAtTime(cameraClips, currentTime);
 
   const shouldRender =
     Boolean(recordingResult?.cameraPath) && camera.enabled && Boolean(activeClip);
@@ -107,13 +120,6 @@ export const CameraOverlayEditor = ({ containerRef, canvasRef }: Props) => {
   const activeLayout = activeClip?.layout ?? 'pip';
   const isPipLayout = activeLayout === 'pip';
 
-  // Disable layout animation when zoom is active. During zoom the overlay position
-  // changes every frame (tracking the zoomed camera), so the 0.22s layout transition
-  // would chase a moving target and produce a jerk at the end of the zoom.
-  const currentZoomScale = isPipLayout
-    ? (interpolateCamera(zoomClips, currentTime)?.scale ?? 1)
-    : 1;
-
   const rect = useMemo(() => {
     if (!shouldRender || !activeClip) {
       return null;
@@ -128,7 +134,7 @@ export const CameraOverlayEditor = ({ containerRef, canvasRef }: Props) => {
 
     let canvasRect;
     if (isPipLayout) {
-      const zoomScale = interpolateCamera(zoomClips, currentTime)?.scale ?? 1;
+      const zoomScale = currentZoomScale;
       const effectiveCamera = {
         ...camera,
         x: activeClip.x,
@@ -188,10 +194,9 @@ export const CameraOverlayEditor = ({ containerRef, canvasRef }: Props) => {
     box.height,
     box.width,
     camera,
-    currentTime,
+    currentZoomScale,
     isPipLayout,
     shouldRender,
-    zoomClips,
   ]);
 
   const updateCameraClip = useCallback(
@@ -248,7 +253,7 @@ export const CameraOverlayEditor = ({ containerRef, canvasRef }: Props) => {
       const maxWidthByY = Math.max(minWidth, (rect.canvasHeight - drag.startY) * aspect);
       const maxWidth = Math.min(maxWidthByX, maxWidthByY);
       const nextWidth = Math.min(maxWidth, Math.max(minWidth, drag.startWidth + dx / scale));
-      const zoomScale = interpolateCamera(zoomClips, currentTime)?.scale ?? 1;
+      const zoomScale = interpolateCamera(zoomClips, useStore.getState().currentTime)?.scale ?? 1;
       const zoomAdjustedScale = getZoomAdjustedCameraScale(camera, zoomScale);
       const baseWidth = nextWidth / Math.max(zoomAdjustedScale, 0.001);
 
@@ -279,7 +284,7 @@ export const CameraOverlayEditor = ({ containerRef, canvasRef }: Props) => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [camera, currentTime, drag, endHistoryGroup, rect, updateCameraClip, zoomClips]);
+  }, [camera, drag, endHistoryGroup, rect, updateCameraClip, zoomClips]);
 
   useEffect(() => {
     return () => {
@@ -309,10 +314,15 @@ export const CameraOverlayEditor = ({ containerRef, canvasRef }: Props) => {
   const surfaceRadius = `${Math.max(0, radius - 1)}px`;
   const chromeInset = Math.max(8, Math.min(radius * 0.3, 18));
 
+  // Disable layout animation when zoom is active. During zoom the overlay position
+  // changes every frame (tracking the zoomed camera), so the 0.22s layout transition
+  // would chase a moving target and produce a jerk at the end of the zoom.
+  const animatesLayout = drag === null && currentZoomScale < 1.001;
+
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
       <motion.div
-        layout={drag === null && currentZoomScale < 1.001}
+        layout={animatesLayout}
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
         className="group pointer-events-auto absolute rounded-md transition-[background-color] duration-150"
         style={{

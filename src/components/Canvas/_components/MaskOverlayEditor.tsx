@@ -38,7 +38,7 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
   const {
     activeWidget,
     maskClips,
-    currentTime,
+    activeMaskIdsKey,
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
@@ -48,7 +48,12 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
     useShallow((state) => ({
       activeWidget: state.activeWidget,
       maskClips: state.maskClips,
-      currentTime: state.currentTime,
+      // The ids of masks under the playhead, as one string so it compares by
+      // value: playback updates currentTime every frame, this rarely changes.
+      activeMaskIdsKey: state.maskClips
+        .filter((m) => state.currentTime >= m.start && state.currentTime < m.end)
+        .map((m) => m.id)
+        .join(','),
       commitEdit: state.commitEdit,
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
@@ -110,10 +115,10 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
     ? canvasDisplayRect.width / Math.max(box.canvasWidth, 1)
     : 1;
 
-  const activeMasks = useMemo(
-    () => maskClips.filter((m) => currentTime >= m.start && currentTime < m.end),
-    [maskClips, currentTime],
-  );
+  const activeMasks = useMemo(() => {
+    const ids = new Set(activeMaskIdsKey ? activeMaskIdsKey.split(',') : []);
+    return maskClips.filter((m) => ids.has(m.id));
+  }, [maskClips, activeMaskIdsKey]);
 
   const toDisplayRect = useCallback(
     (mask: MaskClip) => {

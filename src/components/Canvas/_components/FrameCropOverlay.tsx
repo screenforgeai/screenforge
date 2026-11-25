@@ -50,7 +50,6 @@ export const FrameCropOverlay = ({
   sourceHeight,
 }: FrameCropOverlayProps) => {
   const recordingResult = useStore((s) => s.recordingResult);
-  const currentTime = useStore((s) => s.currentTime);
   const frame = useStore((s) => s.frame);
   const commitEdit = useStore((s) => s.commitEdit);
   // The Window widget's recorded-toolbar line, rather than the Frame widget's crop box.
@@ -99,16 +98,22 @@ export const FrameCropOverlay = ({
     return () => observer.disconnect();
   }, [containerRef]);
 
+  // Follows the playhead through a store subscription rather than a render:
+  // playback updates currentTime every frame and nothing else here changes.
   useEffect(() => {
-    const video = overlayVideoRef.current;
-    if (!video) {
-      return;
-    }
-
-    if (Math.abs(video.currentTime - currentTime) > 0.05) {
-      video.currentTime = currentTime;
-    }
-  }, [currentTime]);
+    const sync = (time: number) => {
+      const video = overlayVideoRef.current;
+      if (video && Math.abs(video.currentTime - time) > 0.05) {
+        video.currentTime = time;
+      }
+    };
+    sync(useStore.getState().currentTime);
+    return useStore.subscribe((state, prev) => {
+      if (state.currentTime !== prev.currentTime) {
+        sync(state.currentTime);
+      }
+    });
+  }, []);
 
   const canvasDisplayRect = useMemo(
     () =>
