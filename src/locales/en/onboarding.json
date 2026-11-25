@@ -27,6 +27,7 @@
   "screen_name": "Screen recording",
   "screen_desc": "Required to record",
   "screen_pendingDesc": "Turns on after Screenforge reopens",
+  "screen_turnOnDesc": "Turn on Screenforge in System Settings, then reopen",
   "screen_deniedDesc": "Turned off in System Settings",
   "accessibility_name": "Accessibility",
   "accessibility_desc": "Lets zooms follow your cursor",

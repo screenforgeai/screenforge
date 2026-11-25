@@ -27,6 +27,7 @@
   "screen_name": "화면 기록",
   "screen_desc": "녹화에 필요합니다",
   "screen_pendingDesc": "Screenforge를 다시 열면 켜집니다",
+  "screen_turnOnDesc": "시스템 설정에서 켠 뒤 다시 여세요",
   "screen_deniedDesc": "시스템 설정에서 꺼져 있습니다",
   "accessibility_name": "손쉬운 사용",
   "accessibility_desc": "줌이 커서를 따라가게 합니다",

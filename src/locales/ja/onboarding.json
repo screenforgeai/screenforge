@@ -27,6 +27,7 @@
   "screen_name": "画面収録",
   "screen_desc": "録画に必要です",
   "screen_pendingDesc": "Screenforge を開き直すとオンになります",
+  "screen_turnOnDesc": "システム設定でオンにしてから開き直してください",
   "screen_deniedDesc": "システム設定でオフになっています",
   "accessibility_name": "アクセシビリティ",
   "accessibility_desc": "ズームがカーソルを追えるようにします",

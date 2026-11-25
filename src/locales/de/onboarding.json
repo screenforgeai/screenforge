@@ -27,6 +27,7 @@
   "screen_name": "Bildschirmaufnahme",
   "screen_desc": "Zum Aufnehmen erforderlich",
   "screen_pendingDesc": "Aktiv, sobald Screenforge neu geöffnet ist",
+  "screen_turnOnDesc": "In den Systemeinstellungen einschalten, dann neu öffnen",
   "screen_deniedDesc": "In den Systemeinstellungen ausgeschaltet",
   "accessibility_name": "Bedienungshilfen",
   "accessibility_desc": "Damit Zooms Ihrem Mauszeiger folgen",

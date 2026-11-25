@@ -94,6 +94,10 @@ export const OnboardingWindow = () => {
   const [language, setLanguage] = useState(() => toSupportedLanguage(i18n.language || 'en'));
   const [usage, setUsage] = useState(true);
   const [prefsSaveFailed, setPrefsSaveFailed] = useState(false);
+  // Whether the saved choices were read; if not, only choices the user changed are saved.
+  const [settingsKnown, setSettingsKnown] = useState(false);
+  const [productUpdatesChanged, setProductUpdatesChanged] = useState(false);
+  const [usageChanged, setUsageChanged] = useState(false);
 
   // FFmpeg, on the last step and only when it's missing
   const [ffmpeg, setFfmpeg] = useState<FfmpegState>('unknown');
@@ -133,12 +137,23 @@ export const OnboardingWindow = () => {
         setRelaunched(true);
       }
 
-      // Pre-filling is a nicety: a failed read leaves the fields empty.
+      // Saved choices pre-fill the steps (tried twice). If they still can't be read, the
+      // defaults on screen aren't saved over them unless the user changes them.
+      const readSettings = async () => {
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          try {
+            return await api.getSettings();
+          } catch (error) {
+            api.writeDiagnosticLog('onboarding.settings-failed', {
+              attempt,
+              message: String(error),
+            });
+          }
+        }
+        return null;
+      };
       const [settings, account] = await Promise.all([
-        api.getSettings().catch((error: unknown) => {
-          api.writeDiagnosticLog('onboarding.settings-failed', { message: String(error) });
-          return null;
-        }),
+        readSettings(),
         api.getDirectorAccount().catch(() => SIGNED_OUT),
       ]);
       if (cancelled) {
@@ -148,6 +163,7 @@ export const OnboardingWindow = () => {
         setName(settings.profile.name);
         setProductUpdates(settings.productUpdates ?? false);
         setUsage(settings.telemetryEnabled);
+        setSettingsKnown(true);
       }
       if (settings?.profile.email) {
         setEmail(settings.profile.email);
@@ -226,7 +242,9 @@ export const OnboardingWindow = () => {
     const profile = { name: name.trim(), email: email.trim() };
     setSaving(true);
     try {
-      await Promise.all([api.saveSettings({ profile, productUpdates }), wait(MIN_SAVE_MS)]);
+      const patch =
+        settingsKnown || productUpdatesChanged ? { profile, productUpdates } : { profile };
+      await Promise.all([api.saveSettings(patch), wait(MIN_SAVE_MS)]);
       // Reported only once it's actually saved.
       identifyUser(profile);
       trackEvent('onboarding_profile_saved', {
@@ -331,7 +349,9 @@ export const OnboardingWindow = () => {
     setSaving(true);
     setPrefsSaveFailed(false);
     try {
-      await api.saveSettings({ language, telemetryEnabled: usage });
+      await api.saveSettings(
+        settingsKnown || usageChanged ? { language, telemetryEnabled: usage } : { language },
+      );
     } catch (error) {
       // Usage sharing is a privacy choice: don't move on until it's saved.
       api.writeDiagnosticLog('onboarding.preferences-save-failed', { message: String(error) });
@@ -557,7 +577,10 @@ export const OnboardingWindow = () => {
                   type="checkbox"
                   checked={productUpdates}
                   disabled={saving}
-                  onChange={(event) => setProductUpdates(event.target.checked)}
+                  onChange={(event) => {
+                    setProductUpdates(event.target.checked);
+                    setProductUpdatesChanged(true);
+                  }}
                 />
                 {t('productUpdates')}
               </label>
@@ -616,7 +639,9 @@ export const OnboardingWindow = () => {
                   <span className="ob-row-sub">
                     {screenView === 'denied' && <IconAlertCircle size={16} />}
                     {screenView === 'pending'
-                      ? t('screen_pendingDesc')
+                      ? permissions?.screen === 'granted'
+                        ? t('screen_pendingDesc')
+                        : t('screen_turnOnDesc')
                       : screenView === 'denied'
                         ? t('screen_deniedDesc')
                         : t('screen_desc')}
@@ -689,7 +714,10 @@ export const OnboardingWindow = () => {
                   aria-checked={usage}
                   aria-label={t('usage_name')}
                   disabled={saving}
-                  onClick={() => setUsage((value) => !value)}
+                  onClick={() => {
+                    setUsage((value) => !value);
+                    setUsageChanged(true);
+                  }}
                 >
                   <i />
                 </button>

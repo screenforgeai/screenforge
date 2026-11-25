@@ -27,6 +27,7 @@
   "screen_name": "Grabación de pantalla",
   "screen_desc": "Necesaria para grabar",
   "screen_pendingDesc": "Se activa al volver a abrir Screenforge",
+  "screen_turnOnDesc": "Activa Screenforge en Ajustes del Sistema y vuelve a abrirlo",
   "screen_deniedDesc": "Desactivada en Ajustes del Sistema",
   "accessibility_name": "Accesibilidad",
   "accessibility_desc": "Permite que los zooms sigan tu cursor",

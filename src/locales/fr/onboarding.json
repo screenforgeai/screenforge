@@ -27,6 +27,7 @@
   "screen_name": "Enregistrement de l'écran",
   "screen_desc": "Nécessaire pour enregistrer",
   "screen_pendingDesc": "S'active à la réouverture de Screenforge",
+  "screen_turnOnDesc": "Activez Screenforge dans Réglages Système, puis rouvrez-le",
   "screen_deniedDesc": "Désactivé dans Réglages Système",
   "accessibility_name": "Accessibilité",
   "accessibility_desc": "Permet aux zooms de suivre votre curseur",

@@ -20,14 +20,22 @@ const makeApi = ({
   productUpdates = undefined as boolean | undefined,
   resumeSaveFails = false,
   saveFails = false,
+  telemetryEnabled = true,
+  settingsFailures = 0,
 } = {}) => ({
   getOnboardingState: vi.fn().mockResolvedValue({ platform, resumeStep }),
-  getSettings: vi.fn().mockResolvedValue({
-    profile: { name: '', email: '' },
-    language: 'en',
-    telemetryEnabled: true,
-    productUpdates,
-  }),
+  getSettings: (() => {
+    const read = vi.fn();
+    for (let i = 0; i < settingsFailures; i += 1) {
+      read.mockRejectedValueOnce(new Error('busy'));
+    }
+    return read.mockResolvedValue({
+      profile: { name: '', email: '' },
+      language: 'en',
+      telemetryEnabled,
+      productUpdates,
+    });
+  })(),
   saveSettings: saveFails
     ? vi.fn().mockRejectedValue(new Error('disk full'))
     : vi.fn().mockResolvedValue({}),
@@ -189,6 +197,9 @@ describe('OnboardingWindow', () => {
     expect(api.requestOnboardingPermission).toHaveBeenCalledWith('screen');
     // macOS hasn't reported the grant yet: keep a way to turn it on, and offer the restart.
     expect(await screen.findByRole('button', { name: 'Open Settings' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Turn on Screenforge in System Settings, then reopen'),
+    ).toBeInTheDocument();
     expect(primary()).toHaveTextContent('Quit and reopen');
 
     await user.click(primary());
@@ -212,6 +223,34 @@ describe('OnboardingWindow', () => {
     await user.click(primary());
     await waitFor(() => expect(api.relaunchApp).toHaveBeenCalledTimes(1));
     expect(api.setOnboardingResumeStep).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a saved opt-out when the first settings read fails', async () => {
+    const user = userEvent.setup();
+    mount({ telemetryEnabled: false, settingsFailures: 1 });
+    await user.click(await screen.findByTestId('onboarding-primary'));
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await screen.findByRole('heading', { name: 'Make it yours' });
+
+    expect(screen.getByRole('switch', { name: 'Share usage data' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await user.click(primary());
+    await waitFor(() =>
+      expect(api.saveSettings).toHaveBeenCalledWith({ language: 'en', telemetryEnabled: false }),
+    );
+  });
+
+  it('does not save over choices it could not read', async () => {
+    const user = userEvent.setup();
+    mount({ settingsFailures: 2 });
+    await user.click(await screen.findByTestId('onboarding-primary'));
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await screen.findByRole('heading', { name: 'Make it yours' });
+
+    await user.click(primary());
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ language: 'en' }));
   });
 
   it('stays on Preferences when they could not be saved', async () => {

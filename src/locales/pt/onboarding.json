@@ -27,6 +27,7 @@
   "screen_name": "Gravação de tela",
   "screen_desc": "Necessária para gravar",
   "screen_pendingDesc": "Ativa quando o Screenforge reabrir",
+  "screen_turnOnDesc": "Ative o Screenforge nos Ajustes do Sistema e reabra",
   "screen_deniedDesc": "Desativada nos Ajustes do Sistema",
   "accessibility_name": "Acessibilidade",
   "accessibility_desc": "Deixa os zooms seguirem seu cursor",
