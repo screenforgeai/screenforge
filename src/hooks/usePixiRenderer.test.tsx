@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../store';
 import type { RecordingResult } from '../types/index';
 import { capturePreviewThumbnailCanvas } from '../lib/pixi/previewThumbnail';
+import { invalidatePreview } from '../lib/pixi/previewInvalidation';
 import { usePixiRenderer } from './usePixiRenderer';
 
 const pixi = vi.hoisted(() => ({
@@ -27,13 +28,17 @@ vi.mock('../lib/pixi/pipeline', () => ({
   },
 }));
 
+const fakePoint = (v: number) => ({ x: v, y: v, set: vi.fn() });
 const fakeContainer = () => ({
   removeChildren: vi.fn(),
   addChild: vi.fn(),
-  scale: { set: vi.fn() },
-  pivot: { set: vi.fn() },
-  position: { set: vi.fn() },
-  skew: { set: vi.fn() },
+  scale: fakePoint(1),
+  pivot: fakePoint(0),
+  position: fakePoint(0),
+  skew: fakePoint(0),
+  rotation: 0,
+  alpha: 1,
+  children: [],
 });
 
 // Pixi's Application.destroy() nulls its renderer, as the real one does.
@@ -204,5 +209,115 @@ describe('usePixiRenderer', () => {
 
     unmount();
     expect(capturePreviewThumbnailCanvas()).toBeNull();
+  });
+
+  describe('drawing on demand', () => {
+    let clock: number;
+
+    const mountPreview = async (paused: boolean) => {
+      clock = 1_000;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const scene = fakeScene();
+      pixi.createPreviewPixiApp.mockResolvedValue(scene);
+      const updater = vi.fn();
+      pixi.setupPixiPipeline.mockResolvedValue([updater]);
+      const video = document.createElement('video');
+      Object.defineProperty(video, 'videoWidth', { value: 1280 });
+      Object.defineProperty(video, 'videoHeight', { value: 720 });
+      Object.defineProperty(video, 'paused', { get: () => paused });
+      renderHook(() =>
+        usePixiRenderer(
+          { current: document.createElement('canvas') },
+          { current: video },
+          recording('/a.mp4'),
+        ),
+      );
+      await act(async () => undefined);
+      return { scene, updater, video };
+    };
+    // One frame every 16 ms of the fake clock.
+    const advance = (ms: number) => {
+      const end = clock + ms;
+      while (clock < end) {
+        clock += 16;
+        runFrames(1);
+      }
+    };
+
+    it('keeps drawing after a paused change until the scene settles, then stops', async () => {
+      const { scene, updater } = await mountPreview(true);
+
+      // Effects smooth with dt (the cursor spring), so it must not stop after one frame.
+      advance(500);
+      expect(updater.mock.calls.length).toBeGreaterThan(20);
+      const dts = updater.mock.calls.map((call) => call[1] as number);
+      expect(Math.max(...dts)).toBeLessThanOrEqual(0.05);
+
+      advance(1_000);
+      scene.app.renderer.render.mockClear();
+      advance(2_000);
+      expect(scene.app.renderer.render).not.toHaveBeenCalled();
+      expect(frames).toHaveLength(0);
+    });
+
+    it('wakes for an edit made while paused', async () => {
+      const { scene } = await mountPreview(true);
+      advance(2_000);
+      scene.app.renderer.render.mockClear();
+
+      act(() => useStore.setState({ cursorSize: 2.5 }));
+      advance(100);
+
+      expect(scene.app.renderer.render).toHaveBeenCalled();
+    });
+
+    it('wakes for a seek and for an asset that finished loading', async () => {
+      const { scene, video } = await mountPreview(true);
+      advance(2_000);
+
+      scene.app.renderer.render.mockClear();
+      video.dispatchEvent(new Event('seeked'));
+      advance(100);
+      expect(scene.app.renderer.render).toHaveBeenCalled();
+
+      advance(2_000);
+      scene.app.renderer.render.mockClear();
+      invalidatePreview();
+      advance(100);
+      expect(scene.app.renderer.render).toHaveBeenCalled();
+    });
+
+    it('stays awake while an effect is still moving the camera on its own', async () => {
+      const { scene, updater } = await mountPreview(true);
+      // The zoom camera eases toward its follow target for seconds after a seek.
+      let easing = true;
+      updater.mockImplementation(() => {
+        if (easing) {
+          scene.cameraContainer.pivot.x += 1;
+        }
+      });
+
+      advance(3_000);
+      scene.app.renderer.render.mockClear();
+      advance(500);
+      expect(scene.app.renderer.render).toHaveBeenCalled();
+
+      // Once it rests, the preview settles and stops.
+      easing = false;
+      advance(1_500);
+      scene.app.renderer.render.mockClear();
+      advance(1_000);
+      expect(scene.app.renderer.render).not.toHaveBeenCalled();
+    });
+
+    it('draws every frame while the video plays, changed or not', async () => {
+      const { scene } = await mountPreview(false);
+      advance(2_000);
+      scene.app.renderer.render.mockClear();
+
+      advance(1_600);
+
+      expect(scene.app.renderer.render.mock.calls.length).toBeGreaterThanOrEqual(99);
+    });
   });
 });

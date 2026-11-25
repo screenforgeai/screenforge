@@ -1,3 +1,4 @@
+import { invalidatePreview } from '../../pixi/previewInvalidation';
 import { useEffect, useRef } from 'react';
 import type { ComponentType } from 'react';
 import type { CursorType } from '../../../types';
@@ -90,6 +91,8 @@ function getCursorImage(url: string): HTMLImageElement {
   }
   const img = new Image();
   img.decoding = 'async';
+  // The paused preview has stopped drawing by the time a cursor image arrives.
+  img.addEventListener('load', invalidatePreview, { once: true });
   img.src = url;
   cursorImageCache.set(url, img);
   return img;

@@ -1,3 +1,4 @@
+import { invalidatePreview } from '../../pixi/previewInvalidation';
 import w2 from '../../../assets/wallpapers/wallpaper-02.webp';
 import w3 from '../../../assets/wallpapers/wallpaper-03.webp';
 import w4 from '../../../assets/wallpapers/wallpaper-04.webp';
@@ -105,6 +106,8 @@ export function getWallpaperBitmap(url: string): ImageBitmap | null {
 export function getWallpaperImage(url: string): HTMLImageElement {
   if (!cache.has(url)) {
     const img = new Image();
+    // The paused preview has stopped drawing by the time a wallpaper arrives.
+    img.addEventListener('load', invalidatePreview, { once: true });
     img.src = url;
     cache.set(url, img);
   }

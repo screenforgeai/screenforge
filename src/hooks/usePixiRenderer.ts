@@ -13,6 +13,21 @@ import { createPreviewPixiApp, getPreviewRendererResolution } from '../lib/pixi/
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
 import { registerPreviewFrameRenderer } from '../lib/pixi/previewThumbnail';
 import { trackVideoFrames } from '../lib/pixi/videoFrames';
+import { onPreviewInvalidated, invalidatePreview } from '../lib/pixi/previewInvalidation';
+import { createPreviewRenderScheduler } from '../lib/pixi/previewRenderScheduler';
+import { hasSceneMoved, readSceneMotion } from '../lib/pixi/sceneMotion';
+
+/** Video events that change what the paused preview should show. */
+const PREVIEW_DIRTY_VIDEO_EVENTS = [
+  'play',
+  'pause',
+  'seeking',
+  'seeked',
+  'loadedmetadata',
+  'loadeddata',
+  'ended',
+  'emptied',
+] as const;
 import {
   analyzePixiEffects,
   runPixiEffectOnLoad,
@@ -207,8 +222,9 @@ export const usePixiRenderer = (
   }, [hasRecording]); // re-run only when canvas enters/leaves the DOM
 
   // ── Project thumbnails ────────────────────────────────────────────────────
-  // The preview keeps no drawing buffer, so a thumbnail draws a frame and is
-  // copied off the canvas in the same task (capturePreviewThumbnailCanvas).
+  // A thumbnail draws a frame and is copied off the canvas in the same task
+  // (capturePreviewThumbnailCanvas), so it never relies on a kept drawing buffer
+  // or on the preview having drawn recently (it stops drawing once settled).
   useEffect(() => {
     if (!sceneReady) {
       return;
@@ -249,6 +265,8 @@ export const usePixiRenderer = (
       const canvas = scene.app.canvas as HTMLCanvasElement;
       canvas.style.width = '100%';
       canvas.style.height = '100%';
+      // Resizing clears the canvas: draw it again even while paused.
+      invalidatePreview();
     };
 
     if (video.readyState >= 1) {
@@ -280,6 +298,7 @@ export const usePixiRenderer = (
           return;
         }
         updatersRef.current = updaters;
+        invalidatePreview();
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -296,18 +315,50 @@ export const usePixiRenderer = (
   // Cursor-click audio and Pixi rendering share one requestAnimationFrame loop
   // rather than running two parallel loops. This halves RAF callbacks from
   // ~120/s to ~60/s and eliminates the scheduling jitter between the two loops.
+  //
+  // The loop runs every frame while the video plays. Paused, it runs only until
+  // the scene settles after the last change (PREVIEW_SETTLE_MS: effects smooth
+  // with dt), then sleeps until something marks the preview dirty again: a store
+  // change, a video event or new frame, a resize, finished effect setup, or
+  // invalidatePreview() from an asset that loaded.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) {
       return;
     }
 
-    let rafId: number;
+    let rafId = 0;
+    let disposed = false;
     let lastFrameTime = performance.now();
+    const scheduler = createPreviewRenderScheduler();
+    let lastMotion: number[] | null = null;
+    const wake = (): void => {
+      if (rafId === 0 && !disposed) {
+        // Sleeping frames are not elapsed animation time for the smoothing.
+        lastFrameTime = performance.now();
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+    const markDirty = (): void => {
+      scheduler.markDirty(performance.now());
+      wake();
+    };
     // The frame effect re-uploads the video texture only when this names a new frame.
-    const videoFrames = trackVideoFrames(video);
+    const videoFrames = trackVideoFrames(video, markDirty);
+    const unsubscribeStore = useStore.subscribe(markDirty);
+    const unsubscribeInvalidate = onPreviewInvalidated(markDirty);
+    for (const event of PREVIEW_DIRTY_VIDEO_EVENTS) {
+      video.addEventListener(event, markDirty);
+    }
+    window.addEventListener('resize', markDirty);
+    document.fonts?.addEventListener?.('loadingdone', markDirty);
 
     const tick = (): void => {
+      rafId = 0;
+      const isVideoPlaying = !video.paused && !video.ended;
+      if (!scheduler.shouldRender(performance.now(), isVideoPlaying)) {
+        return; // settled: sleep until markDirty()
+      }
       rafId = requestAnimationFrame(tick);
 
       // ── Cursor-click audio tick ──────────────────────────────────────────
@@ -381,12 +432,30 @@ export const usePixiRenderer = (
       });
 
       scene.app.renderer.render(scene.app.stage);
+
+      // Paused, effects can keep moving on their own (the zoom camera's follow eases
+      // for seconds after a seek): stay awake until they come to rest.
+      if (!isVideoPlaying) {
+        const motion = readSceneMotion(scene);
+        if (hasSceneMoved(lastMotion, motion)) {
+          scheduler.markDirty(now);
+        }
+        lastMotion = motion;
+      }
     };
 
-    rafId = requestAnimationFrame(tick);
+    markDirty();
     return () => {
+      disposed = true;
       cancelAnimationFrame(rafId);
       videoFrames.dispose();
+      unsubscribeStore();
+      unsubscribeInvalidate();
+      for (const event of PREVIEW_DIRTY_VIDEO_EVENTS) {
+        video.removeEventListener(event, markDirty);
+      }
+      window.removeEventListener('resize', markDirty);
+      document.fonts?.removeEventListener?.('loadingdone', markDirty);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoRef, recording]); // re-run when recording changes so RAF starts once video is in the DOM
