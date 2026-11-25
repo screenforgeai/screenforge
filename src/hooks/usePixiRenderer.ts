@@ -11,6 +11,7 @@ import {
 } from '../lib/effects/cursor/audio';
 import { createPreviewPixiApp, getPreviewRendererResolution } from '../lib/pixi/createPixiApp';
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
+import { registerPreviewFrameRenderer } from '../lib/pixi/previewThumbnail';
 import {
   analyzePixiEffects,
   runPixiEffectOnLoad,
@@ -203,6 +204,24 @@ export const usePixiRenderer = (
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasRecording]); // re-run only when canvas enters/leaves the DOM
+
+  // ── Project thumbnails ────────────────────────────────────────────────────
+  // The preview keeps no drawing buffer, so a thumbnail draws a frame and is
+  // copied off the canvas in the same task (capturePreviewThumbnailCanvas).
+  useEffect(() => {
+    if (!sceneReady) {
+      return;
+    }
+    return registerPreviewFrameRenderer(() => {
+      const scene = sceneRef.current;
+      const video = videoRef.current;
+      if (!scene?.app.renderer || !video || video.videoWidth === 0) {
+        return null;
+      }
+      scene.app.renderer.render(scene.app.stage);
+      return scene.app.canvas as HTMLCanvasElement;
+    });
+  }, [sceneReady, videoRef]);
 
   // ── Renderer resize when source dimensions or frame settings change ───────
   useEffect(() => {

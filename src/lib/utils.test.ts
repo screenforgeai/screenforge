@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { captureFrame, captureProjectThumbnail, isPixelBufferLikelyBlank } from './utils';
 
 describe('thumbnail helpers', () => {
@@ -28,5 +28,23 @@ describe('thumbnail helpers', () => {
     } as HTMLVideoElement);
 
     expect(thumbnail).toBe('');
+  });
+
+  it('encodes a video frame at thumbnail size, not full resolution', () => {
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const toDataURL = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockImplementation(function (this: HTMLCanvasElement) {
+        return `data:image/jpeg;${this.width}x${this.height}`;
+      });
+    const video = { videoWidth: 2560, videoHeight: 1440 } as HTMLVideoElement;
+
+    expect(captureFrame(video)).toBe('data:image/jpeg;480x270');
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 480, 270);
+    toDataURL.mockRestore();
+    vi.restoreAllMocks();
   });
 });

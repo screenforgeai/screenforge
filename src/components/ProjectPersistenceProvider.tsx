@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { toast } from 'sonner';
 import { captureProjectThumbnail } from 'src/lib/utils';
+import { capturePreviewThumbnailCanvas } from 'src/lib/pixi/previewThumbnail';
 import { getStrictContext } from 'src/lib/get-strict-context';
 import { createProjectSnapshotFromState } from 'src/lib/project-snapshot';
 import { useStore, type AppStore } from '../store';
@@ -31,13 +32,11 @@ const [ProjectPersistenceProviderBase, useProjectPersistence] =
 type ProjectPersistenceProviderProps = {
   children: React.ReactNode;
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
 };
 
 function buildProjectFromState(
   state: AppStore,
   videoRef: React.RefObject<HTMLVideoElement | null>,
-  canvasRef: React.RefObject<HTMLCanvasElement | null>,
   thumbnailOverride?: string | null,
 ): SavedProject | null {
   if (!state.recordingResult) {
@@ -50,7 +49,9 @@ function buildProjectFromState(
   }
 
   const thumbnail = captureProjectThumbnail({
-    canvas: canvasRef.current,
+    // A fresh frame drawn and shrunk in one task: the preview's WebGL canvas
+    // keeps no frame to read back later (no preserveDrawingBuffer).
+    canvas: capturePreviewThumbnailCanvas(),
     video: videoRef.current,
     existingThumbnail: thumbnailOverride,
   });
@@ -82,11 +83,7 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Save failed';
 }
 
-const ProjectPersistenceProvider = ({
-  children,
-  videoRef,
-  canvasRef,
-}: ProjectPersistenceProviderProps) => {
+const ProjectPersistenceProvider = ({ children, videoRef }: ProjectPersistenceProviderProps) => {
   // Subscribe only to the fields needed to drive save logic. Unsaved-change
   // detection uses editVersion (O(1) counter) instead of JSON.stringify on 22
   // fields, which was blocking the render thread on every slider drag.
@@ -148,12 +145,7 @@ const ProjectPersistenceProvider = ({
     const existingProject = state.currentProjectId
       ? (state.savedProjects.find((item) => item.id === state.currentProjectId) ?? null)
       : null;
-    const project = buildProjectFromState(
-      state,
-      videoRef,
-      canvasRef,
-      existingProject?.thumbnail ?? null,
-    );
+    const project = buildProjectFromState(state, videoRef, existingProject?.thumbnail ?? null);
     if (!project) {
       return false;
     }
@@ -203,14 +195,7 @@ const ProjectPersistenceProvider = ({
         }, SAVE_STATUS_LINGER_MS);
       }
     }
-  }, [
-    canvasRef,
-    clearPendingTimer,
-    clearSaveStatusTimer,
-    setCurrentProjectId,
-    setSavedProjects,
-    videoRef,
-  ]);
+  }, [clearPendingTimer, clearSaveStatusTimer, setCurrentProjectId, setSavedProjects, videoRef]);
 
   const queueSave = React.useCallback(() => {
     if (!inFlightSaveRef.current) {

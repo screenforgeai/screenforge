@@ -2,6 +2,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../store';
 import type { RecordingResult } from '../types/index';
+import { capturePreviewThumbnailCanvas } from '../lib/pixi/previewThumbnail';
 import { usePixiRenderer } from './usePixiRenderer';
 
 const pixi = vi.hoisted(() => ({
@@ -169,5 +170,39 @@ describe('usePixiRenderer', () => {
     act(() => useStore.setState({ screenshotCapture: null }));
     runFrames(1);
     expect(scene.app.renderer.render).toHaveBeenCalled();
+  });
+
+  it('draws a frame on demand for the project thumbnail, and stops offering one when closed', async () => {
+    const scene = fakeScene();
+    scene.app.canvas.width = 1280;
+    scene.app.canvas.height = 720;
+    pixi.createPreviewPixiApp.mockResolvedValue(scene);
+    pixi.setupPixiPipeline.mockResolvedValue([]);
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'videoWidth', { value: 1280 });
+    Object.defineProperty(video, 'videoHeight', { value: 720 });
+    const { unmount } = renderHook(() =>
+      usePixiRenderer(
+        { current: document.createElement('canvas') },
+        { current: video },
+        recording('/a.mp4'),
+      ),
+    );
+    await act(async () => undefined);
+    scene.app.renderer.render.mockClear();
+
+    const thumbnail = capturePreviewThumbnailCanvas();
+
+    // Drawn now, not read from a kept buffer, then copied off at thumbnail size.
+    expect(scene.app.renderer.render).toHaveBeenCalledTimes(1);
+    expect(drawImage).toHaveBeenCalledWith(scene.app.canvas, 0, 0, 480, 270);
+    expect(thumbnail?.width).toBe(480);
+
+    unmount();
+    expect(capturePreviewThumbnailCanvas()).toBeNull();
   });
 });

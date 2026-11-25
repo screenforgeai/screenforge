@@ -66,8 +66,10 @@ export async function createPreviewPixiApp(canvas: HTMLCanvasElement): Promise<P
     backgroundAlpha: 0,
     // 4× MSAA: rounded corners, masks, click rings and shapes have smooth edges, not steps.
     antialias: true,
-    // Project thumbnails read the preview canvas via toDataURL(). WebGL may
-    // otherwise expose a cleared buffer even when the on-screen preview is fine.
+    // Project thumbnails no longer need this: they draw a frame and read it in the
+    // same task (registerPreviewFrameRenderer in usePixiRenderer). It stays on
+    // because turning it off measured slower on Linux/NVIDIA (GPU process CPU
+    // 9.4% -> 12.8% while paused); revisit with numbers from macOS.
     preserveDrawingBuffer: true,
     failIfMajorPerformanceCaveat: false,
     resolution: getPreviewRendererResolution(),
