@@ -38,6 +38,7 @@ import {
   createScreenVideoCanvasSource,
 } from '../../pixi/textureQuality';
 import type { RenderContext } from '../types';
+import { needsVideoUpload, videoUploadKey } from './videoUpload';
 import { useStore } from '../../../store';
 import {
   sortMediaSegments,
@@ -457,6 +458,10 @@ export const framePixiEffect: PixiEffect<null> = {
     // True when the texture holds only the crop (the bridge canvas), so the
     // sprite fills the media rect instead of being offset behind its mask.
     let videoTextureIsCrop = false;
+    // Which frame (and crop) the GPU copy holds; null forces the next upload.
+    // Re-uploading a frame already on the GPU rebuilt its mip chain for nothing:
+    // a 30 fps video in a 60 Hz loop, or a paused one, did that every tick.
+    let lastVideoUploadKey: string | null = null;
 
     // ── Renderer size tracking — reset change-detection guards on resize ──────
     let lastCw = -1;
@@ -713,6 +718,7 @@ export const framePixiEffect: PixiEffect<null> = {
             videoElementSource.autoUpdate = false;
             videoElementSourceElement = videoSrc.source;
             videoElementTexture = new Texture({ source: videoElementSource });
+            lastVideoUploadKey = null;
           }
           // Set every frame: cropping and uncropping switch between this and
           // the bridge texture without either being rebuilt.
@@ -720,7 +726,11 @@ export const framePixiEffect: PixiEffect<null> = {
           if (currentVideoTexture) {
             videoSprite.texture = currentVideoTexture;
           }
-          videoElementSource?.update();
+          const uploadKey = videoUploadKey('whole', videoSrc.frameId, crop);
+          if (needsVideoUpload(lastVideoUploadKey, uploadKey)) {
+            videoElementSource?.update();
+            lastVideoUploadKey = uploadKey;
+          }
         } else if (videoBridgeCtx) {
           if (videoBridgeCanvas.width !== crop.width || videoBridgeCanvas.height !== crop.height) {
             videoBridgeCanvas.width = crop.width;
@@ -729,27 +739,32 @@ export const framePixiEffect: PixiEffect<null> = {
             // A new size needs a new GPU source; the old one keeps the old size.
             videoBridgeSource?.destroy();
             videoBridgeSource = null;
+            lastVideoUploadKey = null;
           }
-          videoBridgeCtx.drawImage(
-            videoSrc.source as CanvasImageSource,
-            crop.x,
-            crop.y,
-            crop.width,
-            crop.height,
-            0,
-            0,
-            crop.width,
-            crop.height,
-          );
-          if (!videoBridgeSource) {
-            videoBridgeSource = createScreenVideoCanvasSource(videoBridgeCanvas);
-            videoBridgeTexture = new Texture({ source: videoBridgeSource });
+          const uploadKey = videoUploadKey('crop', videoSrc.frameId, crop);
+          if (!videoBridgeSource || needsVideoUpload(lastVideoUploadKey, uploadKey)) {
+            videoBridgeCtx.drawImage(
+              videoSrc.source as CanvasImageSource,
+              crop.x,
+              crop.y,
+              crop.width,
+              crop.height,
+              0,
+              0,
+              crop.width,
+              crop.height,
+            );
+            if (!videoBridgeSource) {
+              videoBridgeSource = createScreenVideoCanvasSource(videoBridgeCanvas);
+              videoBridgeTexture = new Texture({ source: videoBridgeSource });
+            }
+            videoBridgeSource.update();
+            lastVideoUploadKey = uploadKey;
           }
           currentVideoTexture = videoBridgeTexture;
           if (currentVideoTexture) {
             videoSprite.texture = currentVideoTexture;
           }
-          videoBridgeSource.update();
           videoTextureIsCrop = true;
         }
       }

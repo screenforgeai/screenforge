@@ -12,6 +12,7 @@ import {
 import { createPreviewPixiApp, getPreviewRendererResolution } from '../lib/pixi/createPixiApp';
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
 import { registerPreviewFrameRenderer } from '../lib/pixi/previewThumbnail';
+import { trackVideoFrames } from '../lib/pixi/videoFrames';
 import {
   analyzePixiEffects,
   runPixiEffectOnLoad,
@@ -303,6 +304,8 @@ export const usePixiRenderer = (
 
     let rafId: number;
     let lastFrameTime = performance.now();
+    // The frame effect re-uploads the video texture only when this names a new frame.
+    const videoFrames = trackVideoFrames(video);
 
     const tick = (): void => {
       rafId = requestAnimationFrame(tick);
@@ -373,6 +376,7 @@ export const usePixiRenderer = (
           width: video.videoWidth,
           height: video.videoHeight,
           ready: video.readyState >= 2,
+          frameId: videoFrames.frameId,
         },
       });
 
@@ -380,7 +384,10 @@ export const usePixiRenderer = (
     };
 
     rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
+    return () => {
+      cancelAnimationFrame(rafId);
+      videoFrames.dispose();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoRef, recording]); // re-run when recording changes so RAF starts once video is in the DOM
 };
