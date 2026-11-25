@@ -1,8 +1,9 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildH264EncodeArgs,
+  buildNativeCaptureArgs,
   buildSegmentConcatArgs,
   buildSegmentConcatList,
   buildWaylandTranscodeArgs,
@@ -480,5 +481,141 @@ describe('matchesDisplaySize', () => {
     expect(
       matchesDisplaySize({ width: 2560, height: 1440 }, { width: 1920, height: 1080 }, 1),
     ).toBe(false);
+  });
+});
+
+describe('buildNativeCaptureArgs', () => {
+  // Main display (150%) on the right, a 100% display to its left: Electron lists
+  // the main display first, while Windows may enumerate the left monitor first.
+  const main = { bounds: { x: 0, y: 0, width: 1707, height: 960 } };
+  const left = { bounds: { x: -1920, y: 0, width: 1920, height: 1080 } };
+  const physical = new Map([
+    [main.bounds, { x: 0, y: 0, width: 2560, height: 1440 }],
+    [left.bounds, { x: -1920, y: 0, width: 1920, height: 1080 }],
+  ]);
+  const dipToScreenRect = vi.fn((rect: { x: number; y: number; width: number; height: number }) => {
+    const out = physical.get(rect);
+    if (!out) {
+      throw new Error('unexpected rect');
+    }
+    return out;
+  });
+
+  beforeEach(() => {
+    dipToScreenRect.mockClear();
+  });
+
+  it('names the display on Windows by its physical bounds as well as its index', () => {
+    expect(
+      buildNativeCaptureArgs({
+        platform: 'win32',
+        outPath: 'C:\\out.mp4',
+        display: left,
+        displayIndex: 1,
+        displayId: 2779098405,
+        windowId: null,
+        excludeWindowTitle: 'Screenforge Toolbar',
+        dipToScreenRect,
+      }),
+    ).toEqual([
+      '--output',
+      'C:\\out.mp4',
+      '--fps',
+      '60',
+      '--display',
+      '1',
+      '--display-id',
+      '2779098405',
+      '--display-bounds',
+      '-1920,0,1920,1080',
+      '--exclude-window-title',
+      'Screenforge Toolbar',
+    ]);
+    expect(dipToScreenRect).toHaveBeenCalledWith(left.bounds);
+  });
+
+  it('converts the main display of a scaled arrangement to physical pixels', () => {
+    const args = buildNativeCaptureArgs({
+      platform: 'win32',
+      outPath: 'C:\\out.mp4',
+      display: main,
+      displayIndex: 0,
+      displayId: 1,
+      windowId: null,
+      dipToScreenRect,
+    });
+    expect(
+      args.slice(args.indexOf('--display-bounds'), args.indexOf('--display-bounds') + 2),
+    ).toEqual(['--display-bounds', '0,0,2560,1440']);
+  });
+
+  it('rounds fractional physical bounds', () => {
+    const args = buildNativeCaptureArgs({
+      platform: 'win32',
+      outPath: 'out.mp4',
+      display: main,
+      displayIndex: 0,
+      displayId: null,
+      windowId: null,
+      dipToScreenRect: () => ({ x: -0.4, y: 10.6, width: 2560.5, height: 1440.2 }),
+    });
+    expect(args).toContain('0,11,2561,1440');
+    expect(args).not.toContain('--display-id');
+  });
+
+  it('refuses to name a Windows display without a way to convert its bounds', () => {
+    expect(() =>
+      buildNativeCaptureArgs({
+        platform: 'win32',
+        outPath: 'out.mp4',
+        display: main,
+        displayIndex: 0,
+        displayId: 1,
+        windowId: null,
+      }),
+    ).toThrow(/dipToScreenRect/);
+  });
+
+  it('keeps the macOS command line: index and CGDirectDisplayID, no bounds', () => {
+    expect(
+      buildNativeCaptureArgs({
+        platform: 'darwin',
+        outPath: '/tmp/out.mp4',
+        display: main,
+        displayIndex: 0,
+        displayId: 69733382,
+        windowId: null,
+        excludeWindowTitle: 'Screenforge Toolbar',
+        dipToScreenRect,
+      }),
+    ).toEqual([
+      '--output',
+      '/tmp/out.mp4',
+      '--fps',
+      '60',
+      '--display',
+      '0',
+      '--display-id',
+      '69733382',
+      '--exclude-window-title',
+      'Screenforge Toolbar',
+    ]);
+    expect(dipToScreenRect).not.toHaveBeenCalled();
+  });
+
+  it('names only the window for a window capture, on Windows too', () => {
+    expect(
+      buildNativeCaptureArgs({
+        platform: 'win32',
+        outPath: 'C:\\out.mp4',
+        display: main,
+        displayIndex: 0,
+        displayId: 1,
+        windowId: 131330,
+        excludeWindowTitle: 'Screenforge Toolbar',
+        dipToScreenRect,
+      }),
+    ).toEqual(['--output', 'C:\\out.mp4', '--fps', '60', '--window-id', '131330']);
+    expect(dipToScreenRect).not.toHaveBeenCalled();
   });
 });

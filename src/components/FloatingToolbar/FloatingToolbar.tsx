@@ -44,6 +44,7 @@ import {
 } from '../../lib/ui';
 import type {
   DesktopSource,
+  DisplayPickerPurpose,
   CursorEvent,
   CaptureBackend,
   SystemAudioSupport,
@@ -165,9 +166,12 @@ function resolveSourceIdForTab(
   tab: SourceTab,
   selectedSource: DesktopSource | null,
   sources: DesktopSource[],
+  /** The screen source of the monitor picked on its overlay, when several are attached. */
+  chosenScreenId: string | null = null,
 ): string | null {
   if (tab === 'display') {
     return (
+      chosenScreenId ??
       (selectedSource?.id?.startsWith('screen') ? selectedSource.id : null) ??
       sources.find((source) => source.id.startsWith('screen'))?.id ??
       'screen:0'
@@ -340,6 +344,10 @@ export const FloatingToolbar = () => {
   const [sources, setSources] = useState<DesktopSource[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [selectedSource, setSelectedSource] = useState<DesktopSource | null>(null);
+  // Several monitors (macOS, Windows, X11): Record and Screenshot ask which one, on an overlay
+  // over each. Wayland asks in the system share dialog instead.
+  /** The display picked for the recording about to start. */
+  const recordDisplayIdRef = useRef<number | null>(null);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
@@ -486,6 +494,49 @@ export const FloatingToolbar = () => {
       }),
     [sources],
   );
+
+  /**
+   * Several monitors: covers each with an overlay to click the one to capture. Its id; null when
+   * cancelled; undefined when there is nothing to pick (one monitor, or Wayland). The displays are
+   * read now (cheap: nothing is captured), as a monitor may have been plugged in or out since the
+   * toolbar opened.
+   */
+  const pickDisplayToCapture = async (
+    purpose: DisplayPickerPurpose,
+  ): Promise<number | null | undefined> => {
+    if (captureBackendRef.current === 'wayland-portal') {
+      return undefined;
+    }
+    const displays = await window.screenforge.getDisplays().catch(() => []);
+    if (displays.length < 2) {
+      return undefined;
+    }
+    try {
+      return await window.screenforge.pickDisplay(purpose);
+    } catch (err) {
+      console.error('[display] the display picker failed:', err);
+      return null;
+    }
+  };
+
+  /**
+   * The screen source that shows a picked display. Null when one was picked but no screen shows
+   * it any more (unplugged during the countdown, or Screen Recording revoked): the capture then
+   * stops rather than fall back to another monitor. Undefined when no display was picked, where
+   * the usual source applies.
+   */
+  const resolveScreenSourceIdForDisplay = async (
+    displayId: number | null | undefined,
+  ): Promise<string | null | undefined> => {
+    if (displayId === null || displayId === undefined) {
+      return undefined;
+    }
+    const sourceId = await window.screenforge
+      .getScreenSourceForDisplay(displayId)
+      .catch(() => null);
+    logToolbarDiagnostic('toolbar.display.resolved', { displayId, sourceId });
+    return sourceId;
+  };
 
   const duplicateWindowAppCounts = useMemo(
     () =>
@@ -986,9 +1037,19 @@ export const FloatingToolbar = () => {
     // Wayland: a window is picked in the share dialog, so there is no window: source id; the
     // portal stream itself is the capture.
     const pickWindowInDialog = captureBackendRef.current === 'wayland-portal' && tab === 'window';
+    const pickedDisplayId =
+      tab === 'display' && !pickWindowInDialog ? recordDisplayIdRef.current : null;
+    const chosenScreenId = await resolveScreenSourceIdForDisplay(pickedDisplayId);
+    if (chosenScreenId === null) {
+      logToolbarDiagnostic('toolbar.display.unavailable', { displayId: pickedDisplayId });
+      setRecordState('idle');
+      setCountdown(3);
+      window.screenforge.systemWarning(t('displayUnavailable'));
+      return;
+    }
     const sourceId = pickWindowInDialog
       ? resolveSourceIdForTab('display', null, sources)
-      : resolveSourceIdForTab(tab, selectedSource, sources);
+      : resolveSourceIdForTab(tab, selectedSource, sources, chosenScreenId ?? null);
     if (!sourceId) {
       discardWaylandPortalCapture();
       window.screenforge.systemWarning(tab === 'window' ? t('chooseWindow') : t('noDisplaySource'));
@@ -1154,9 +1215,21 @@ export const FloatingToolbar = () => {
       await takePhoto({ kind: 'window', sourceId: selectedSource.id });
       return;
     }
+    const displayId = await pickDisplayToCapture('screenshot');
+    if (displayId === null) {
+      return;
+    }
+    const chosenScreenId = await resolveScreenSourceIdForDisplay(displayId);
+    if (chosenScreenId === null) {
+      logToolbarDiagnostic('toolbar.display.unavailable', { displayId });
+      window.screenforge.systemWarning(t('displayUnavailable'));
+      return;
+    }
     await takePhoto({
       kind: 'display',
-      sourceId: resolveSourceIdForTab('display', selectedSource, sources) ?? 'screen:0',
+      sourceId:
+        resolveSourceIdForTab('display', selectedSource, sources, chosenScreenId ?? null) ??
+        'screen:0',
     });
   }
 
@@ -1171,7 +1244,12 @@ export const FloatingToolbar = () => {
     if (!(await ensureScreenshotPermissions())) {
       return;
     }
-    const area = await window.screenforge.openAreaSelector('screenshot');
+    const displayId = await pickDisplayToCapture('area');
+    if (displayId === null) {
+      setTab('display');
+      return;
+    }
+    const area = await window.screenforge.openAreaSelector('screenshot', displayId ?? null);
     if (!area) {
       setTab('display');
       return;
@@ -1209,10 +1287,16 @@ export const FloatingToolbar = () => {
         return;
       }
 
-      const area =
-        captureBackendRef.current === 'wayland-portal'
-          ? await pickWaylandArea()
-          : await window.screenforge.openAreaSelector();
+      let area: SelectedArea | null;
+      if (captureBackendRef.current === 'wayland-portal') {
+        area = await pickWaylandArea();
+      } else {
+        const displayId = await pickDisplayToCapture('area');
+        area =
+          displayId === null
+            ? null
+            : await window.screenforge.openAreaSelector('record', displayId ?? null);
+      }
       if (!area) {
         setTab('display');
         return;
@@ -1262,7 +1346,27 @@ export const FloatingToolbar = () => {
       ) {
         return;
       }
+      let pickedDisplayId: number | null = null;
+      if (tab === 'display') {
+        const displayId = await pickDisplayToCapture('record');
+        if (displayId === null) {
+          return;
+        }
+        pickedDisplayId = displayId ?? null;
+      }
 
+      // Another Record press finished preparing first and its countdown is running: that one
+      // records, with its own display. A late finish must not restart it or replace its pick.
+      if (recordStateRef.current !== 'idle') {
+        logToolbarDiagnostic('toolbar.recording.stale-preparation-dropped', {
+          recordState: recordStateRef.current,
+        });
+        return;
+      }
+      recordDisplayIdRef.current = pickedDisplayId;
+      // Now, not when the effect syncing it runs after the render: a preparation finishing in the
+      // same tick must already see this countdown.
+      recordStateRef.current = 'countdown';
       setCountdown(3);
       setRecordState('countdown');
     } finally {
@@ -2228,6 +2332,7 @@ export const FloatingToolbar = () => {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          aria-label={t('display')}
                           onClick={() => handleTabChange('display')}
                           className={`${toolbarButtonCls} ${tabCls(tab === 'display')}`}
                         >

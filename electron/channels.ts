@@ -6,6 +6,8 @@
 export const CH = {
   sources: {
     GET: 'sources:get',
+    DISPLAYS: 'sources:displays',
+    SOURCE_FOR_DISPLAY: 'sources:source-for-display',
     SET_SHARE_KIND: 'sources:set-share-kind',
     PICK_SCREEN: 'sources:pick-screen',
     SCREEN_STILL: 'sources:screen-still',
@@ -179,6 +181,14 @@ export const CH = {
     OPEN: 'camera-preview:open',
     CLOSE: 'camera-preview:close',
     GET_DEVICE_ID: 'camera-preview:get-device-id',
+  },
+  displayPicker: {
+    // Toolbar → main: cover each monitor with an overlay to pick the one to record
+    OPEN: 'display-picker:open',
+    // Overlay → main
+    GET_TARGET: 'display-picker:get-target',
+    CONFIRM: 'display-picker:confirm',
+    CANCEL: 'display-picker:cancel',
   },
   areaSelector: {
     OPEN: 'area-selector:open',

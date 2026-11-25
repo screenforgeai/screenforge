@@ -9,6 +9,7 @@ import ExportWorker from './components/ExportWorker';
 import { Teleprompter } from './components/Teleprompter/Teleprompter';
 import { SceneOverlayWindow } from './components/WidgetLibrary/_components/SceneOverlay';
 import { AreaSelector } from './components/AreaSelector/AreaSelector';
+import { DisplayPicker } from './components/DisplayPicker/DisplayPicker';
 import App from './app';
 import { captureException } from './lib/analytics';
 
@@ -49,7 +50,8 @@ if (
   hash === 'scene-overlay' ||
   hash === 'camera-preview' ||
   hash === 'area-selector' ||
-  hash === 'area-selector-screenshot'
+  hash === 'area-selector-screenshot' ||
+  hash === 'display-picker'
 ) {
   document.body.classList.add('transparent-window');
 }
@@ -76,6 +78,9 @@ switch (hash) {
     break;
   case 'area-selector':
     rootNode = <AreaSelector />;
+    break;
+  case 'display-picker':
+    rootNode = <DisplayPicker />;
     break;
   case 'area-selector-screenshot':
     rootNode = <AreaSelector purpose="screenshot" />;
