@@ -129,6 +129,7 @@ export const OnboardingWindow = () => {
           setEmail(account.user.email);
           setFromDirector(true);
         }
+        setProductUpdates(settings.productUpdates ?? false);
         setUsage(settings.telemetryEnabled);
         trackEvent('onboarding_step_viewed', {
           step: state.resumeStep ?? 'welcome',
@@ -252,7 +253,6 @@ export const OnboardingWindow = () => {
   const screenView = getScreenPermissionView({
     status: permissions?.screen ?? 'not-determined',
     requested: screenRequested,
-    relaunched,
   });
   const accessibilityGranted = permissions?.accessibility === 'granted';
   const welcomeBack = relaunched && screenView === 'granted';
@@ -286,9 +286,13 @@ export const OnboardingWindow = () => {
     trackEvent('onboarding_relaunch_requested');
     try {
       await api.setOnboardingResumeStep('permissions');
-    } finally {
-      api.relaunchApp();
+    } catch (error) {
+      // Without the saved step the reopened app would start over, so stay here and let them retry.
+      api.writeDiagnosticLog('onboarding.resume-save-failed', { message: String(error) });
+      setRelaunching(false);
+      return;
     }
+    api.relaunchApp();
   };
 
   // ── Preferences ──
@@ -334,7 +338,10 @@ export const OnboardingWindow = () => {
         }
       })
       .catch(() => {
-        // The editor's own FFmpeg check still runs after onboarding.
+        // Can't tell whether it's there: install it rather than open a recorder that may not save.
+        if (!cancelled) {
+          installFfmpeg();
+        }
       });
     return () => {
       cancelled = true;
@@ -374,7 +381,8 @@ export const OnboardingWindow = () => {
         return {
           label: t('record_cta'),
           onClick: () => finish('record'),
-          disabled: ffmpeg === 'installing' || ffmpeg === 'failed',
+          // Only once FFmpeg is confirmed: the toolbar opens straight away.
+          disabled: ffmpeg !== 'ready',
           secondary: { label: t('exploreEditor'), onClick: () => finish('editor') },
         };
       default:
@@ -733,6 +741,7 @@ export const OnboardingWindow = () => {
           type="button"
           className="ob-corner ob-corner-back app-no-drag"
           aria-label={t('back')}
+          disabled={saving || relaunching}
           onClick={goBack}
         >
           <IconChevronLeft size={16} />

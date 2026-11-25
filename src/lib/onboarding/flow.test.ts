@@ -60,37 +60,22 @@ describe('profile helpers', () => {
 
 describe('getScreenPermissionView', () => {
   it('offers Allow before anything happened', () => {
-    expect(
-      getScreenPermissionView({ status: 'not-determined', requested: false, relaunched: false }),
-    ).toBe('ask');
+    expect(getScreenPermissionView({ status: 'not-determined', requested: false })).toBe('ask');
   });
 
   it('needs a quit and reopen once access was requested this run', () => {
-    expect(
-      getScreenPermissionView({ status: 'not-determined', requested: true, relaunched: false }),
-    ).toBe('pending');
-    // Granted during this run still only takes effect after a relaunch.
-    expect(getScreenPermissionView({ status: 'granted', requested: true, relaunched: false })).toBe(
-      'pending',
-    );
+    expect(getScreenPermissionView({ status: 'not-determined', requested: true })).toBe('pending');
+    // Granted during this run (a reopened run too) still only takes effect after a relaunch.
+    expect(getScreenPermissionView({ status: 'granted', requested: true })).toBe('pending');
   });
 
-  it('is granted when it already was, or after the relaunch', () => {
-    expect(
-      getScreenPermissionView({ status: 'granted', requested: false, relaunched: false }),
-    ).toBe('granted');
-    expect(getScreenPermissionView({ status: 'granted', requested: false, relaunched: true })).toBe(
-      'granted',
-    );
+  it('is granted when it was already on when this run started', () => {
+    expect(getScreenPermissionView({ status: 'granted', requested: false })).toBe('granted');
   });
 
   it('points to System Settings when access was turned off', () => {
-    expect(getScreenPermissionView({ status: 'denied', requested: false, relaunched: true })).toBe(
-      'denied',
-    );
-    expect(
-      getScreenPermissionView({ status: 'restricted', requested: false, relaunched: false }),
-    ).toBe('denied');
+    expect(getScreenPermissionView({ status: 'denied', requested: false })).toBe('denied');
+    expect(getScreenPermissionView({ status: 'restricted', requested: false })).toBe('denied');
   });
 });
 

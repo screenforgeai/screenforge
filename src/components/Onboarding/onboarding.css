@@ -453,6 +453,11 @@
   transition-duration: var(--ob-press);
 }
 
+.ob-corner:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .ob-corner-back {
   left: 16px;
 }

@@ -49,19 +49,19 @@ export type ScreenPermissionView = 'ask' | 'pending' | 'granted' | 'denied';
 
 /**
  * macOS only applies Screen Recording to a running app after it restarts, so any
- * request made in this run ends in "Quit and reopen".
+ * request made in this run ends in "Quit and reopen", also in a run that was
+ * itself reopened. Access that was already on when this run started counts.
  */
 export const getScreenPermissionView = ({
   status,
   requested,
-  relaunched,
 }: {
   status: StartupPermissionStatus;
+  /** Whether access was requested (or System Settings opened) during this run. */
   requested: boolean;
-  relaunched: boolean;
 }): ScreenPermissionView => {
   if (status === 'granted') {
-    return requested && !relaunched ? 'pending' : 'granted';
+    return requested ? 'pending' : 'granted';
   }
   if (requested) {
     return 'pending';

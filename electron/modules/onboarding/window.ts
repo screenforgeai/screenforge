@@ -22,6 +22,8 @@ let launchResumeStep: OnboardingResumeStep | null = null;
 let settleOutcome: ((outcome: OnboardingOutcome) => void) | null = null;
 // Set when the window saves a step to resume at: it is about to quit and reopen, not finish.
 let resumePending = false;
+// Set once the window finished itself (its completion is already recorded).
+let finished = false;
 
 export function getOnboardingLaunchResumeStep(): OnboardingResumeStep | null {
   return launchResumeStep;
@@ -35,6 +37,7 @@ export function markOnboardingResumePending(): void {
 export function runOnboardingWindow(deps: OnboardingWindowDeps): Promise<OnboardingOutcome> {
   launchResumeStep = deps.resumeStep;
   resumePending = false;
+  finished = false;
 
   return new Promise<OnboardingOutcome>((resolve) => {
     let settled = false;
@@ -73,13 +76,16 @@ export function runOnboardingWindow(deps: OnboardingWindowDeps): Promise<Onboard
     });
     win.on('closed', () => {
       onboardingWindow = null;
-      // Closed from the system (⌘W, Alt+F4) counts as done, unless it's quitting to reopen.
-      if (!resumePending) {
-        void completeOnboarding().catch((error) =>
-          log.warn('[onboarding] could not record completion', error),
-        );
+      // Finished from the window (already recorded), or quitting to reopen.
+      if (finished || resumePending) {
+        settleOutcome?.('editor');
+        return;
       }
-      settleOutcome?.('editor');
+      // Closed from the system (⌘W, Alt+F4) counts as done. Recorded before the editor
+      // starts, so the editor's own settings writes can't bring the old record back.
+      void completeOnboarding()
+        .catch((error) => log.warn('[onboarding] could not record completion', error))
+        .finally(() => settleOutcome?.('editor'));
     });
 
     deps.loadURL(win, 'onboarding');
@@ -100,6 +106,7 @@ export function resizeOnboardingWindow(height: number): void {
 }
 
 export async function finishOnboardingWindow(outcome: OnboardingOutcome): Promise<void> {
+  finished = true;
   try {
     await completeOnboarding();
   } catch (error) {

@@ -940,6 +940,8 @@ export interface ScreenforgeAPI {
     profile: { name: string; email: string };
     language: string;
     telemetryEnabled: boolean;
+    /** Absent until answered in onboarding. */
+    productUpdates?: boolean;
   }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };

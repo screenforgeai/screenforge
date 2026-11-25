@@ -17,12 +17,15 @@ const makeApi = ({
     accessibility: 'not-determined',
   } as StartupPermissionMap,
   ffmpegAvailable = true,
+  productUpdates = undefined as boolean | undefined,
+  resumeSaveFails = false,
 } = {}) => ({
   getOnboardingState: vi.fn().mockResolvedValue({ platform, resumeStep }),
   getSettings: vi.fn().mockResolvedValue({
     profile: { name: '', email: '' },
     language: 'en',
     telemetryEnabled: true,
+    productUpdates,
   }),
   saveSettings: vi.fn().mockResolvedValue({}),
   getDirectorAccount: vi.fn().mockResolvedValue(account),
@@ -31,7 +34,9 @@ const makeApi = ({
   getStartupPermissionStatuses: vi.fn().mockResolvedValue(permissions),
   requestOnboardingPermission: vi.fn().mockResolvedValue('not-determined'),
   openSystemSettings: vi.fn(),
-  setOnboardingResumeStep: vi.fn().mockResolvedValue(undefined),
+  setOnboardingResumeStep: resumeSaveFails
+    ? vi.fn().mockRejectedValue(new Error('disk full'))
+    : vi.fn().mockResolvedValue(undefined),
   relaunchApp: vi.fn(),
   checkFFmpegStatus: vi.fn().mockResolvedValue({ available: ffmpegAvailable }),
   installFFmpeg: vi.fn(),
@@ -105,8 +110,18 @@ describe('OnboardingWindow', () => {
     expect(
       await screen.findByRole('heading', { name: 'Record your first video' }),
     ).toBeInTheDocument();
+    // Record waits until FFmpeg is confirmed.
+    await waitFor(() => expect(primary()).toBeEnabled());
     await user.click(primary());
     expect(api.finishOnboarding).toHaveBeenCalledWith('record');
+  });
+
+  it('keeps the product updates choice saved before the quit and reopen', async () => {
+    const user = userEvent.setup();
+    mount({ productUpdates: true });
+    await user.click(await screen.findByTestId('onboarding-primary'));
+
+    expect(await screen.findByLabelText('Email me product updates and tips')).toBeChecked();
   });
 
   it('shows the email error only after leaving the field, and Skip saves nothing', async () => {
@@ -165,6 +180,21 @@ describe('OnboardingWindow', () => {
     await user.click(primary());
     await waitFor(() => expect(api.relaunchApp).toHaveBeenCalled());
     expect(api.setOnboardingResumeStep).toHaveBeenCalledWith('permissions');
+  });
+
+  it('stays on the step to retry when the resume step could not be saved', async () => {
+    const user = userEvent.setup();
+    mount({ platform: 'darwin', resumeSaveFails: true });
+    await user.click(await screen.findByTestId('onboarding-primary'));
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Allow' }))[0]);
+    await screen.findByText('Needs reopen');
+
+    await user.click(primary());
+    await waitFor(() => expect(api.setOnboardingResumeStep).toHaveBeenCalled());
+    await waitFor(() => expect(primary()).toBeEnabled());
+    expect(api.relaunchApp).not.toHaveBeenCalled();
+    expect(primary()).toHaveTextContent('Quit and reopen');
   });
 
   it('welcomes the user back after the relaunch', async () => {
