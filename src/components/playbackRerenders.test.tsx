@@ -109,6 +109,9 @@ const countRendersDuringPlayback = (ui: ReactNode, from: number, to: number, tic
   return renders - before;
 };
 
+// Stand-in for callbacks the components under test never call.
+const noop = () => undefined;
+
 const containerRef = { current: document.createElement('div') };
 const canvasRef = { current: document.createElement('canvas') };
 
@@ -147,10 +150,11 @@ describe('playback does not re-render panels every frame', () => {
     // The panel asks the main process about the speech model when it mounts.
     Object.assign(window, {
       screenforge: {
-        onTranscribeProgress: () => () => {},
-        getWhisperModelStatus: () => new Promise(() => {}),
+        onTranscribeProgress: () => noop,
+        // Never settle: the test is about playback, not transcription.
+        getWhisperModelStatus: () => new Promise(noop),
         cancelTranscription: () => Promise.resolve(),
-        transcribeAudio: () => new Promise(() => {}),
+        transcribeAudio: () => new Promise(noop),
       },
     });
     // 30 frames from 1.5 s to ~2.47 s cross one word boundary (2 s): hello -> there.
@@ -177,13 +181,13 @@ describe('playback does not re-render panels every frame', () => {
         scaleWidth={80}
         canUndo={false}
         canRedo={false}
-        onTogglePlay={() => {}}
-        onStop={() => {}}
-        onSplit={() => {}}
-        onUndo={() => {}}
-        onRedo={() => {}}
-        onZoomIn={() => {}}
-        onZoomOut={() => {}}
+        onTogglePlay={noop}
+        onStop={noop}
+        onSplit={noop}
+        onUndo={noop}
+        onRedo={noop}
+        onZoomIn={noop}
+        onZoomOut={noop}
       />,
       1.5,
       2.0,
