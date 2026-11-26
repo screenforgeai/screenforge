@@ -69,6 +69,8 @@ export const exportBridge = {
     CH.export.PRERENDER_START,
   ),
   stopExportPrerender: createInvokeBridge<[], void>(CH.export.PRERENDER_STOP),
+  setExportPrerenderPace: createSendBridge<[number]>(CH.export.PRERENDER_PACE),
+  onPrerenderPace: createSubscription<number>(CH.export.PRERENDER_PACE),
   reportPrerenderStatus: createSendBridge<[ExportPrerenderStatus]>(CH.export.PRERENDER_STATUS),
   onPrerenderStatus: createSubscription<ExportPrerenderStatus>(CH.export.PRERENDER_STATUS),
   canPrerenderOnPower: createInvokeBridge<[], boolean>(CH.export.PRERENDER_POWER),

@@ -6,7 +6,7 @@ import { DEFAULT_CURSOR_SETTINGS } from '../../src/store/defaults';
 import { normalizeExportFpsForFormat } from '../../src/lib/export/gif';
 import { computeRequestedExportSize, computeTimelineDuration } from '../../src/lib/export/planning';
 import {
-  PRERENDER_DUTY_CYCLE,
+  PRERENDER_IDLE_DUTY_CYCLE,
   VIDEO_DECODE_STALL_ERROR,
 } from '../../src/lib/export/captureScheduling';
 import {
@@ -143,9 +143,9 @@ export async function runExportHarness(
     // pre-render first, as the editor does while idle.
     let prerendered: boolean | undefined;
     if (chunked && process.env.SCREENFORGE_EXPORT_PRERENDER === '1') {
-      // At the editor's pace, so its speed lines compare with the real app's.
+      // At the pace the editor uses while it is still, as the app's would be.
       prerendered = await runExportPrerender(
-        { ...captureParams, dutyCycle: PRERENDER_DUTY_CYCLE },
+        { ...captureParams, dutyCycle: PRERENDER_IDLE_DUTY_CYCLE },
         preloadPath,
       );
     }

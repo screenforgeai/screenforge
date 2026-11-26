@@ -2,13 +2,16 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExportPrerenderStatus } from '../types';
 import { useStore } from '../store';
+import { setPreviewDrawing } from '../lib/pixi/previewActivity';
 
 const prepareExportCapture = vi.hoisted(() => vi.fn());
 vi.mock('../lib/export/captureParams', () => ({ prepareExportCapture }));
 
 import {
-  PRERENDER_DUTY_CYCLE,
+  PRERENDER_ACTIVE_DUTY_CYCLE,
   PRERENDER_EDIT_DELAY_MS,
+  PRERENDER_IDLE_DUTY_CYCLE,
+  PRERENDER_IDLE_SETTLE_MS,
   PRERENDER_PLAYBACK_DELAY_MS,
   prerenderSettingsKey,
   selectPrerenderReadiness,
@@ -18,14 +21,21 @@ import {
 
 const startExportPrerender = vi.fn();
 const stopExportPrerender = vi.fn();
+const setExportPrerenderPace = vi.fn();
 const canPrerenderOnPower = vi.fn();
 let powerListener: ((allowed: boolean) => void) | null = null;
 let statusListener: ((status: ExportPrerenderStatus) => void) | null = null;
 
 const initialStore = useStore.getState();
 
+let hidden = false;
+
 beforeEach(() => {
   vi.useFakeTimers();
+  // The hook times stillness with performance.now(), which these fake timers leave alone.
+  vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+  hidden = false;
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
   statusListener = null;
   startExportPrerender.mockResolvedValue(true);
   stopExportPrerender.mockResolvedValue(undefined);
@@ -41,6 +51,7 @@ beforeEach(() => {
     value: {
       startExportPrerender,
       stopExportPrerender,
+      setExportPrerenderPace,
       canPrerenderOnPower,
       onPrerenderPowerChanged: vi.fn((cb: (allowed: boolean) => void) => {
         powerListener = cb;
@@ -64,6 +75,7 @@ beforeEach(() => {
     isExporting: false,
   });
   usePrerenderStore.setState({ stateVersion: 0, settingsKey: null, status: null, blocked: false });
+  setPreviewDrawing(false);
 });
 
 afterEach(() => {
@@ -103,7 +115,7 @@ async function startRunning() {
 }
 
 describe('useExportPrerender', () => {
-  it('starts shortly after a project is open, throttled and without audio', async () => {
+  it('starts shortly after a project is open, without audio', async () => {
     renderHook(() => useExportPrerender(true));
     await wait(PRERENDER_EDIT_DELAY_MS - 1);
     expect(startExportPrerender).not.toHaveBeenCalled();
@@ -113,8 +125,83 @@ describe('useExportPrerender', () => {
       chunking: 'prerender',
       includeAudio: false,
       stateVersion: 0,
-      dutyCycle: PRERENDER_DUTY_CYCLE,
     });
+  });
+
+  it('starts held while the preview draws, flat out once the editor is still', async () => {
+    setPreviewDrawing(true);
+    const { unmount } = renderHook(() => useExportPrerender(true));
+    await wait(PRERENDER_EDIT_DELAY_MS);
+    expect(startExportPrerender.mock.calls[0][0].dutyCycle).toBe(PRERENDER_ACTIVE_DUTY_CYCLE);
+    unmount();
+
+    setPreviewDrawing(false);
+    renderHook(() => useExportPrerender(true));
+    await wait(PRERENDER_EDIT_DELAY_MS);
+    expect(startExportPrerender.mock.calls[1][0].dutyCycle).toBe(PRERENDER_IDLE_DUTY_CYCLE);
+  });
+
+  it('holds as soon as the preview wakes, and goes on once it has slept a moment', async () => {
+    await startRunning();
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_IDLE_DUTY_CYCLE);
+    setExportPrerenderPace.mockClear();
+
+    act(() => setPreviewDrawing(true));
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_ACTIVE_DUTY_CYCLE);
+
+    // Brief sleeps between wake-ups (edits a moment apart) keep it held.
+    act(() => setPreviewDrawing(false));
+    await wait(PRERENDER_IDLE_SETTLE_MS - 1);
+    act(() => setPreviewDrawing(true));
+    act(() => setPreviewDrawing(false));
+    await wait(PRERENDER_IDLE_SETTLE_MS - 1);
+    expect(setExportPrerenderPace).toHaveBeenCalledTimes(1);
+
+    await wait(1);
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_IDLE_DUTY_CYCLE);
+    expect(setExportPrerenderPace).toHaveBeenCalledTimes(2);
+    // Pace changes are not restarts.
+    expect(startExportPrerender).toHaveBeenCalledTimes(1);
+    expect(stopExportPrerender).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a click', () => new PointerEvent('pointerdown')],
+    ['a key', () => new KeyboardEvent('keydown', { key: 'z' })],
+    ['a scroll', () => new WheelEvent('wheel')],
+  ])('holds on %s before the editor handles it, then goes on once still', async (_, make) => {
+    await startRunning();
+    setExportPrerenderPace.mockClear();
+
+    // Not bubbling, as if an editor handler had stopped it: only a capture-phase
+    // listener, which runs before the editor's, sees it.
+    act(() => {
+      document.body.dispatchEvent(make());
+    });
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_ACTIVE_DUTY_CYCLE);
+
+    await wait(PRERENDER_IDLE_SETTLE_MS - 1);
+    expect(setExportPrerenderPace).toHaveBeenCalledTimes(1);
+    await wait(1);
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_IDLE_DUTY_CYCLE);
+  });
+
+  it('goes flat out while the window is hidden, whatever the preview last said', async () => {
+    await startRunning();
+    act(() => setPreviewDrawing(true));
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_ACTIVE_DUTY_CYCLE);
+
+    hidden = true;
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_IDLE_DUTY_CYCLE);
+
+    hidden = false;
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(setExportPrerenderPace).toHaveBeenLastCalledWith(PRERENDER_ACTIVE_DUTY_CYCLE);
   });
 
   it('restarts after an edit settles, with the new state version', async () => {

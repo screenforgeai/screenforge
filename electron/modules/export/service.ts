@@ -88,6 +88,11 @@ let mainWindowWebContents: Electron.WebContents | null = null;
 let captureWindow: BrowserWindow | null = null;
 /** Background pre-renders share the capture window but never block anything. */
 let captureWindowKind: 'export' | 'prerender' | null = null;
+/**
+ * The pace (duty cycle) the editor last asked for. A pre-render's window gets
+ * it with its params, so a change made while the window was loading still applies.
+ */
+let prerenderDutyCycle: number | undefined;
 
 let chunkCache: ChunkCache | null = null;
 function getChunkCache(): ChunkCache {
@@ -352,6 +357,7 @@ export async function runCaptureInWindow(
       win.webContents.send(CH.export.CAPTURE_PARAMS, {
         ...params,
         edgeSmoothing: params.edgeSmoothing ?? currentEdgeSmoothing(),
+        ...(kind === 'prerender' ? { dutyCycle: prerenderDutyCycle ?? params.dutyCycle } : {}),
       });
     };
 
@@ -1112,6 +1118,7 @@ export async function runExportPrerender(
 ): Promise<boolean> {
   const generation = prerenderGeneration;
   const isStopped = () => generation !== prerenderGeneration;
+  prerenderDutyCycle = params.dutyCycle;
   const refuse = (reason: string) => {
     log.info(`[export:prerender] not started: ${reason}`);
     return false;
@@ -1147,6 +1154,20 @@ export async function runExportPrerender(
     return false;
   } finally {
     await cleanupExportWorkspace(workspace.workspaceId);
+  }
+}
+
+/**
+ * Sets the background pre-render's pace: full speed while the editor's preview
+ * sleeps, throttled while it draws. Kept for a pre-render that is still starting.
+ */
+export function setExportPrerenderPace(dutyCycle: number): void {
+  if (!Number.isFinite(dutyCycle)) {
+    return;
+  }
+  prerenderDutyCycle = dutyCycle;
+  if (captureWindowKind === 'prerender' && captureWindow && !captureWindow.isDestroyed()) {
+    captureWindow.webContents.send(CH.export.PRERENDER_PACE, dutyCycle);
   }
 }
 

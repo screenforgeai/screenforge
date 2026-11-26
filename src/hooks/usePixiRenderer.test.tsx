@@ -7,6 +7,7 @@ import {
   capturePreviewThumbnailCanvas,
 } from '../lib/pixi/previewThumbnail';
 import { invalidatePreview } from '../lib/pixi/previewInvalidation';
+import { isPreviewDrawing } from '../lib/pixi/previewActivity';
 import { usePixiRenderer } from './usePixiRenderer';
 
 const pixi = vi.hoisted(() => ({
@@ -356,6 +357,21 @@ describe('usePixiRenderer', () => {
       pixi.stepPixiSystemTicker.mockClear();
       advance(1_000);
       expect(pixi.stepPixiSystemTicker).not.toHaveBeenCalled();
+    });
+
+    it('tells the background pre-render when it draws and when it sleeps', async () => {
+      await mountPreview(true);
+      advance(100);
+      expect(isPreviewDrawing()).toBe(true);
+
+      advance(3_000);
+      expect(isPreviewDrawing()).toBe(false);
+
+      act(() => useStore.setState({ cursorSize: 2.5 }));
+      expect(isPreviewDrawing()).toBe(true);
+
+      cleanup();
+      expect(isPreviewDrawing()).toBe(false);
     });
 
     it('wakes for an edit made while paused', async () => {

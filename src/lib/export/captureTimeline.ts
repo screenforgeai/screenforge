@@ -30,8 +30,12 @@ import { VideoEncoderWrapper } from './videoEncoder';
 import {
   clampMediaSegmentsToSourceDuration,
   isCaptureKeyFrame,
+  normalizeDutyCycle,
   resolveOutputFrameMode,
+  restAfterWork,
   VIDEO_DECODE_STALL_ERROR,
+  waitWhileHeld,
+  yieldToEventLoop,
 } from './captureScheduling';
 import { createExportVideoFrameSource, type ExportVideoFrameSource } from './videoFrameSource';
 import { preloadWallpapersAsync, preloadCustomWallpaperAsync } from '../effects/frame/wallpapers';
@@ -41,6 +45,8 @@ import { createNv12Readback, type Nv12Readback } from './nv12Readback';
 
 const CAPTURE_STALL_TIMEOUT_MS = 15_000;
 const CAPTURE_YIELD_INTERVAL_FRAMES = 12;
+// How often a held pre-render checks whether it may continue.
+const CAPTURE_HOLD_POLL_MS = 50;
 const CAPTURE_FRAME_BATCH_SIZE = 120;
 const CAPTURE_WRITER_BACKPRESSURE_INTERVAL_FRAMES = 60;
 const CAPTURE_MAX_PENDING_CHUNK_BATCHES = 3;
@@ -106,9 +112,17 @@ export interface CaptureTimelineOptions {
   /**
    * Share of wall time spent rendering (0–1]. Below 1 the capture pauses
    * after each burst of frames, so a background pre-render leaves the GPU
-   * and CPU to the editor. Exports leave it at 1.
+   * and CPU to the editor. Exports leave it at 1. A function is read before
+   * every rest, so a pre-render can change pace while it runs; 0 holds it
+   * until the pace goes up again.
    */
-  dutyCycle?: number;
+  dutyCycle?: number | (() => number);
+  /**
+   * Frames rendered between rests, which is also the most frames queued on the
+   * GPU at once. Fewer keeps a pre-render's GPU work short, so the editor's next
+   * frame never waits long behind it; exports leave it at the default.
+   */
+  framesPerBurst?: number;
   /** How edges are smoothed (see CaptureWindowParams.edgeSmoothing). */
   edgeSmoothing?: EdgeSmoothing;
   /** Writes a line to the app log; used for render speed diagnostics. */
@@ -388,8 +402,10 @@ export async function captureTimeline(
     // gl.finish() blocks until ALL submitted GPU commands complete — no setTimeout,
     // no timer throttling. The GPU batches PBO_SUB_BATCH frames' rendering in
     // roughly one Metal scheduling window (~26ms total vs PBO_SUB_BATCH × 26ms sequential).
-    const PBO_SUB_BATCH = 8;
+    const PBO_SUB_BATCH = Math.max(1, Math.min(8, Math.round(opts.framesPerBurst ?? 8)));
     const PBO_COUNT = PBO_SUB_BATCH;
+    // A pre-render rests after every burst, so its pace changes apply within one burst.
+    const yieldIntervalFrames = opts.framesPerBurst ? PBO_SUB_BATCH : CAPTURE_YIELD_INTERVAL_FRAMES;
 
     let readbackFallbackReason: string | null = null;
     try {
@@ -715,7 +731,8 @@ export async function captureTimeline(
     // ── Frame capture loop ────────────────────────────────────────────────
     let currentOutputFrame = 0;
     let loopEndFrame = totalFrames;
-    const dutyCycle = Math.min(1, Math.max(0.05, opts.dutyCycle ?? 1));
+    const readDutyCycle = (): number =>
+      normalizeDutyCycle(typeof opts.dutyCycle === 'function' ? opts.dutyCycle() : opts.dutyCycle);
     let busySince = performance.now();
     // Yields to the event loop; under a duty cycle, also rests for long enough
     // that rendering takes only `dutyCycle` of the time since the last rest.
@@ -729,10 +746,16 @@ export async function captureTimeline(
         writerBackpressureMs,
         restMs,
       });
-      const restFor =
-        dutyCycle < 1 ? ((performance.now() - busySince) * (1 - dutyCycle)) / dutyCycle : 0;
       const restStartedAt = performance.now();
-      await new Promise<void>((resolve) => setTimeout(resolve, restFor));
+      // Held (pace 0): wait until the pace goes up again, or the capture is stopped.
+      const dutyCycle = await waitWhileHeld(readDutyCycle, signal, CAPTURE_HOLD_POLL_MS);
+      const restFor = restAfterWork(restStartedAt - busySince, dutyCycle);
+      if (restFor === 0 && opts.framesPerBurst) {
+        // A pre-render at full speed rests every burst; don't pay a timer's 4 ms each time.
+        await yieldToEventLoop();
+      } else {
+        await new Promise<void>((resolve) => setTimeout(resolve, restFor));
+      }
       busySince = performance.now();
       restMs += busySince - restStartedAt;
     };
@@ -753,7 +776,8 @@ export async function captureTimeline(
       framesToRender,
       runs: runs?.length ?? null,
       fps,
-      dutyCycle,
+      dutyCycle: readDutyCycle(),
+      framesPerBurst: PBO_SUB_BATCH,
       edgeSmoothing: pixiScene.edgeSmoothing,
     });
     const reportFrameProgress = (): void => {
@@ -820,7 +844,7 @@ export async function captureTimeline(
             reportFrameProgress();
             await waitForWriterIfNeeded();
 
-            if (currentOutputFrame % CAPTURE_YIELD_INTERVAL_FRAMES === 0) {
+            if (currentOutputFrame % yieldIntervalFrames === 0) {
               await yieldAndRest();
             }
           }
@@ -920,7 +944,7 @@ export async function captureTimeline(
             reportFrameProgress();
             await waitForWriterIfNeeded();
 
-            if (currentOutputFrame % CAPTURE_YIELD_INTERVAL_FRAMES === 0) {
+            if (currentOutputFrame % yieldIntervalFrames === 0) {
               await yieldAndRest();
             }
           }
