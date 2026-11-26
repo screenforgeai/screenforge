@@ -105,7 +105,7 @@ export const OnboardingWindow = () => {
 
   const steps = useMemo(() => getOnboardingSteps(platform), [platform]);
   const index = Math.max(0, steps.indexOf(step));
-  const dotRef = useTravellingDot(index);
+  const dotRef = useTravellingDot(index, ready);
 
   useEffect(() => {
     document.title = t('windowLabel');

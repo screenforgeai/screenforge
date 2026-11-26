@@ -20,9 +20,9 @@ const prefersReducedMotion = () =>
 /**
  * One white dot travels between the step dots. Its two edges are separate
  * springs: the leading edge snaps, the trailing edge follows, so it stretches
- * a little in transit and settles. Placed instantly on first render.
+ * a little in transit and settles. Placed instantly once the dots mount.
  */
-export const useTravellingDot = (index: number) => {
+export const useTravellingDot = (index: number, ready: boolean) => {
   const ref = useRef<HTMLSpanElement>(null);
   const edges = useRef({ a: 0, b: DOT });
   // The two edge springs, mutated in place by the animation frames.
@@ -97,7 +97,8 @@ export const useTravellingDot = (index: number) => {
     trail.d = 30;
     run(pair.a, 'a', nextA, instant);
     run(pair.b, 'b', nextB, instant);
-  }, [index]);
+    // `ready` mounts the dots: a resumed launch is already on its step by then.
+  }, [index, ready]);
 
   useEffect(() => {
     const current = springs;

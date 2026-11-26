@@ -33,6 +33,32 @@ describe('settings service', () => {
     fs.rmSync(userData, { recursive: true, force: true });
   });
 
+  it('applies saves started together one after another, so none is lost', async () => {
+    // e.g. Preferences turns usage sharing off while closing the window records completion.
+    await Promise.all([
+      saveSettings({ telemetryEnabled: false }),
+      saveSettings({ onboarding: { completed: true } }),
+      saveSettings({ language: 'de' }),
+    ]);
+
+    const settings = await getSettings();
+    expect(settings.telemetryEnabled).toBe(false);
+    expect(settings.onboarding).toEqual({ completed: true });
+    expect(settings.language).toBe('de');
+  });
+
+  it('keeps saving after a save fails', async () => {
+    const writeFile = vi
+      .spyOn(fs.promises, 'writeFile')
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(saveSettings({ language: 'fr' })).rejects.toThrow('disk full');
+    writeFile.mockRestore();
+    await saveSettings({ language: 'ja' });
+
+    expect((await getSettings()).language).toBe('ja');
+  });
+
   it('shares usage data by default', async () => {
     expect((await getSettings()).telemetryEnabled).toBe(true);
     expect(getSettingsSync().telemetryEnabled).toBe(true);

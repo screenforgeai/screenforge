@@ -98,7 +98,18 @@ export function getSettingsSync(): AppSettings {
   }
 }
 
-export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+// Saves read the whole file and write it back, so they run one at a time: each reads what
+// the previous one wrote (e.g. closing onboarding mid-save can't undo a usage-data opt-out).
+let saveQueue: Promise<unknown> = Promise.resolve();
+
+export function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const save = saveQueue.then(() => writeSettings(patch));
+  // A failed save rejects for its caller only; the next one still runs.
+  saveQueue = save.catch(() => undefined);
+  return save;
+}
+
+async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings();
   const next: AppSettings = withOptionalFields(
     {

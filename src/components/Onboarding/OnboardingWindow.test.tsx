@@ -22,6 +22,8 @@ const makeApi = ({
   saveFails = false,
   telemetryEnabled = true,
   settingsFailures = 0,
+  // A real read crosses IPC, so the window renders in between; 0 resolves at once.
+  settingsDelayMs = 0,
 } = {}) => ({
   getOnboardingState: vi.fn().mockResolvedValue({ platform, resumeStep }),
   getSettings: (() => {
@@ -29,12 +31,17 @@ const makeApi = ({
     for (let i = 0; i < settingsFailures; i += 1) {
       read.mockRejectedValueOnce(new Error('busy'));
     }
-    return read.mockResolvedValue({
+    const saved = {
       profile: { name: '', email: '' },
       language: 'en',
       telemetryEnabled,
       productUpdates,
-    });
+    };
+    return settingsDelayMs > 0
+      ? read.mockImplementation(
+          () => new Promise((resolve) => setTimeout(() => resolve(saved), settingsDelayMs)),
+        )
+      : read.mockResolvedValue(saved);
   })(),
   saveSettings: saveFails
     ? vi.fn().mockRejectedValue(new Error('disk full'))
@@ -272,6 +279,7 @@ describe('OnboardingWindow', () => {
     mount({
       platform: 'darwin',
       resumeStep: 'permissions',
+      settingsDelayMs: 20,
       permissions: {
         screen: 'granted',
         microphone: 'granted',
@@ -281,6 +289,10 @@ describe('OnboardingWindow', () => {
     });
 
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+    // The step indicator starts on the third dot, not the first.
+    expect(document.querySelector<HTMLElement>('.ob-dot-ind')?.style.transform).toBe(
+      'translateX(32px)',
+    );
     await waitFor(() => expect(primary()).toBeEnabled());
     expect(screen.getAllByText('Granted')).toHaveLength(2);
   });
