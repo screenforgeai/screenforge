@@ -756,8 +756,27 @@ export async function captureTimeline(
       } else {
         await new Promise<void>((resolve) => setTimeout(resolve, restFor));
       }
+      // The pace may have dropped to held during that rest: hold before the next burst.
+      await waitWhileHeld(readDutyCycle, signal, CAPTURE_HOLD_POLL_MS);
       busySince = performance.now();
       restMs += busySince - restStartedAt;
+    };
+    // Rests once a burst's worth of frames is out, counting every frame encoded
+    // (decoded, black or padding), so no path renders past a burst unchecked.
+    let framesSinceRest = 0;
+    const restIfBurstDone = async (): Promise<void> => {
+      framesSinceRest += 1;
+      if (framesSinceRest >= yieldIntervalFrames) {
+        framesSinceRest = 0;
+        await yieldAndRest();
+      }
+    };
+    // Before a run's first burst: a pre-render held before it started waits here.
+    const holdBeforeFirstBurst = async (): Promise<void> => {
+      const heldSince = performance.now();
+      await waitWhileHeld(readDutyCycle, signal, CAPTURE_HOLD_POLL_MS);
+      busySince = performance.now();
+      restMs += busySince - heldSince;
     };
     const framesToRender = runs
       ? runs.reduce((sum, run) => sum + (run.endFrame - run.startFrame), 0)
@@ -800,6 +819,7 @@ export async function captureTimeline(
 
     const renderUntil = async (endFrame: number): Promise<void> => {
       loopEndFrame = endFrame;
+      await holdBeforeFirstBurst();
       while (currentOutputFrame < loopEndFrame) {
         assertNotAborted();
 
@@ -844,9 +864,7 @@ export async function captureTimeline(
             reportFrameProgress();
             await waitForWriterIfNeeded();
 
-            if (currentOutputFrame % yieldIntervalFrames === 0) {
-              await yieldAndRest();
-            }
+            await restIfBurstDone();
           }
 
           continue;
@@ -898,6 +916,7 @@ export async function captureTimeline(
                 encodeMs += performance.now() - encodeStart;
                 currentOutputFrame += 1;
                 blackFrameCount += 1;
+                await restIfBurstDone();
               }
               break;
             }
@@ -916,6 +935,7 @@ export async function captureTimeline(
               encodeMs += performance.now() - encodeStart;
               currentOutputFrame += 1;
               blackFrameCount += 1;
+              await restIfBurstDone();
               continue;
             }
 
@@ -944,9 +964,7 @@ export async function captureTimeline(
             reportFrameProgress();
             await waitForWriterIfNeeded();
 
-            if (currentOutputFrame % yieldIntervalFrames === 0) {
-              await yieldAndRest();
-            }
+            await restIfBurstDone();
           }
         } finally {
           // Drain the pipeline: collect and encode all PBOs submitted in this batch
