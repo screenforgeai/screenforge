@@ -232,6 +232,33 @@ describe('updater service', () => {
     });
   });
 
+  it('gives Squirrel the Windows feed folder, since it adds /RELEASES itself', async () => {
+    Object.defineProperty(process, 'platform', {
+      configurable: true,
+      value: 'win32',
+    });
+    const { createUpdaterAdapter } = await loadServiceModule();
+    const adapter = createUpdaterAdapter({
+      winUpdateBaseUrl: 'https://updates.example.com/screenforge/updates/release/win32/x64/',
+    });
+    if (adapter.kind !== 'active') {
+      throw new Error('Expected an active Windows adapter.');
+    }
+
+    adapter.start({
+      onChecking: vi.fn(),
+      onUpdateAvailable: vi.fn(),
+      onManualUpdateAvailable: vi.fn(),
+      onUpdateNotAvailable: vi.fn(),
+      onUpdateDownloaded: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    expect(electronMock.autoUpdater.setFeedURL).toHaveBeenCalledWith({
+      url: 'https://updates.example.com/screenforge/updates/release/win32/x64',
+    });
+  });
+
   it('disables macOS auto-update when the feed URL is missing', async () => {
     Object.defineProperty(process, 'platform', {
       configurable: true,
