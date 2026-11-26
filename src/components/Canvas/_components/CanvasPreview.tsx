@@ -20,6 +20,7 @@ import { TextOverlayEditor } from './TextOverlayEditor';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { playShutterSound } from 'src/lib/screenshot/shutter-sound';
 import { canvasToPng, createPngUrl } from 'src/lib/screenshot/png';
+import { capturePreviewFrameCanvas } from 'src/lib/pixi/previewThumbnail';
 
 interface Props {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -130,7 +131,9 @@ export const CanvasPreview = ({ videoRef, canvasRef }: Props) => {
 
   const handleCapture = useCallback(
     async (source: 'button' | 'shortcut' = 'button') => {
-      const canvas = canvasRef.current;
+      // The preview only draws as many pixels as it shows; a frame screenshot is
+      // drawn again at the recording's full resolution.
+      const canvas = capturePreviewFrameCanvas() ?? canvasRef.current;
       if (!canvas) {
         return;
       }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  capturePreviewFrameCanvas,
   capturePreviewThumbnailCanvas,
   fitThumbnailSize,
   registerPreviewFrameRenderer,
@@ -31,11 +32,15 @@ describe('preview thumbnails', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       drawImage,
     } as unknown as CanvasRenderingContext2D);
-    const render = vi.fn(() => {
-      // The copy must not have happened yet: it reads the frame this call draws.
-      expect(drawImage).not.toHaveBeenCalled();
-      return preview;
-    });
+    const render = vi.fn(
+      (read: (canvas: HTMLCanvasElement) => void, options: { fullResolution: boolean }) => {
+        // The copy must not have happened yet: it reads the frame this call draws.
+        expect(drawImage).not.toHaveBeenCalled();
+        // A thumbnail needs no more pixels than the preview already shows.
+        expect(options.fullResolution).toBe(false);
+        read(preview);
+      },
+    );
     const unregister = registerPreviewFrameRenderer(render);
 
     const thumbnail = capturePreviewThumbnailCanvas();
@@ -49,9 +54,9 @@ describe('preview thumbnails', () => {
   });
 
   it('keeps a newer preview registered when an older one unregisters', () => {
-    const older = registerPreviewFrameRenderer(() => null);
+    const older = registerPreviewFrameRenderer(() => undefined);
     const newerCanvas = document.createElement('canvas');
-    const unregisterNewer = registerPreviewFrameRenderer(() => newerCanvas);
+    const unregisterNewer = registerPreviewFrameRenderer((read) => read(newerCanvas));
     older();
 
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
@@ -61,5 +66,28 @@ describe('preview thumbnails', () => {
     newerCanvas.height = 50;
     expect(capturePreviewThumbnailCanvas()?.width).toBe(100);
     unregisterNewer();
+  });
+
+  it('asks for a full-resolution frame for a screenshot and keeps its size', () => {
+    const preview = document.createElement('canvas');
+    preview.width = 2560;
+    preview.height = 1440;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const render = vi.fn(
+      (read: (canvas: HTMLCanvasElement) => void, options: { fullResolution: boolean }) => {
+        expect(options.fullResolution).toBe(true);
+        read(preview);
+      },
+    );
+    const unregister = registerPreviewFrameRenderer(render);
+
+    const shot = capturePreviewFrameCanvas();
+    unregister();
+
+    expect(shot?.width).toBe(2560);
+    expect(shot?.height).toBe(1440);
+    expect(capturePreviewFrameCanvas()).toBeNull();
   });
 });

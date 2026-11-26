@@ -11,7 +11,8 @@ import {
 } from '../lib/effects/cursor/audio';
 import {
   createPreviewPixiApp,
-  getPreviewRendererResolution,
+  fitPreviewResolution,
+  resizePreviewRenderer,
   stepPixiSystemTicker,
 } from '../lib/pixi/createPixiApp';
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
@@ -20,6 +21,9 @@ import { trackVideoFrames } from '../lib/pixi/videoFrames';
 import { onPreviewInvalidated, invalidatePreview } from '../lib/pixi/previewInvalidation';
 import { createPreviewRenderScheduler } from '../lib/pixi/previewRenderScheduler';
 import { hasSceneMoved, readSceneMotion } from '../lib/pixi/sceneMotion';
+
+/** How long the preview's on-screen size must hold still before its buffer is resized. */
+const PREVIEW_RESIZE_SETTLE_MS = 120;
 
 /** Video events that change what the paused preview should show. */
 const PREVIEW_DIRTY_VIDEO_EVENTS = [
@@ -176,6 +180,8 @@ export const usePixiRenderer = (
   // The effect updaters for the current scene; they close over it, so they
   // must never outlive it (see the scene cleanup below).
   const updatersRef = useRef<PixiEffectUpdater[]>([]);
+  // The scene's layout size (the recording's pixels), as last set by resize.
+  const logicalSizeRef = useRef<{ width: number; height: number } | null>(null);
 
   // Track only whether a recording is present (null vs. non-null).
   // Switching from R1 → R2 must NOT destroy the Pixi app — recreating a
@@ -233,14 +239,28 @@ export const usePixiRenderer = (
     if (!sceneReady) {
       return;
     }
-    return registerPreviewFrameRenderer(() => {
+    return registerPreviewFrameRenderer((read, { fullResolution }) => {
       const scene = sceneRef.current;
       const video = videoRef.current;
       if (!scene?.app.renderer || !video || video.videoWidth === 0) {
-        return null;
+        return;
       }
-      scene.app.renderer.render(scene.app.stage);
-      return scene.app.canvas as HTMLCanvasElement;
+      const { renderer, stage } = scene.app;
+      // The buffer is only as big as the preview is shown: a frame screenshot
+      // draws once at the recording's pixels, then puts the buffer back. The exact
+      // layout size, not renderer.width/height (Pixi rounds them via the buffer).
+      const shownResolution = renderer.resolution;
+      const enlarge = fullResolution && shownResolution < 1;
+      const logical = logicalSizeRef.current ?? { width: renderer.width, height: renderer.height };
+      if (enlarge) {
+        renderer.resize(logical.width, logical.height, 1);
+      }
+      renderer.render(stage);
+      read(scene.app.canvas as HTMLCanvasElement);
+      if (enlarge) {
+        renderer.resize(logical.width, logical.height, shownResolution);
+        renderer.render(stage);
+      }
     });
   }, [sceneReady, videoRef]);
 
@@ -261,12 +281,26 @@ export const usePixiRenderer = (
       const { isCropEditing: editing } = useStore.getState();
       const targetFrame = editing ? { ...frame, cropRect: DEFAULT_CROP_RECT } : frame;
       const geometry = getFrameGeometry(targetFrame, sw, sh);
-      const resolution = getPreviewRendererResolution();
+      const canvas = scene.app.canvas as HTMLCanvasElement;
+      const shown = canvas.getBoundingClientRect();
+      // Laid out in the recording's pixels; drawn at the size it is shown.
+      const resolution = fitPreviewResolution({
+        logicalWidth: geometry.canvasWidth,
+        logicalHeight: geometry.canvasHeight,
+        displayWidth: shown.width,
+        displayHeight: shown.height,
+        devicePixelRatio: window.devicePixelRatio,
+      });
       scene.sourceWidth = sw;
       scene.sourceHeight = sh;
-      scene.app.renderer.resize(geometry.canvasWidth, geometry.canvasHeight, resolution);
+      logicalSizeRef.current = { width: geometry.canvasWidth, height: geometry.canvasHeight };
+      resizePreviewRenderer(
+        scene.app.renderer,
+        geometry.canvasWidth,
+        geometry.canvasHeight,
+        resolution,
+      );
 
-      const canvas = scene.app.canvas as HTMLCanvasElement;
       canvas.style.width = '100%';
       canvas.style.height = '100%';
       // Resizing clears the canvas: draw it again even while paused.
@@ -278,7 +312,25 @@ export const usePixiRenderer = (
     }
     video.addEventListener('loadedmetadata', resize);
     window.addEventListener('resize', resize);
+    // The drawing buffer follows the preview's on-screen size (focus mode, the
+    // timeline divider, panels). Settle first: while the size is still changing
+    // the browser scales the current frame, instead of reallocating every frame.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+              if (video.readyState >= 1) {
+                resize();
+              }
+            }, PREVIEW_RESIZE_SETTLE_MS);
+          });
+    observer?.observe(scene.app.canvas as HTMLCanvasElement);
     return () => {
+      clearTimeout(resizeTimer);
+      observer?.disconnect();
       video.removeEventListener('loadedmetadata', resize);
       window.removeEventListener('resize', resize);
     };

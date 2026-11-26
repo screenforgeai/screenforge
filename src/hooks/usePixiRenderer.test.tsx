@@ -2,7 +2,10 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../store';
 import type { RecordingResult } from '../types/index';
-import { capturePreviewThumbnailCanvas } from '../lib/pixi/previewThumbnail';
+import {
+  capturePreviewFrameCanvas,
+  capturePreviewThumbnailCanvas,
+} from '../lib/pixi/previewThumbnail';
 import { invalidatePreview } from '../lib/pixi/previewInvalidation';
 import { usePixiRenderer } from './usePixiRenderer';
 
@@ -12,11 +15,21 @@ const pixi = vi.hoisted(() => ({
   stepPixiSystemTicker: vi.fn(),
 }));
 
-vi.mock('../lib/pixi/createPixiApp', () => ({
-  createPreviewPixiApp: pixi.createPreviewPixiApp,
-  getPreviewRendererResolution: () => 1,
-  stepPixiSystemTicker: pixi.stepPixiSystemTicker,
-}));
+vi.mock('../lib/pixi/createPixiApp', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/pixi/createPixiApp')>();
+  return {
+    createPreviewPixiApp: pixi.createPreviewPixiApp,
+    fitPreviewResolution: actual.fitPreviewResolution,
+    // The fake renderer has no view texture; resizePreviewRenderer has its own tests.
+    resizePreviewRenderer: (
+      renderer: { resize: (w: number, h: number, r: number) => void },
+      width: number,
+      height: number,
+      resolution: number,
+    ) => renderer.resize(width, height, resolution),
+    stepPixiSystemTicker: pixi.stepPixiSystemTicker,
+  };
+});
 
 vi.mock('../lib/pixi/pipeline', () => ({
   analyzePixiEffects: () => new Map(),
@@ -211,6 +224,73 @@ describe('usePixiRenderer', () => {
 
     unmount();
     expect(capturePreviewThumbnailCanvas()).toBeNull();
+  });
+
+  it('draws only as many pixels as the preview shows, laid out in the recording pixels', async () => {
+    const scene = fakeScene();
+    vi.spyOn(scene.app.canvas, 'getBoundingClientRect').mockReturnValue({
+      width: 640,
+      height: 360,
+    } as DOMRect);
+    pixi.createPreviewPixiApp.mockResolvedValue(scene);
+    pixi.setupPixiPipeline.mockResolvedValue([]);
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'videoWidth', { value: 2560 });
+    Object.defineProperty(video, 'videoHeight', { value: 1440 });
+    Object.defineProperty(video, 'readyState', { value: 1 });
+    renderHook(() =>
+      usePixiRenderer(
+        { current: document.createElement('canvas') },
+        { current: video },
+        recording('/a.mp4'),
+      ),
+    );
+    await act(async () => undefined);
+
+    const [width, height, resolution] = scene.app.renderer.resize.mock.calls.at(-1) as number[];
+    // Effects keep working in the recording's pixels...
+    expect(width).toBeGreaterThanOrEqual(2560);
+    // ...while the buffer covers what is shown, not the whole recording.
+    expect(resolution).toBeLessThan(0.5);
+    expect(width * resolution).toBeGreaterThanOrEqual(640);
+    expect(height * resolution).toBeGreaterThanOrEqual(360);
+  });
+
+  it('draws a frame screenshot at full resolution, then puts the smaller buffer back', async () => {
+    const scene = fakeScene();
+    Object.assign(scene.app.renderer, { resolution: 0.25, width: 2560, height: 1440 });
+    pixi.createPreviewPixiApp.mockResolvedValue(scene);
+    pixi.setupPixiPipeline.mockResolvedValue([]);
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'videoWidth', { value: 2560 });
+    Object.defineProperty(video, 'videoHeight', { value: 1440 });
+    renderHook(() =>
+      usePixiRenderer(
+        { current: document.createElement('canvas') },
+        { current: video },
+        recording('/a.mp4'),
+      ),
+    );
+    await act(async () => undefined);
+    scene.app.renderer.resize.mockClear();
+    let resizesWhenRead = -1;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: () => {
+        resizesWhenRead = scene.app.renderer.resize.mock.calls.length;
+      },
+    } as unknown as CanvasRenderingContext2D);
+    scene.app.canvas.width = 2560;
+    scene.app.canvas.height = 1440;
+
+    const shot = capturePreviewFrameCanvas();
+
+    expect(scene.app.renderer.resize.mock.calls).toEqual([
+      [2560, 1440, 1],
+      [2560, 1440, 0.25],
+    ]);
+    // Copied while the full-resolution frame was on the canvas.
+    expect(resizesWhenRead).toBe(1);
+    expect(shot?.width).toBe(2560);
   });
 
   describe('drawing on demand', () => {

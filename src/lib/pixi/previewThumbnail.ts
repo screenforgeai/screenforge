@@ -2,11 +2,15 @@
 export const THUMBNAIL_MAX_WIDTH = 480;
 
 /**
- * Draws one preview frame and returns the canvas it went to. A WebGL canvas
- * without preserveDrawingBuffer only holds that frame until the current task
- * ends, so read it right away.
+ * Draws one preview frame and hands the canvas holding it to `read`, in the same
+ * task (a WebGL canvas may not keep the frame past it). The preview's buffer is
+ * sized to what is shown on screen; with `fullResolution` the frame is drawn at
+ * the recording's own pixels instead, then the buffer goes back.
  */
-type PreviewFrameRenderer = () => HTMLCanvasElement | null;
+type PreviewFrameRenderer = (
+  read: (canvas: HTMLCanvasElement) => void,
+  options: { fullResolution: boolean },
+) => void;
 
 let renderPreviewFrame: PreviewFrameRenderer | null = null;
 
@@ -61,9 +65,28 @@ export function drawThumbnailCanvas(
 export function capturePreviewThumbnailCanvas(
   maxWidth: number = THUMBNAIL_MAX_WIDTH,
 ): HTMLCanvasElement | null {
-  const canvas = renderPreviewFrame?.() ?? null;
-  if (!canvas) {
-    return null;
-  }
-  return drawThumbnailCanvas(canvas, canvas.width, canvas.height, maxWidth);
+  let copy: HTMLCanvasElement | null = null;
+  renderPreviewFrame?.(
+    (canvas) => {
+      copy = drawThumbnailCanvas(canvas, canvas.width, canvas.height, maxWidth);
+    },
+    { fullResolution: false },
+  );
+  return copy;
+}
+
+/**
+ * Draws a preview frame at the recording's full resolution and copies it onto a
+ * 2D canvas (the preview's own buffer is only as big as it is shown). For frame
+ * screenshots. Null when no preview is live.
+ */
+export function capturePreviewFrameCanvas(): HTMLCanvasElement | null {
+  let copy: HTMLCanvasElement | null = null;
+  renderPreviewFrame?.(
+    (canvas) => {
+      copy = drawThumbnailCanvas(canvas, canvas.width, canvas.height, Number.POSITIVE_INFINITY);
+    },
+    { fullResolution: true },
+  );
+  return copy;
 }
