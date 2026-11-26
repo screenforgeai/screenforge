@@ -14,6 +14,7 @@ const scene = () => {
       compositeContainer: new Container(),
       cameraContainer: new Container(),
       frameContainer: new Container(),
+      videoContainer: new Container(),
       motionOverlayContainer,
     } as unknown as PixiScene,
   };
@@ -34,6 +35,13 @@ describe('scene motion', () => {
     const { scene: s } = scene();
     const before = readSceneMotion(s);
     s.cameraContainer.pivot.x += 0.5;
+    expect(hasSceneMoved(before, readSceneMotion(s))).toBe(true);
+  });
+
+  it('sees a later clip still fading in (wall-clock fade on the video container)', () => {
+    const { scene: s } = scene();
+    const before = readSceneMotion(s);
+    s.videoContainer.alpha = 0.4;
     expect(hasSceneMoved(before, readSceneMotion(s))).toBe(true);
   });
 

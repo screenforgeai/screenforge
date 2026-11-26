@@ -24,9 +24,11 @@ const pushTransform = (out: number[], c: Container): void => {
 
 /**
  * The transforms that effects animate on their own between edits: the zoom
- * camera's follow and tilt, motion clips, and what rides on them (the cursor).
- * The paused preview keeps drawing while these still change frame to frame:
- * the camera's follow is stateful and keeps easing for a while after a seek.
+ * camera's follow and tilt, motion clips, the fade-in of a clip after the first
+ * (timed by the wall clock, up to 1.5 s, on the video container), and what rides
+ * on them (the cursor). The paused preview keeps drawing while these still change
+ * frame to frame: the camera's follow is stateful and keeps easing for a while
+ * after a seek.
  */
 export function readSceneMotion(scene: PixiScene): number[] {
   const out: number[] = [];
@@ -34,6 +36,7 @@ export function readSceneMotion(scene: PixiScene): number[] {
   pushTransform(out, scene.compositeContainer);
   pushTransform(out, scene.cameraContainer);
   pushTransform(out, scene.frameContainer);
+  pushTransform(out, scene.videoContainer);
   for (const child of scene.motionOverlayContainer.children) {
     pushTransform(out, child);
   }
