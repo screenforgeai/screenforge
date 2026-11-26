@@ -38,5 +38,10 @@
   "director_signOutFailed": "サインアウトできませんでした。Screenforge Director に接続できず、保存されたサインイン情報も削除できませんでした。接続を確認してもう一度お試しください。",
   "director_error_expired": "サインインのリンクの有効期限が切れました。もう一度お試しください。",
   "director_error_failed": "Screenforge Director にサインインできませんでした。接続を確認して、もう一度お試しください。",
-  "director_error_disconnected": "このアプリは Screenforge Director から切断されました。再接続するにはもう一度サインインしてください。"
+  "director_error_disconnected": "このアプリは Screenforge Director から切断されました。再接続するにはもう一度サインインしてください。",
+  "tabs_updates": "アップデート",
+  "updates_title": "アップデート",
+  "updates_description": "受け取る Screenforge のバージョンを選択します。",
+  "earlyUpdates_label": "早期アップデートを受け取る",
+  "earlyUpdates_desc": "新しいバージョンをいち早く試せます。不具合が残っている場合があります。"
 }

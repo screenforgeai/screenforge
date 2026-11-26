@@ -38,5 +38,10 @@
   "director_signOutFailed": "로그아웃하지 못했습니다. Screenforge Director에 연결할 수 없고 저장된 로그인 정보도 삭제하지 못했습니다. 연결을 확인한 후 다시 시도하세요.",
   "director_error_expired": "로그인 링크가 만료되었습니다. 다시 시도하세요.",
   "director_error_failed": "Screenforge Director에 로그인하지 못했습니다. 연결을 확인하고 다시 시도하세요.",
-  "director_error_disconnected": "이 앱은 Screenforge Director와의 연결이 끊겼습니다. 다시 연결하려면 다시 로그인하세요."
+  "director_error_disconnected": "이 앱은 Screenforge Director와의 연결이 끊겼습니다. 다시 연결하려면 다시 로그인하세요.",
+  "tabs_updates": "업데이트",
+  "updates_title": "업데이트",
+  "updates_description": "받을 Screenforge 버전을 선택하세요.",
+  "earlyUpdates_label": "얼리 업데이트 받기",
+  "earlyUpdates_desc": "새 버전을 누구보다 먼저 사용해 보세요. 다듬어지지 않은 부분이 있을 수 있습니다."
 }

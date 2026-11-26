@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsModal } from './SettingsModal';
 
@@ -17,6 +17,7 @@ beforeEach(() => {
         telemetryEnabled: true,
       }),
       saveSettings: vi.fn().mockResolvedValue(undefined),
+      checkForUpdatesNow: vi.fn().mockResolvedValue(undefined),
       trackEvent: vi.fn(),
     },
     writable: true,
@@ -45,6 +46,33 @@ describe('SettingsModal', () => {
     expect(await screen.findByRole('tab', { name: /account/i })).toHaveAttribute(
       'aria-selected',
       'true',
+    );
+  });
+
+  it('saves early updates and checks the beta feed right away', async () => {
+    render(<SettingsModal open section="updates" onClose={vi.fn()} />);
+    const toggle = await screen.findByRole('switch', { name: /get early updates/i });
+    expect(toggle).not.toBeChecked();
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() =>
+      expect(window.screenforge.saveSettings).toHaveBeenCalledWith({ earlyUpdates: true }),
+    );
+    await waitFor(() => expect(window.screenforge.checkForUpdatesNow).toHaveBeenCalled());
+  });
+
+  it('shows early updates as saved', async () => {
+    vi.mocked(window.screenforge.getSettings).mockResolvedValue({
+      profile: { name: '', email: '' },
+      language: 'en',
+      telemetryEnabled: true,
+      earlyUpdates: true,
+    });
+    render(<SettingsModal open section="updates" onClose={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: /get early updates/i })).toBeChecked(),
     );
   });
 });

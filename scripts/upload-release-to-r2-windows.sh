@@ -44,7 +44,9 @@ if [[ "$R2_PUBLIC_BASE_URL" != https://* ]]; then
 fi
 
 release_path="${prefix%/}/${tag}"
-win_update_feed_path="${prefix%/}/updates/release/win32/x64"
+# New builds reach the beta feed only; scripts/promote-update-feed.sh moves a
+# version to the release feed once its GitHub release stops being a pre-release.
+win_update_feed_path="${prefix%/}/updates/beta/win32/x64"
 public_base="${R2_PUBLIC_BASE_URL%/}"
 endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
@@ -129,18 +131,10 @@ for file in "${win_feed_artifacts[@]}"; do
   echo "Uploaded update feed ${name} -> ${public_base}/${object_key}"
 done
 
-# Windows builds up to 0.10.0 read <feed>/RELEASES/RELEASES and look for packages
-# next to it (see scripts/legacy-win-feed.mjs). Put a copy there that points at
-# this feed's packages, so those installs can update to a build that reads the
-# feed correctly. Only the release feed: it's the one those builds read.
-if [[ "$win_update_feed_path" == "${prefix%/}/updates/release/win32/x64" ]]; then
-  legacy_releases="out/make/legacy-RELEASES"
-  node scripts/legacy-win-feed.mjs out/make/squirrel.windows/x64/RELEASES \
-    "${public_base}/${win_update_feed_path}" "$legacy_releases"
-  object_key="${win_update_feed_path}/RELEASES/RELEASES"
-  aws s3 cp "$legacy_releases" "s3://${R2_BUCKET}/${object_key}" \
-    --endpoint-url "$endpoint" \
-    --only-show-errors \
-    --cache-control "public, max-age=300, must-revalidate"
-  echo "Uploaded legacy update feed RELEASES -> ${public_base}/${object_key}"
-fi
+# Keep this build's RELEASES with the version too: the beta feed's copy is
+# replaced by the next build, and promotion needs the one for this version.
+aws s3 cp out/make/squirrel.windows/x64/RELEASES "s3://${R2_BUCKET}/${release_path}/RELEASES" \
+  --endpoint-url "$endpoint" \
+  --only-show-errors \
+  --cache-control "public, max-age=31536000, immutable"
+echo "Uploaded RELEASES -> ${public_base}/${release_path}/RELEASES"
