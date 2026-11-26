@@ -128,3 +128,19 @@ for file in "${win_feed_artifacts[@]}"; do
     --cache-control "$cache_control"
   echo "Uploaded update feed ${name} -> ${public_base}/${object_key}"
 done
+
+# Windows builds up to 0.10.0 read <feed>/RELEASES/RELEASES and look for packages
+# next to it (see scripts/legacy-win-feed.mjs). Put a copy there that points at
+# this feed's packages, so those installs can update to a build that reads the
+# feed correctly. Only the release feed: it's the one those builds read.
+if [[ "$win_update_feed_path" == "${prefix%/}/updates/release/win32/x64" ]]; then
+  legacy_releases="out/make/legacy-RELEASES"
+  node scripts/legacy-win-feed.mjs out/make/squirrel.windows/x64/RELEASES \
+    "${public_base}/${win_update_feed_path}" "$legacy_releases"
+  object_key="${win_update_feed_path}/RELEASES/RELEASES"
+  aws s3 cp "$legacy_releases" "s3://${R2_BUCKET}/${object_key}" \
+    --endpoint-url "$endpoint" \
+    --only-show-errors \
+    --cache-control "public, max-age=300, must-revalidate"
+  echo "Uploaded legacy update feed RELEASES -> ${public_base}/${object_key}"
+fi
