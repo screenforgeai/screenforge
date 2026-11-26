@@ -173,8 +173,9 @@ class WinUpdaterAdapter implements ActiveUpdaterAdapter {
     this.started = true;
 
     const normalizedBaseUrl = this.baseUrl.replace(/\/$/, '');
-    // Squirrel.Windows consumes a RELEASES manifest plus .nupkg packages.
-    const feedUrl = `${normalizedBaseUrl}/RELEASES`;
+    // Squirrel.Windows takes the feed folder and fetches `RELEASES` and the
+    // .nupkg packages from it, so the URL must not end in /RELEASES.
+    const feedUrl = normalizedBaseUrl;
     log.info('[updater] configuring Windows feed', { feedUrl });
 
     this.updater.setFeedURL({ url: feedUrl });
