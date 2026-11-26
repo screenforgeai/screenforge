@@ -744,6 +744,8 @@ export interface FeatureFlags {
    * smoothed in a shader and small shapes get MSAA of their own. Faster.
    */
   fastExportEdges: boolean;
+  /** Updates come from the beta feed: releases before they reach everyone. */
+  betaUpdates: boolean;
 }
 
 /** The optional Director sign-in, as the app shows it. Never carries the token. */
@@ -1001,6 +1003,8 @@ export interface ScreenforgeAPI {
     telemetryEnabled: boolean;
     /** Absent until answered in onboarding. */
     productUpdates?: boolean;
+    /** "Get early updates"; absent until set. */
+    earlyUpdates?: boolean;
   }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };
@@ -1008,6 +1012,7 @@ export interface ScreenforgeAPI {
     telemetryEnabled?: boolean;
     /** "Email me product updates and tips" from onboarding. */
     productUpdates?: boolean;
+    earlyUpdates?: boolean;
   }) => Promise<{
     profile: { name: string; email: string };
     language: string;

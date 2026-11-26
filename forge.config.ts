@@ -179,7 +179,13 @@ if (stagedUiohookDir && fs.existsSync(stagedUiohookDir)) {
   extraResources.push(stagedUiohookDir);
 }
 
-const macUpdateManifestBaseUrl = process.env.SCREENFORGE_MAC_UPDATE_BASE_URL?.trim() ?? '';
+// The feed this build's RELEASES.json is written for: the beta feed in CI, since
+// every release reaches beta first. The app itself keeps the release feed
+// (SCREENFORGE_MAC_UPDATE_BASE_URL) and picks its channel at run time.
+const macUpdateManifestBaseUrl =
+  process.env.SCREENFORGE_MAC_UPDATE_MANIFEST_BASE_URL?.trim() ||
+  process.env.SCREENFORGE_MAC_UPDATE_BASE_URL?.trim() ||
+  '';
 const macUpdateReleaseNotes = readOptionalConfiguredTextFile(
   process.env.SCREENFORGE_MAC_UPDATE_RELEASE_NOTES_PATH,
 );

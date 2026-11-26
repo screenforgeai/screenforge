@@ -17,6 +17,8 @@ export interface AppSettings {
   onboarding?: OnboardingRecord;
   /** "Email me product updates and tips", ticked in onboarding; absent until answered. */
   productUpdates?: boolean;
+  /** "Get early updates": this install reads the beta update feed; absent until set. */
+  earlyUpdates?: boolean;
 }
 
 const DEFAULTS: AppSettings = {
@@ -51,7 +53,12 @@ function toOnboardingRecord(value: unknown): OnboardingRecord | undefined {
 /** Adds the optional fields that hold a valid value; leaves the rest out. */
 function withOptionalFields(
   settings: AppSettings,
-  values: { lastSeenVersion?: unknown; onboarding?: unknown; productUpdates?: unknown },
+  values: {
+    lastSeenVersion?: unknown;
+    onboarding?: unknown;
+    productUpdates?: unknown;
+    earlyUpdates?: unknown;
+  },
 ): AppSettings {
   const next: AppSettings = { ...settings };
   if (isNonEmptyString(values.lastSeenVersion)) {
@@ -63,6 +70,9 @@ function withOptionalFields(
   }
   if (isBoolean(values.productUpdates)) {
     next.productUpdates = values.productUpdates;
+  }
+  if (isBoolean(values.earlyUpdates)) {
+    next.earlyUpdates = values.earlyUpdates;
   }
   return next;
 }
@@ -127,6 +137,7 @@ async function writeSettings(patch: Partial<AppSettings>): Promise<AppSettings> 
       productUpdates: isBoolean(patch.productUpdates)
         ? patch.productUpdates
         : current.productUpdates,
+      earlyUpdates: isBoolean(patch.earlyUpdates) ? patch.earlyUpdates : current.earlyUpdates,
     },
   );
   await fs.writeFile(settingsPath(), JSON.stringify(next), 'utf8');

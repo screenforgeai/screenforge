@@ -38,5 +38,10 @@
   "director_signOutFailed": "Não foi possível sair: o Screenforge Director não respondeu e o login salvo não pôde ser removido. Verifique sua conexão e tente novamente.",
   "director_error_expired": "O link de login expirou. Tente novamente.",
   "director_error_failed": "Não foi possível entrar no Screenforge Director. Verifique sua conexão e tente novamente.",
-  "director_error_disconnected": "Este app foi desconectado do Screenforge Director. Entre novamente para reconectar."
+  "director_error_disconnected": "Este app foi desconectado do Screenforge Director. Entre novamente para reconectar.",
+  "tabs_updates": "Atualizações",
+  "updates_title": "Atualizações",
+  "updates_description": "Escolha quais versões do Screenforge você recebe.",
+  "earlyUpdates_label": "Receber atualizações antecipadas",
+  "earlyUpdates_desc": "Experimente novas versões antes de todos. Elas podem ter alguns problemas."
 }

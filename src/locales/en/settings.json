@@ -38,5 +38,10 @@
   "director_signOutFailed": "Couldn't sign out: Screenforge Director couldn't be reached and the saved sign-in couldn't be removed. Check your connection and try again.",
   "director_error_expired": "The sign-in link expired. Try again.",
   "director_error_failed": "Couldn't sign in to Screenforge Director. Check your connection and try again.",
-  "director_error_disconnected": "This app was disconnected from Screenforge Director. Sign in again to reconnect."
+  "director_error_disconnected": "This app was disconnected from Screenforge Director. Sign in again to reconnect.",
+  "tabs_updates": "Updates",
+  "updates_title": "Updates",
+  "updates_description": "Choose which Screenforge versions you get.",
+  "earlyUpdates_label": "Get early updates",
+  "earlyUpdates_desc": "Try new versions before everyone else. They may have rough edges."
 }
