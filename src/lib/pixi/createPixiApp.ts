@@ -1,5 +1,6 @@
 import { Application, Container, Ticker, type Renderer } from 'pixi.js';
 import type { PixiScene } from './types';
+import type { EdgeSmoothing } from '../../types';
 
 // The preview's scene is laid out in the recording's own pixels (its logical size),
 // so every effect works in the same units as export. Its drawing buffer is sized
@@ -84,9 +85,10 @@ export function resizePreviewRenderer(
   }
 }
 
+/** The containers only; each factory adds the rest of PixiScene. */
 function buildSceneGraph(
   app: Application,
-): Omit<PixiScene, 'app' | 'sourceWidth' | 'sourceHeight'> {
+): Omit<PixiScene, 'app' | 'edgeSmoothing' | 'sourceWidth' | 'sourceHeight' | 'renderScale'> {
   const motionContainer = new Container();
   const motionOverlayContainer = new Container();
   const compositeContainer = new Container();
@@ -162,7 +164,14 @@ export async function createPreviewPixiApp(canvas: HTMLCanvasElement): Promise<P
   Ticker.system.stop();
 
   const containers = buildSceneGraph(app);
-  return { app, ...containers, sourceWidth: 1280, sourceHeight: 800, renderScale: 1 };
+  return {
+    app,
+    ...containers,
+    edgeSmoothing: 'msaa',
+    sourceWidth: 1280,
+    sourceHeight: 800,
+    renderScale: 1,
+  };
 }
 
 /** Runs Pixi's system ticker for one preview frame (see createPreviewPixiApp). */
@@ -178,15 +187,22 @@ export function stepPixiSystemTicker(now: number): void {
  * autoStart=false — captureTimeline drives rendering one frame at a time.
  * antialias=true — 4× MSAA, as in the preview: rounded corners, masks, click rings and
  * shapes are drawn as geometry, whose edges step without it (the 1:1 blit cannot smooth them).
+ * edgeSmoothing 'shader' turns canvas MSAA off: it costs ~4 ms a 1080p frame, and the
+ * effects then smooth their own edges (the frame's corners in a shader, small shapes
+ * with MSAA of their own; see src/lib/pixi/edgeSmoothing.ts).
  */
-export async function createExportPixiApp(width: number, height: number): Promise<PixiScene> {
+export async function createExportPixiApp(
+  width: number,
+  height: number,
+  edgeSmoothing: EdgeSmoothing = 'msaa',
+): Promise<PixiScene> {
   const app = new Application();
 
   await app.init({
     width,
     height,
     backgroundAlpha: 0,
-    antialias: true,
+    antialias: edgeSmoothing === 'msaa',
     failIfMajorPerformanceCaveat: false,
     // preserveDrawingBuffer so the WebGL backbuffer remains readable after render()
     // and before the next render call — VideoFrame reads directly from the WebGL
@@ -202,5 +218,12 @@ export async function createExportPixiApp(width: number, height: number): Promis
   console.log('[ExportPixiApp] Renderer type:', app.renderer.type, '(1=WebGL, 2=WebGPU, 4=Canvas)');
 
   const containers = buildSceneGraph(app);
-  return { app, ...containers, sourceWidth: width, sourceHeight: height, renderScale: 1 };
+  return {
+    app,
+    ...containers,
+    edgeSmoothing,
+    sourceWidth: width,
+    sourceHeight: height,
+    renderScale: 1,
+  };
 }

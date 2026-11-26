@@ -22,6 +22,12 @@ vi.mock('./components/CameraPreview/CameraPreviewWindow', () => ({
   CameraPreviewWindow: stub('CameraPreviewWindow'),
 }));
 vi.mock('./components/AreaSelector/AreaSelector', () => ({ AreaSelector: stub('AreaSelector') }));
+vi.mock('./components/Onboarding/OnboardingWindow', () => ({
+  OnboardingWindow: stub('OnboardingWindow'),
+}));
+vi.mock('./components/DisplayPicker/DisplayPicker', () => ({
+  DisplayPicker: stub('DisplayPicker'),
+}));
 
 const { loadWindowRoot } = await import('./windowRoots');
 
@@ -29,10 +35,11 @@ const componentName = (node: unknown) =>
   isValidElement(node) ? (node.type as { displayName?: string }).displayName : undefined;
 
 describe('window roots', () => {
-  it('has the splash ready without loading anything else', async () => {
-    const node = await loadWindowRoot('splash');
-    expect(componentName(node)).toBe('SplashScreen');
-    expect([...loaded]).toEqual(['SplashScreen']);
+  it('has the splash and onboarding ready without loading anything else', async () => {
+    // Both are shown as soon as the page loads, before any other chunk could arrive.
+    expect(componentName(await loadWindowRoot('splash'))).toBe('SplashScreen');
+    expect(componentName(await loadWindowRoot('onboarding'))).toBe('OnboardingWindow');
+    expect([...loaded].sort()).toEqual(['OnboardingWindow', 'SplashScreen']);
   });
 
   it.each([
@@ -42,6 +49,7 @@ describe('window roots', () => {
     ['scene-overlay', 'SceneOverlayWindow'],
     ['camera-preview', 'CameraPreviewWindow'],
     ['area-selector', 'AreaSelector'],
+    ['display-picker', 'DisplayPicker'],
   ])('#%s loads its own UI, not the editor', async (hash, name) => {
     const node = await loadWindowRoot(hash);
     expect(componentName(node)).toBe(name);

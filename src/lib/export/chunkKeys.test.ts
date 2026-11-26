@@ -139,6 +139,26 @@ describe('computeChunkKeys', () => {
     expect(changedChunks(before, after)).toEqual([8, 9, 10, 11, 12, 13]);
   });
 
+  it('only refreshes chunks near the first clip added to an empty lane', () => {
+    const before = computeChunkKeys(baseInput({ textClips: [], zoomClips: [zoom(1, 2)] }));
+    const after = computeChunkKeys(
+      baseInput({ textClips: [{ id: 't1', start: 20, end: 22 }], zoomClips: [zoom(1, 2)] }),
+    );
+    expect(changedChunks(before, after)).toEqual([8, 9, 10, 11, 12, 13]);
+  });
+
+  it('only refreshes chunks near the last clip removed from a lane', () => {
+    const before = computeChunkKeys(baseInput({ maskClips: [{ id: 'm1', start: 20, end: 22 }] }));
+    const after = computeChunkKeys(baseInput({ maskClips: [] }));
+    expect(changedChunks(before, after)).toEqual([8, 9, 10, 11, 12, 13]);
+  });
+
+  it('refreshes every chunk when an empty list gains untimed items', () => {
+    const before = computeChunkKeys(baseInput({ fonts: [] }));
+    const after = computeChunkKeys(baseInput({ fonts: ['Inter'] }));
+    expect(changedChunks(before, after)).toHaveLength(before.length);
+  });
+
   it('refreshes every chunk on a global change', () => {
     const before = computeChunkKeys(
       baseInput({ frame: { padding: 0.1 }, zoomClips: [zoom(1, 2)] }),

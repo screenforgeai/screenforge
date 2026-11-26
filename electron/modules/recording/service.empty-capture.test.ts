@@ -60,6 +60,7 @@ vi.mock('../sources/service', () => ({
       new Map([[4242, { x: 100, y: 80, width: 1200, height: 760, scaleFactor: 2 }]]),
     ),
   parseWindowIdFromSourceId: vi.fn(() => 4242),
+  getDisplayIdForSource: vi.fn(() => null),
 }));
 vi.mock('../export/service', () => ({ probeExportSource: vi.fn() }));
 

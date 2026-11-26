@@ -26,6 +26,16 @@ import {
   saveMusic,
 } from './service';
 
+/**
+ * Renderer diagnostics, such as the export speed lines. Export test runs need
+ * it too, and they register nothing else from this module.
+ */
+export function registerDiagnosticLogChannel(): void {
+  listenChannel<[string, unknown?]>(CH.app.WRITE_DIAGNOSTIC_LOG, (scope, payload) => {
+    writeDiagnosticLog(scope, payload);
+  });
+}
+
 export function registerAppChannels(): void {
   listenChannel(CH.app.QUIT, () => app.quit());
   listenChannel(CH.app.RELAUNCH, () => relaunchApp());
@@ -40,9 +50,7 @@ export function registerAppChannels(): void {
   handleChannel(CH.app.REQUEST_MEDIA_ACCESS, (permission) => requestMediaAccess(permission));
   handleChannel<[], string>(CH.app.GET_LOG_FILE_PATH, () => getDiagnosticLogFilePath());
   handleChannel<[], string>(CH.app.READ_LOG_FILE, () => readDiagnosticLog());
-  listenChannel<[string, unknown?]>(CH.app.WRITE_DIAGNOSTIC_LOG, (scope, payload) => {
-    writeDiagnosticLog(scope, payload);
-  });
+  registerDiagnosticLogChannel();
   listenChannel<[string]>(CH.app.OPEN_EXTERNAL_URL, (url) => {
     void openExternalUrl(url);
   });

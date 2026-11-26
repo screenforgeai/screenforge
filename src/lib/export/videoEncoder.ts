@@ -6,6 +6,7 @@ import type {
   SerializedDecoderConfig,
 } from '../../types/index';
 import { resolveSupportedVideoEncoderConfig } from './support';
+import type { Nv12Layout } from './nv12Readback';
 
 const ENCODED_CHUNK_BATCH_SIZE = 60;
 // batchWriteQueue serializes IPC sends — short timer so chunks are forwarded
@@ -66,6 +67,8 @@ export interface CreateEncoderResult {
    * Null when not available up-front — onDecoderConfig will fire on first keyframe.
    */
   decoderConfig: SerializedDecoderConfig | null;
+  /** The configuration the encoder was opened with, for diagnostics. */
+  config: Pick<VideoEncoderConfig, 'codec' | 'hardwareAcceleration' | 'bitrate' | 'latencyMode'>;
 }
 
 // ── VideoEncoderWrapper ────────────────────────────────────────────────────
@@ -86,6 +89,8 @@ export class VideoEncoderWrapper {
   private batchWriteError: Error | null = null;
   private pendingBatchWrites = 0;
   private muxerInitPromise: Promise<void> | null = null;
+  // The muxer is being set up from the first keyframe; see handleOutput.
+  private muxerInitializing = false;
 
   private constructor(encoder: VideoEncoder, opts: VideoEncoderWrapperOptions) {
     this.encoder = encoder;
@@ -137,7 +142,13 @@ export class VideoEncoderWrapper {
     realEncoder.configure(resolvedConfig.config as VideoEncoderConfig);
     wrapper = new VideoEncoderWrapper(realEncoder, opts);
 
-    return { wrapper, decoderConfig: preflight };
+    const { codec, hardwareAcceleration, bitrate, latencyMode } =
+      resolvedConfig.config as VideoEncoderConfig;
+    return {
+      wrapper,
+      decoderConfig: preflight,
+      config: { codec, hardwareAcceleration, bitrate, latencyMode },
+    };
   }
 
   private handleOutput(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): void {
@@ -163,6 +174,10 @@ export class VideoEncoderWrapper {
         this.opts.height,
       );
       this.muxerReady = true;
+      // Until the muxer is set up, frames wait in pendingChunks: sent on the
+      // batch timer they could reach it before this keyframe (seen on slow
+      // machines), and a muxer or chunk must start on a keyframe.
+      this.muxerInitializing = true;
       // Fire initMuxer, then flush everything in the correct decode order.
       this.muxerInitPromise = this.opts
         .onDecoderConfig(serializedDc)
@@ -170,6 +185,7 @@ export class VideoEncoderWrapper {
           // The encoder can produce chunks while this async IPC call is
           // in-flight. Because muxerReady was set synchronously above, those
           // chunks are in pendingChunks and belong after the triggering keyframe.
+          this.muxerInitializing = false;
           const buffered = this.bufferedBeforeMuxer;
           this.bufferedBeforeMuxer = [];
 
@@ -189,6 +205,7 @@ export class VideoEncoderWrapper {
           this.batchWriteError = err instanceof Error ? err : new Error(String(err));
         })
         .finally(() => {
+          this.muxerInitializing = false;
           this.resolveFlushIfDone();
         });
       return;
@@ -234,6 +251,10 @@ export class VideoEncoderWrapper {
 
   private addToBatch(chunk: SerializedChunk): void {
     this.pendingChunks.push(chunk);
+    if (this.muxerInitializing) {
+      // Sent with the first keyframe once the muxer is set up.
+      return;
+    }
     if (this.pendingChunks.length >= ENCODED_CHUNK_BATCH_SIZE) {
       void this.flushBatch();
     } else if (this.batchTimer === null) {
@@ -271,7 +292,8 @@ export class VideoEncoderWrapper {
 
   /**
    * Encode one frame from a canvas source.
-   * Used for black frames (2D canvas). Video frames use encodePixelBuffer instead.
+   * Used for black frames (2D canvas). Video frames use encodeNv12Buffer, or
+   * encodePixelBuffer when the NV12 readback is not available.
    */
   encodeFrame(
     source: HTMLCanvasElement | OffscreenCanvas,
@@ -291,7 +313,46 @@ export class VideoEncoderWrapper {
   }
 
   /**
-   * Encode one frame from a CPU pixel buffer (top-to-bottom RGBA).
+   * Encode one frame read back as NV12 (see nv12Readback). Full-range BT.709,
+   * like the RGBA frames encodePixelBuffer gives: the output is yuvj420p
+   * either way.
+   */
+  encodeNv12Buffer(
+    pixels: Uint8Array,
+    layout: Nv12Layout,
+    timestampMicros: number,
+    isKeyFrame: boolean,
+  ): void {
+    if (this.faulted) {
+      throw new Error('VideoEncoder is in an error state — export aborted');
+    }
+    this.pendingEncodes += 1;
+    const frame = new VideoFrame(pixels, {
+      format: 'NV12',
+      codedWidth: layout.width,
+      codedHeight: layout.height,
+      timestamp: timestampMicros,
+      layout: [
+        { offset: 0, stride: layout.stride },
+        { offset: layout.uvOffset, stride: layout.stride },
+      ],
+      colorSpace: {
+        primaries: 'bt709',
+        transfer: 'iec61966-2-1',
+        matrix: 'bt709',
+        fullRange: true,
+      },
+    });
+    try {
+      this.encoder.encode(frame, { keyFrame: isKeyFrame });
+    } finally {
+      frame.close();
+    }
+  }
+
+  /**
+   * Encode one frame from a CPU pixel buffer (top-to-bottom RGBA). The
+   * fallback when the NV12 readback cannot be set up.
    *
    * Preferred over encodeFrame(canvas) for video frames: VideoToolbox reads
    * CPU memory instead of the WebGL canvas IOSurface, eliminating the Metal

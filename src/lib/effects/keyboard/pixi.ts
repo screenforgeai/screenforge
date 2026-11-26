@@ -149,6 +149,11 @@ export const keyboardPixiEffect: PixiEffect<KeyboardData> = {
     dropShadow.alpha = 0.22;
     dropShadow.blur = 18;
     dropShadow.offset = { x: 0, y: 8 };
+    if (scene.edgeSmoothing === 'shader') {
+      // No canvas MSAA to inherit: the shadow's texture holds the whole
+      // caption, so MSAA of its own keeps the pill's corners smooth.
+      dropShadow.antialias = 'on';
+    }
     container.filters = [dropShadow];
 
     container.addChild(graphics, textLayer);

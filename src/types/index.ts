@@ -8,6 +8,16 @@ export interface PreloadProgress {
 
 export type StartupPermission = 'screen' | 'microphone' | 'camera' | 'accessibility';
 
+/** The permissions first-run onboarding asks for (macOS). */
+export type OnboardingPermission = 'screen' | 'accessibility';
+
+/** What the first-run window needs from the main process. */
+export type OnboardingState = {
+  platform: string;
+  /** Set when the window reopens after the quit and reopen Screen Recording needs. */
+  resumeStep: 'permissions' | null;
+};
+
 /** An error as it crosses IPC from a renderer: Error instances don't survive structured clone intact. */
 export type SerializedError = {
   name?: string;
@@ -94,6 +104,34 @@ export interface DesktopSource {
   appIcon: string | null;
   appName?: string;
   windowTitle?: string;
+  /** Screen sources: the id of the display it shows (Electron's `Display.id`), as a string. */
+  displayId?: string;
+}
+
+/** An attached display, as the OS describes it. */
+export interface DisplayInfo {
+  /** Electron's `Display.id`. */
+  id: number;
+  /** The display's name from the OS (e.g. "DELL U2720Q"), when it gives one. */
+  label: string | null;
+  /** Its size in DIPs. */
+  width: number;
+  height: number;
+  /** Whether it is the main display. */
+  isPrimary: boolean;
+}
+
+/** What the display is picked for: its overlays name the action. */
+export type DisplayPickerPurpose = 'record' | 'screenshot' | 'area';
+
+/** What the display picker overlay on one monitor shows about it. */
+export interface DisplayPickerTarget {
+  display: DisplayInfo;
+  /** Its number in the picker (1-based, OS order), also the key that picks it. */
+  number: number;
+  /** How many displays the picker covers. */
+  count: number;
+  purpose: DisplayPickerPurpose;
 }
 
 export type ScreenshotCaptureKind = 'display' | 'window' | 'area';
@@ -433,7 +471,15 @@ export interface CaptureWindowParams {
   stateVersion?: number;
   /** Pre-render: share of wall time spent rendering (see captureTimeline). */
   dutyCycle?: number;
+  /**
+   * How edges are smoothed: 'msaa' multisamples the whole canvas; 'shader'
+   * renders without it and smooths the frame's corners in a shader and small
+   * shapes with MSAA of their own. Set by the main process from a feature flag.
+   */
+  edgeSmoothing?: EdgeSmoothing;
 }
+
+export type EdgeSmoothing = 'msaa' | 'shader';
 
 /** Result returned from the hidden export-worker BrowserWindow. */
 export interface CaptureWindowResult {
@@ -478,10 +524,14 @@ export interface ExportCapturePerfStats {
   decodeWaitMs: number;
   renderMs: number;
   gpuSyncMs: number;
+  /** Waiting for the GPU to finish frames and copying them back to the CPU. */
+  readbackMs: number;
   encodeMs: number;
   encoderFlushMs: number;
   writerBackpressureMs: number;
   audioRenderMs: number;
+  /** Time a background prerender spent resting between batches (duty cycle). */
+  restMs: number;
   batchCount: number;
   yieldedFrameCount: number;
   videoFrameCount: number;
@@ -689,6 +739,11 @@ export interface FeatureFlags {
   directorSharing: boolean;
   /** Chunked export, background prerendering and its progress in the top bar. */
   chunkedExport: boolean;
+  /**
+   * Export renders without canvas MSAA: the frame's rounded corners are
+   * smoothed in a shader and small shapes get MSAA of their own. Faster.
+   */
+  fastExportEdges: boolean;
 }
 
 /** The optional Director sign-in, as the app shows it. Never carries the token. */
@@ -827,6 +882,20 @@ export interface ScreenforgeAPI {
   relaunchApp: () => void;
   openSystemSettings: (permission: StartupPermission) => void;
   getSources: () => Promise<DesktopSource[]>;
+  /** The attached displays, in OS order. Cheap: it captures nothing. */
+  getDisplays: () => Promise<DisplayInfo[]>;
+  /** The screen source that shows a display, or null when the screens can't be listed. */
+  getScreenSourceForDisplay: (displayId: number) => Promise<string | null>;
+  /**
+   * Several monitors: covers each with an overlay to click the one to record or screenshot. The
+   * display picked, or null when cancelled.
+   */
+  pickDisplay: (purpose: DisplayPickerPurpose) => Promise<number | null>;
+  /** Display picker overlay: the monitor this overlay covers. */
+  getDisplayPickerTarget: () => Promise<DisplayPickerTarget | null>;
+  /** Display picker overlay: picks this overlay's monitor, or the one with that number. */
+  confirmDisplayPick: (number?: number) => Promise<void>;
+  cancelDisplayPick: () => void;
   /** Wayland: what the next screen-share dialog asks for, a screen or a window. */
   setShareKind: (kind: 'screen' | 'window') => Promise<void>;
   pickScreen: () => Promise<'picked' | 'cancelled' | 'unavailable'>;
@@ -888,6 +957,17 @@ export interface ScreenforgeAPI {
   /** This release's feature flags; off until PostHog says on. */
   getFeatureFlags: () => Promise<FeatureFlags>;
   onFeatureFlagsChanged: (cb: (flags: FeatureFlags) => void) => () => void;
+  /** First-run window only: the platform, and the step to reopen at after a relaunch. */
+  getOnboardingState: () => Promise<OnboardingState>;
+  /** Saved right before the quit and reopen that Screen Recording needs. */
+  setOnboardingResumeStep: (step: 'permissions') => Promise<void>;
+  /** Shows macOS's own prompt; asking again for Accessibility opens System Settings. */
+  requestOnboardingPermission: (
+    permission: OnboardingPermission,
+  ) => Promise<StartupPermissionStatus>;
+  resizeOnboardingWindow: (height: number) => void;
+  /** Closes the first-run window and opens the recording toolbar or the editor. */
+  finishOnboarding: (outcome: 'record' | 'editor') => void;
   getDirectorAccount: () => Promise<DirectorAccountState>;
   /** Opens Director's approval page; resolves once signed in, cancelled or expired. */
   signInToDirector: () => Promise<void>;
@@ -919,11 +999,15 @@ export interface ScreenforgeAPI {
     profile: { name: string; email: string };
     language: string;
     telemetryEnabled: boolean;
+    /** Absent until answered in onboarding. */
+    productUpdates?: boolean;
   }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };
     language?: string;
     telemetryEnabled?: boolean;
+    /** "Email me product updates and tips" from onboarding. */
+    productUpdates?: boolean;
   }) => Promise<{
     profile: { name: string; email: string };
     language: string;
@@ -1055,8 +1139,14 @@ export interface ScreenforgeAPI {
   cancelAreaSelection: () => void;
   /** Wayland: the still the open area selector draws on, if any. */
   getAreaSelectorStill: () => Promise<AreaSelectorStill | null>;
-  /** `purpose` picks the confirm button: record (default) or take a screenshot. */
-  openAreaSelector: (purpose?: AreaSelectorPurpose) => Promise<SelectedArea | null>;
+  /**
+   * `purpose` picks the confirm button: record (default) or take a screenshot. It opens on the
+   * display with `displayId` (picked on its overlay), else on the main display.
+   */
+  openAreaSelector: (
+    purpose?: AreaSelectorPurpose,
+    displayId?: number | null,
+  ) => Promise<SelectedArea | null>;
   /** Wayland: draw a recording area on a still of the screen picked in the share dialog. */
   selectAreaOnStill: (still: AreaSelectorStillRequest) => Promise<SelectedArea | null>;
   getCaptureShortcuts: () => Promise<RegisteredCaptureShortcuts>;

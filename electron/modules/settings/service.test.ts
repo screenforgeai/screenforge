@@ -33,6 +33,32 @@ describe('settings service', () => {
     fs.rmSync(userData, { recursive: true, force: true });
   });
 
+  it('applies saves started together one after another, so none is lost', async () => {
+    // e.g. Preferences turns usage sharing off while closing the window records completion.
+    await Promise.all([
+      saveSettings({ telemetryEnabled: false }),
+      saveSettings({ onboarding: { completed: true } }),
+      saveSettings({ language: 'de' }),
+    ]);
+
+    const settings = await getSettings();
+    expect(settings.telemetryEnabled).toBe(false);
+    expect(settings.onboarding).toEqual({ completed: true });
+    expect(settings.language).toBe('de');
+  });
+
+  it('keeps saving after a save fails', async () => {
+    const writeFile = vi
+      .spyOn(fs.promises, 'writeFile')
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(saveSettings({ language: 'fr' })).rejects.toThrow('disk full');
+    writeFile.mockRestore();
+    await saveSettings({ language: 'ja' });
+
+    expect((await getSettings()).language).toBe('ja');
+  });
+
   it('shares usage data by default', async () => {
     expect((await getSettings()).telemetryEnabled).toBe(true);
     expect(getSettingsSync().telemetryEnabled).toBe(true);
@@ -96,5 +122,45 @@ describe('settings service', () => {
 
   it('leaves lastSeenVersion out until one has been recorded', async () => {
     expect(await getSettings()).not.toHaveProperty('lastSeenVersion');
+  });
+
+  it('leaves onboarding and productUpdates out until they are recorded', async () => {
+    const settings = await getSettings();
+    expect(settings).not.toHaveProperty('onboarding');
+    expect(settings).not.toHaveProperty('productUpdates');
+  });
+
+  it('keeps the onboarding record and product updates choice across unrelated saves', async () => {
+    await saveSettings({ onboarding: { completed: false, resumeStep: 'permissions' } });
+    await saveSettings({ productUpdates: true });
+    await saveSettings({ language: 'de' });
+
+    expect(await getSettings()).toMatchObject({
+      language: 'de',
+      onboarding: { completed: false, resumeStep: 'permissions' },
+      productUpdates: true,
+    });
+    expect(getSettingsSync()).toMatchObject({ productUpdates: true });
+  });
+
+  it('drops a resume step once onboarding is completed', async () => {
+    await saveSettings({ onboarding: { completed: false, resumeStep: 'permissions' } });
+    await saveSettings({ onboarding: { completed: true } });
+
+    expect((await getSettings()).onboarding).toEqual({ completed: true });
+  });
+
+  it('ignores a malformed onboarding record or product updates value in the file', async () => {
+    fs.writeFileSync(
+      path.join(userData, 'settings.json'),
+      JSON.stringify({
+        onboarding: { completed: 'yes', resumeStep: 'elsewhere' },
+        productUpdates: 1,
+      }),
+    );
+
+    const settings = await getSettings();
+    expect(settings).not.toHaveProperty('onboarding');
+    expect(settings).not.toHaveProperty('productUpdates');
   });
 });

@@ -42,7 +42,8 @@ if (
   hash === 'scene-overlay' ||
   hash === 'camera-preview' ||
   hash === 'area-selector' ||
-  hash === 'area-selector-screenshot'
+  hash === 'area-selector-screenshot' ||
+  hash === 'display-picker'
 ) {
   document.body.classList.add('transparent-window');
 }

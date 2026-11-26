@@ -9,7 +9,7 @@ import { CH } from './channels';
 import log, { getLogFilePath } from './lib/logger';
 import { installNavigationGuards } from './lib/navigation-guard';
 import { pinWindowToAllWorkspaces } from './lib/workspace-pin';
-import { registerAppChannels } from './modules/app/channel';
+import { registerAppChannels, registerDiagnosticLogChannel } from './modules/app/channel';
 import {
   prepareScreenshotPermissions,
   requestAccessibilityAccess,
@@ -59,6 +59,8 @@ import { registerTeleprompterChannels } from './modules/teleprompter/channel';
 import { registerSceneOverlayChannels } from './modules/scene-overlay/channel';
 import { registerCameraPreviewChannels } from './modules/camera-preview/channel';
 import { registerAreaSelectorChannels } from './modules/area-selector/channel';
+import { registerDisplayPickerChannels } from './modules/display-picker/channel';
+import { openDisplayPicker } from './modules/display-picker/service';
 import { registerImportChannels } from './modules/import/channel';
 import { registerScreenshotChannels } from './modules/screenshot/channel';
 import { pickAndImportVideo } from './modules/import/service';
@@ -69,6 +71,7 @@ import {
 } from './modules/area-selector/service';
 import {
   isAreaScreenshotInFlight,
+  selectAreaOnPickedDisplay,
   takeAreaScreenshot,
   takePickedAreaScreenshot,
 } from './modules/screenshot/flow';
@@ -90,6 +93,10 @@ import { registerFeatureChannels } from './modules/features/channel';
 import { initFeatureFlags } from './modules/features/service';
 import { initDirectorAccount } from './modules/director/service';
 import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
+import { registerOnboardingChannels } from './modules/onboarding/channel';
+import { getOnboardingLaunch } from './modules/onboarding/service';
+import { runOnboardingWindow } from './modules/onboarding/window';
+import type { OnboardingOutcome } from '../src/lib/onboarding/flow';
 
 // Before telemetry or anything else writes to userData: tells a fresh
 // install apart from an update for the What's new dialog.
@@ -523,6 +530,8 @@ app.on('ready', async () => {
 
   // For export test runs
   if (IS_EXPORT_HARNESS_MODE && EXPORT_HARNESS_MANIFEST && EXPORT_HARNESS_RESULT) {
+    // The export window's speed lines (export:capture:*) come through here.
+    registerDiagnosticLogChannel();
     harnessKeepAliveWindow = new BrowserWindow({
       show: false,
       width: 1,
@@ -587,10 +596,12 @@ app.on('ready', async () => {
     loadURL,
   });
   registerAreaSelectorChannels(PRELOAD_PATH, loadURL);
+  registerDisplayPickerChannels(PRELOAD_PATH, loadURL);
   registerImportChannels();
   registerFeatureChannels();
   registerDirectorChannels();
   registerShareChannels();
+  registerOnboardingChannels();
   void initDirectorAccount();
   registerSceneOverlayChannels({
     preloadPath: PRELOAD_PATH,
@@ -661,16 +672,35 @@ app.on('ready', async () => {
 
   trackEvent('app_launched', { is_packaged: app.isPackaged });
 
-  // Prompt for screen capture and accessibility early so they don't block the user when they click record.
-  void requestMacScreenCaptureAccess();
-  void requestAccessibilityAccess();
+  // First run (or back from the quit and reopen Screen Recording needs): onboarding
+  // before the editor. It asks for screen recording and accessibility itself.
+  const onboarding = await getOnboardingLaunch().catch((error: unknown) => {
+    log.warn('[onboarding] launch check failed', error);
+    return { show: false, resumeStep: null };
+  });
+  let onboardingOutcome: OnboardingOutcome | null = null;
+  if (onboarding.show) {
+    onboardingOutcome = await runOnboardingWindow({
+      preloadPath: PRELOAD_PATH,
+      loadURL,
+      iconPath: APP_ICON_PATH,
+      resumeStep: onboarding.resumeStep,
+    });
+  } else {
+    // Prompt for screen capture and accessibility early so they don't block the user when they click record.
+    void requestMacScreenCaptureAccess();
+    void requestAccessibilityAccess();
+  }
 
   markStartupComplete();
 
   await waitForStartupCompletion();
 
-  mainWindow.show();
-  mainWindow.focus();
+  // "Start recording" goes straight to the toolbar, which hides the editor anyway.
+  if (onboardingOutcome !== 'record') {
+    mainWindow.show();
+    mainWindow.focus();
+  }
 
   const openToolbar = () => {
     // The toolbar would land in the still, or outlive the capture that closes it.
@@ -688,6 +718,9 @@ app.on('ready', async () => {
       toolbarWindow.focus();
     }
   };
+  if (onboardingOutcome === 'record') {
+    openToolbar();
+  }
   const takeScreenshot = (trigger: 'shortcut' | 'menu' | 'toolbar' = 'shortcut') => {
     const deps = {
       getMainWindow: () => mainWindow,
@@ -708,7 +741,13 @@ app.on('ready', async () => {
           })
         : takeAreaScreenshot({
             ...deps,
-            selectArea: () => openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot'),
+            selectArea: () =>
+              selectAreaOnPickedDisplay({
+                displayCount: () => screen.getAllDisplays().length,
+                pickDisplay: () => openDisplayPicker(PRELOAD_PATH, loadURL, 'area'),
+                selectArea: (displayId) =>
+                  openAreaSelector(PRELOAD_PATH, loadURL, 'screenshot', displayId),
+              }),
           });
     void taken.then((result) => {
       if (result === 'taken') {

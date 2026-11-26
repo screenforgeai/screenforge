@@ -184,6 +184,10 @@ async function exportThroughApp(
       SCREENFORGE_EXPORT_CHUNKED: chunked ? '1' : '0',
       SCREENFORGE_EXPORT_CACHE_DIR: options.cache ?? cacheDir,
       SCREENFORGE_EXPORT_PRERENDER: options.prerender ? '1' : '0',
+      // Development builds turn every feature flag on; test what release builds
+      // ship unless the run asks otherwise.
+      SCREENFORGE_FEATURE_FAST_EXPORT_EDGES:
+        process.env.SCREENFORGE_FEATURE_FAST_EXPORT_EDGES ?? '0',
     },
     detached: process.platform !== 'win32',
     shell: launch.shell,

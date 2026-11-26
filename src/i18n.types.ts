@@ -23,6 +23,7 @@ import type mask from './locales/en/mask.json';
 import type motion from './locales/en/motion.json';
 import type whatsNew from './locales/en/whatsNew.json';
 import type screenshot from './locales/en/screenshot.json';
+import type onboarding from './locales/en/onboarding.json';
 
 declare module 'i18next' {
   interface CustomTypeOptions {
@@ -53,6 +54,7 @@ declare module 'i18next' {
       motion: typeof motion;
       whatsNew: typeof whatsNew;
       screenshot: typeof screenshot;
+      onboarding: typeof onboarding;
     };
   }
 }

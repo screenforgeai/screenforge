@@ -39,6 +39,7 @@ import {
 } from '../../pixi/textureQuality';
 import type { RenderContext } from '../types';
 import { needsVideoUpload, videoUploadKey } from './videoUpload';
+import { RoundedClipFilter } from '../../pixi/edgeSmoothing';
 import { useStore } from '../../../store';
 import {
   sortMediaSegments,
@@ -342,7 +343,12 @@ export const framePixiEffect: PixiEffect<null> = {
     const mediaMask = new Graphics();
     // The cursor magnifier clips to this too, so it never shows cropped-out pixels.
     mediaMask.label = RECORDING_MASK_LABEL;
-    mediaContainer.mask = mediaMask;
+    // Without canvas MSAA the rounded corners are cut by edgeClip's shader
+    // instead (see below); the mask Graphics are kept for their geometry.
+    const shaderEdges = scene.edgeSmoothing === 'shader';
+    if (!shaderEdges) {
+      mediaContainer.mask = mediaMask;
+    }
 
     // ── Window bar ──────────────────────────────────────────────────────────
     // Drawn as vectors onto its own canvas at the size it shows on screen
@@ -375,7 +381,9 @@ export const framePixiEffect: PixiEffect<null> = {
     // backgroundContainer rather than being blanketed by an opaque repaint.
     const bgRepaintContainer = new Container();
     const bgRepaintMask = new Graphics();
-    bgRepaintContainer.mask = bgRepaintMask;
+    if (!shaderEdges) {
+      bgRepaintContainer.mask = bgRepaintMask;
+    }
 
     const bgRepaintSolid = new Graphics();
     const bgRepaintGradient = new Sprite();
@@ -391,8 +399,24 @@ export const framePixiEffect: PixiEffect<null> = {
 
     // ── Content mask + video container ──────────────────────────────────────
     const contentMask = new Graphics();
-    scene.videoContainer.mask = contentMask;
-    scene.videoContainer.addChild(contentMask, bgRepaintContainer, mediaContainer);
+    // Holds what the masks cut; no transform of its own, so its local space is
+    // videoContainer's. videoContainer's filters belong to clip transitions.
+    const edgeClip = new Container();
+    edgeClip.label = 'frame-edge-clip';
+    edgeClip.addChild(bgRepaintContainer, mediaContainer);
+    scene.videoContainer.addChild(contentMask, edgeClip);
+    let roundedClip: RoundedClipFilter | null = null;
+    if (shaderEdges) {
+      // One pass cuts both rounded rectangles (content and media) with a
+      // smooth edge; the Graphics stay for their geometry but are not drawn.
+      roundedClip = new RoundedClipFilter();
+      edgeClip.filters = [roundedClip];
+      contentMask.renderable = false;
+      mediaMask.renderable = false;
+      bgRepaintMask.renderable = false;
+    } else {
+      scene.videoContainer.mask = contentMask;
+    }
 
     // ── Full-canvas background (behind cameraContainer content) ─────────────
     const bgSolid = new Graphics();
@@ -1195,6 +1219,17 @@ export const framePixiEffect: PixiEffect<null> = {
       // Only redrawn when geometry changes — e.g. user adjusts padding or corner
       // radius. During playback this is static, so we skip 3 GPU buffer uploads/frame.
       const mediaMaskKey = `${windowRect.x}|${windowRect.y}|${windowRect.width}|${windowRect.height}|${mediaRadius}`;
+      const contentMaskKey = `${contentRect.x}|${contentRect.y}|${contentRect.width}|${contentRect.height}|${contentRadius}`;
+      if (
+        roundedClip &&
+        (mediaMaskKey !== lastMediaMaskKey || contentMaskKey !== lastContentMaskKey)
+      ) {
+        roundedClip.setClip(
+          edgeClip,
+          { ...windowRect, radius: mediaRadius },
+          { ...contentRect, radius: contentRadius },
+        );
+      }
       if (mediaMaskKey !== lastMediaMaskKey) {
         mediaMask.clear();
         mediaMask.roundRect(
@@ -1219,7 +1254,6 @@ export const framePixiEffect: PixiEffect<null> = {
       }
 
       // ── Content mask ─────────────────────────────────────────────────────
-      const contentMaskKey = `${contentRect.x}|${contentRect.y}|${contentRect.width}|${contentRect.height}|${contentRadius}`;
       if (contentMaskKey !== lastContentMaskKey) {
         contentMask.clear();
         contentMask.roundRect(

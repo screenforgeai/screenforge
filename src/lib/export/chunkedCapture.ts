@@ -22,7 +22,8 @@ import {
 } from './chunkPlan';
 
 /** Bump when rendering changes in a way the app version would not capture. */
-export const CHUNK_KEY_VERSION = 'chunk-v2';
+// v3: frames are read back as NV12 (nv12Readback.ts).
+export const CHUNK_KEY_VERSION = 'chunk-v3';
 
 /** How far after a chunk timed data can already affect it. */
 export const CHUNK_LOOKAHEAD_SECONDS = 3;
@@ -58,6 +59,8 @@ export function buildChunkKeyInputs(
       fps: info.fps,
       quality: params.quality,
       resolution: params.resolution,
+      // Chunks smoothed differently differ along every edge.
+      edgeSmoothing: params.edgeSmoothing ?? 'msaa',
     },
     state: {
       storeSnapshot: snapshot,

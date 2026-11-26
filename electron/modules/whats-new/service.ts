@@ -46,6 +46,11 @@ export function recordInstallStateAtLaunch(): void {
   }
 }
 
+/** Whether Screenforge had run here before this launch (onboarding is for new installs only). */
+export function wasExistingInstallAtLaunch(): boolean {
+  return existingInstallAtLaunch;
+}
+
 async function decideAndRecord(): Promise<WhatsNewLaunchState> {
   const currentVersion = app.getVersion();
   const settings = await getSettings();

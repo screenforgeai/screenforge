@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CaptureBackend } from '../../types/index';
+import type { CaptureBackend, DisplayInfo } from '../../types/index';
 
 // framer-motion's AnimatePresence exit animations never complete under jsdom
 // fake timers, leaving the recording controls unmounted. Replace motion
@@ -200,6 +200,9 @@ function createScreenforgeMock(backend: CaptureBackend) {
     closeCameraPreview: vi.fn(),
     openAreaSelector: vi.fn().mockResolvedValue(null),
     getSources: vi.fn().mockResolvedValue([]),
+    getDisplays: vi.fn().mockResolvedValue([]),
+    getScreenSourceForDisplay: vi.fn().mockResolvedValue(null),
+    pickDisplay: vi.fn().mockResolvedValue(null),
     getStartupPermissionStatuses: vi.fn().mockResolvedValue({
       screen: 'granted',
       microphone: 'granted',
@@ -1100,6 +1103,254 @@ describe('FloatingToolbar recording widget', () => {
     });
   });
 
+  describe('several monitors (macOS, Windows, Linux X11)', () => {
+    // Listed in OS order: the external monitor first, the main display second.
+    const external: DisplayInfo = {
+      id: 11,
+      label: 'DELL U2720Q',
+      width: 2560,
+      height: 1440,
+      isPrimary: false,
+    };
+    const builtIn: DisplayInfo = {
+      id: 22,
+      label: 'Built-in Retina Display',
+      width: 1512,
+      height: 982,
+      isPrimary: true,
+    };
+    // On Windows the number in a screen source's id is its position, not the display's id.
+    const sourceOf: Record<number, string> = { 11: 'screen:0:0', 22: 'screen:1:0' };
+
+    beforeEach(() => {
+      installMocks('native');
+      screenforge.getDisplays.mockResolvedValue([external, builtIn]);
+      screenforge.getScreenSourceForDisplay.mockImplementation(async (id: number) => sourceOf[id]);
+    });
+
+    const renderWithDisplays = async () => {
+      render(<FloatingToolbar />);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Display' })).toBeEnabled(), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+    };
+
+    /** Presses Record on the toolbar already shown, until it asks for the permissions. */
+    const pressRecord = async () => {
+      const appendModeCalls = screenforge.getAppendMode.mock.calls.length;
+      await waitFor(
+        () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+          expect(screenforge.getAppendMode.mock.calls.length).toBeGreaterThan(appendModeCalls);
+        },
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+    };
+
+    it('asks which monitor on Record, then records the one picked on its overlay', async () => {
+      screenforge.pickDisplay.mockResolvedValue(external.id);
+      await renderWithDisplays();
+      await pressRecord();
+      await finishCountdown();
+      await waitForRecordingState();
+
+      expect(screenforge.pickDisplay).toHaveBeenCalledWith('record');
+      expect(screenforge.getScreenSourceForDisplay).toHaveBeenCalledWith(external.id);
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0:0', null);
+    });
+
+    it('does not start when the overlays are cancelled', async () => {
+      screenforge.pickDisplay.mockResolvedValue(null);
+      await renderWithDisplays();
+      await pressRecord();
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledWith('record'), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+
+      expect(screen.queryByText('Starting in')).not.toBeInTheDocument();
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+    });
+
+    it('does not ask on the Display tab itself', async () => {
+      await renderWithDisplays();
+      fireEvent.click(screen.getByRole('button', { name: 'Display' }));
+
+      expect(screenforge.pickDisplay).not.toHaveBeenCalled();
+    });
+
+    it('asks which monitor on Take screenshot, then captures the one picked', async () => {
+      screenforge.pickDisplay.mockResolvedValue(external.id);
+      await renderWithDisplays();
+      fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+
+      await waitFor(
+        () =>
+          expect(screenforge.captureScreenshot).toHaveBeenCalledWith({
+            kind: 'display',
+            sourceId: 'screen:0:0',
+          }),
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+      expect(screenforge.pickDisplay).toHaveBeenCalledWith('screenshot');
+    });
+
+    it('takes no screenshot when the overlays are cancelled', async () => {
+      screenforge.pickDisplay.mockResolvedValue(null);
+      await renderWithDisplays();
+      fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledWith('screenshot'), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+      expect(screenforge.captureScreenshot).not.toHaveBeenCalled();
+    });
+
+    it('stops, rather than record another monitor, when the picked one is gone', async () => {
+      screenforge.pickDisplay.mockResolvedValue(external.id);
+      // Unplugged during the countdown: no screen shows it any more.
+      screenforge.getScreenSourceForDisplay.mockResolvedValue(null);
+      await renderWithDisplays();
+      await pressRecord();
+      await finishCountdown();
+
+      await waitFor(
+        () =>
+          expect(screenforge.systemWarning).toHaveBeenCalledWith(
+            expect.stringMatching(/isn't available anymore/),
+          ),
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+      expect(screenforge.startRecording).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
+    });
+
+    it('takes no screenshot of another monitor when the picked one is gone', async () => {
+      screenforge.pickDisplay.mockResolvedValue(external.id);
+      screenforge.getScreenSourceForDisplay.mockResolvedValue(null);
+      await renderWithDisplays();
+      fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+
+      await waitFor(
+        () =>
+          expect(screenforge.systemWarning).toHaveBeenCalledWith(
+            expect.stringMatching(/isn't available anymore/),
+          ),
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+      expect(screenforge.captureScreenshot).not.toHaveBeenCalled();
+    });
+
+    it("keeps the first press's display when a second press finishes during its countdown", async () => {
+      let pickFirst: (id: number) => void = () => undefined;
+      screenforge.pickDisplay
+        .mockImplementationOnce(() => new Promise<number>((resolve) => (pickFirst = resolve)))
+        // The second press picks the other monitor, but only after the first one's countdown began.
+        .mockResolvedValueOnce(builtIn.id);
+      await renderWithDisplays();
+      await pressRecord();
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(1), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+
+      // The second press is held before its own pick until the first press has picked.
+      let appendModeSecond: (value: boolean) => void = () => undefined;
+      screenforge.getAppendMode.mockImplementationOnce(
+        () => new Promise<boolean>((resolve) => (appendModeSecond = resolve)),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      await act(async () => pickFirst(external.id));
+      await screen.findByText('Starting in', undefined, { timeout: ASYNC_UI_TIMEOUT_MS });
+      await act(async () => appendModeSecond(false));
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(2), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+      await finishCountdown();
+      await waitForRecordingState();
+
+      expect(screenforge.startRecording).toHaveBeenCalledTimes(1);
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0:0', null);
+    });
+
+    it('keeps the first display when both presses finish before the next render', async () => {
+      let pickFirst: (id: number) => void = () => undefined;
+      let pickSecond: (id: number) => void = () => undefined;
+      screenforge.pickDisplay
+        .mockImplementationOnce(() => new Promise<number>((resolve) => (pickFirst = resolve)))
+        .mockImplementationOnce(() => new Promise<number>((resolve) => (pickSecond = resolve)));
+      await renderWithDisplays();
+      await pressRecord();
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(1), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(2), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+
+      // Both picks land in the same tick: neither preparation sees a render in between.
+      await act(async () => {
+        pickFirst(external.id);
+        pickSecond(builtIn.id);
+      });
+      await finishCountdown();
+      await waitForRecordingState();
+
+      expect(screenforge.startRecording).toHaveBeenCalledTimes(1);
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:0:0', null);
+    });
+
+    it('records again after a pick was cancelled', async () => {
+      screenforge.pickDisplay.mockResolvedValueOnce(null).mockResolvedValueOnce(builtIn.id);
+      await renderWithDisplays();
+      await pressRecord();
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledTimes(1), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+      await pressRecord();
+      await finishCountdown();
+      await waitForRecordingState();
+
+      expect(screenforge.startRecording).toHaveBeenCalledWith('screen:1:0', null);
+    });
+
+    it('asks which monitor before drawing a recording area, then draws on it', async () => {
+      screenforge.pickDisplay.mockResolvedValue(external.id);
+      await renderWithDisplays();
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+
+      await waitFor(
+        () => expect(screenforge.openAreaSelector).toHaveBeenCalledWith('record', external.id),
+        { timeout: ASYNC_UI_TIMEOUT_MS },
+      );
+      expect(screenforge.pickDisplay).toHaveBeenCalledWith('area');
+    });
+
+    it('draws no area when the monitor overlays are cancelled', async () => {
+      screenforge.pickDisplay.mockResolvedValue(null);
+      await renderWithDisplays();
+      fireEvent.click(screen.getByRole('button', { name: 'Area' }));
+
+      await waitFor(() => expect(screenforge.pickDisplay).toHaveBeenCalledWith('area'), {
+        timeout: ASYNC_UI_TIMEOUT_MS,
+      });
+      expect(screenforge.openAreaSelector).not.toHaveBeenCalled();
+    });
+
+    it('asks nothing with a single monitor', async () => {
+      screenforge.getDisplays.mockResolvedValue([builtIn]);
+      await renderWithDisplays();
+      await pressRecord();
+      await finishCountdown();
+      await waitForRecordingState();
+
+      expect(screenforge.pickDisplay).not.toHaveBeenCalled();
+      expect(screenforge.getScreenSourceForDisplay).not.toHaveBeenCalled();
+    });
+  });
+
   describe('screenshot mode', () => {
     beforeEach(() => installMocks('native'));
 
@@ -1136,8 +1387,17 @@ describe('FloatingToolbar recording widget', () => {
     it('names the global shortcut in the Screenshot tooltip', async () => {
       render(<FloatingToolbar />);
       await waitFor(() => expect(screenforge.getCaptureShortcuts).toHaveBeenCalled());
-      fireEvent.focus(screen.getByRole('button', { name: 'Screenshot' }));
-      expect(await screen.findAllByText('Alt+Shift+S')).not.toHaveLength(0);
+      // The shortcut reaches the tooltip after the toolbar mounts, and a focus that lands before
+      // it can leave the tooltip closed: focus again until it shows.
+      await waitFor(
+        () => {
+          const button = screen.getByRole('button', { name: 'Screenshot' });
+          fireEvent.blur(button);
+          fireEvent.focus(button);
+          expect(screen.getAllByText('Alt+Shift+S')).not.toHaveLength(0);
+        },
+        { timeout: 4000 },
+      );
     });
 
     it('captures the display, asking only for screen access', async () => {
@@ -1166,7 +1426,7 @@ describe('FloatingToolbar recording widget', () => {
           area: { x: 1, y: 2, width: 300, height: 200 },
         }),
       );
-      expect(screenforge.openAreaSelector).toHaveBeenCalledWith('screenshot');
+      expect(screenforge.openAreaSelector).toHaveBeenCalledWith('screenshot', null);
     });
 
     it('does nothing when the area selection is cancelled', async () => {

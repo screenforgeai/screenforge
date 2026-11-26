@@ -1,6 +1,7 @@
 import { BrowserWindow, screen } from 'electron';
 import log from '../../lib/logger';
 import { pinWindowToAllWorkspaces } from '../../lib/workspace-pin';
+import { focusOverlay } from '../../lib/focus-overlay';
 import type {
   AreaSelectorStill,
   AreaSelectorStillRequest,
@@ -22,10 +23,15 @@ function isAlive(): boolean {
   return selectorWindow !== null && !selectorWindow.isDestroyed();
 }
 
+/**
+ * Draws an area on a display: the one with that id (picked on its overlay when several are
+ * attached), else the main display.
+ */
 export function openAreaSelector(
   preloadPath: string,
   loadURL: (win: BrowserWindow, hash: string) => void,
   purpose: 'record' | 'screenshot' = 'record',
+  displayId: number | null = null,
 ): Promise<SelectedArea | null> {
   if (isAlive()) {
     return Promise.resolve(null);
@@ -34,19 +40,25 @@ export function openAreaSelector(
   return new Promise((resolve) => {
     pendingResolve = resolve;
 
-    const primaryDisplay = screen.getPrimaryDisplay();
     const allDisplays = screen.getAllDisplays();
+    const display =
+      (displayId !== null ? allDisplays.find((candidate) => candidate.id === displayId) : null) ??
+      screen.getPrimaryDisplay();
 
-    log.info('[area-selector] primaryDisplay.bounds', primaryDisplay.bounds);
-    log.info('[area-selector] primaryDisplay.workArea', primaryDisplay.workArea);
-    log.info('[area-selector] primaryDisplay.scaleFactor', primaryDisplay.scaleFactor);
+    log.info('[area-selector] display', {
+      id: display.id,
+      requestedId: displayId,
+      bounds: display.bounds,
+      workArea: display.workArea,
+      scaleFactor: display.scaleFactor,
+    });
     log.info(
       '[area-selector] allDisplays',
       allDisplays.map((d) => ({ id: d.id, bounds: d.bounds, scaleFactor: d.scaleFactor })),
     );
 
-    const { x, y, width, height } = primaryDisplay.bounds;
-    selectorDisplay = { id: primaryDisplay.id, width, height };
+    const { x, y, width, height } = display.bounds;
+    selectorDisplay = { id: display.id, width, height };
     selectorStill = null;
 
     const win = new BrowserWindow({
@@ -90,6 +102,7 @@ export function openAreaSelector(
       win.setBounds({ x, y, width, height });
       const actual = win.getBounds();
       log.info('[area-selector] window.getBounds() after did-finish-load', actual);
+      focusOverlay(win);
     });
 
     win.on('closed', () => {
@@ -144,6 +157,7 @@ export function openAreaSelectorOnStill(
     });
     win.setAlwaysOnTop(true, 'screen-saver');
     loadURL(win, purpose === 'record' ? 'area-selector-record-still' : 'area-selector-still');
+    win.webContents.once('did-finish-load', () => focusOverlay(win));
 
     win.on('closed', () => {
       selectorWindow = null;

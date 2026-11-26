@@ -13,6 +13,7 @@ import { teleprompterBridge } from './modules/teleprompter/bridge';
 import { sceneOverlayBridge } from './modules/scene-overlay/bridge';
 import { cameraPreviewBridge } from './modules/camera-preview/bridge';
 import { areaSelectorBridge } from './modules/area-selector/bridge';
+import { displayPickerBridge } from './modules/display-picker/bridge';
 import { importBridge } from './modules/import/bridge';
 import { directorBridge } from './modules/director/bridge';
 import { featuresBridge } from './modules/features/bridge';
@@ -20,6 +21,7 @@ import { shareBridge } from './modules/share/bridge';
 import { whatsNewBridge } from './modules/whats-new/bridge';
 import { screenshotBridge } from './modules/screenshot/bridge';
 import { captureShortcutsBridge } from './modules/capture-shortcuts/bridge';
+import { onboardingBridge } from './modules/onboarding/bridge';
 
 contextBridge.exposeInMainWorld('screenforge', {
   ...sourcesBridge,
@@ -36,6 +38,7 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...sceneOverlayBridge,
   ...cameraPreviewBridge,
   ...areaSelectorBridge,
+  ...displayPickerBridge,
   ...importBridge,
   ...directorBridge,
   ...featuresBridge,
@@ -43,5 +46,6 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...whatsNewBridge,
   ...screenshotBridge,
   ...captureShortcutsBridge,
+  ...onboardingBridge,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 });
