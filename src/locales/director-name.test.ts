@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 // The cloud app is always "Screenforge Director" in this app: "Director" on
 // its own doesn't say what it is.
 const LOCALES_DIR = __dirname;
-const NAMESPACES = ['settings', 'export', 'recordings', 'common'];
+const NAMESPACES = ['settings', 'export', 'recordings', 'common', 'onboarding'];
 const locales = readdirSync(LOCALES_DIR, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name);
