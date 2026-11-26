@@ -96,6 +96,30 @@ export function sortMediaSegments(segments: MediaSegment[]): MediaSegment[] {
   return [...segments].sort((a, b) => a.timelineStart - b.timelineStart);
 }
 
+/**
+ * The id of the segment under the playhead, [timelineStart, timelineEnd): the
+ * first match in timeline order, as a lookup over sortMediaSegments() finds it.
+ * Segments can be stored out of order (moveMediaSegment) and overlap; the earliest
+ * start wins, ties keep array order. Neither sorts nor allocates: it runs in a store
+ * selector on every playback frame.
+ */
+export function findSegmentIdAtPlayhead(
+  segments: readonly MediaSegment[],
+  time: number,
+): string | null {
+  let found: MediaSegment | null = null;
+  for (const seg of segments) {
+    if (
+      time >= seg.timelineStart &&
+      time < seg.timelineEnd &&
+      (found === null || seg.timelineStart < found.timelineStart)
+    ) {
+      found = seg;
+    }
+  }
+  return found?.id ?? null;
+}
+
 export function findSegmentAtTime(segments: MediaSegment[], time: number): MediaSegment | null {
   if (segments.length === 0) {
     return null;

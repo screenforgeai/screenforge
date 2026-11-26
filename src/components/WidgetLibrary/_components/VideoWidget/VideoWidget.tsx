@@ -13,7 +13,7 @@ import {
   WIDGET_SECTION_HEADING_CLASS,
 } from 'src/components/layout';
 import { cn, formatTime } from 'src/lib/utils';
-import { sortMediaSegments } from 'src/lib/helpers/segments';
+import { findSegmentIdAtPlayhead, sortMediaSegments } from 'src/lib/helpers/segments';
 
 // ── VideoWidget ───────────────────────────────────────────────────────────────
 
@@ -42,10 +42,7 @@ export const VideoWidget = () => {
       setSelectedClip: state.setSelectedClip,
       // Only the segment under the playhead, not the time itself: playback
       // updates currentTime every frame, the panel only changes with this.
-      playheadSegmentId:
-        state.mediaSegments.find(
-          (seg) => state.currentTime >= seg.timelineStart && state.currentTime < seg.timelineEnd,
-        )?.id ?? null,
+      playheadSegmentId: findSegmentIdAtPlayhead(state.mediaSegments, state.currentTime),
       selectedClip: state.selectedClip,
       requestSeekTo: state.requestSeekTo,
       requestPauseAndSeekTo: state.requestPauseAndSeekTo,
