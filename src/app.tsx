@@ -392,7 +392,7 @@ const App = () => {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
   return (
-    <ProjectPersistenceProvider videoRef={videoRef} canvasRef={previewCanvasRef}>
+    <ProjectPersistenceProvider videoRef={videoRef}>
       <AppShell videoRef={videoRef} previewCanvasRef={previewCanvasRef} />
     </ProjectPersistenceProvider>
   );

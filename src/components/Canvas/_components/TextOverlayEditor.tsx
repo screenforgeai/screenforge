@@ -114,7 +114,6 @@ export const TextOverlayEditor = ({ containerRef, canvasRef }: Props) => {
     recordingResult,
     textClips,
     selectedClip,
-    currentTime,
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
@@ -127,7 +126,6 @@ export const TextOverlayEditor = ({ containerRef, canvasRef }: Props) => {
       recordingResult: state.recordingResult,
       textClips: state.textClips,
       selectedClip: state.selectedClip,
-      currentTime: state.currentTime,
       commitEdit: state.commitEdit,
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
@@ -353,7 +351,7 @@ export const TextOverlayEditor = ({ containerRef, canvasRef }: Props) => {
                 return;
               }
               setSelectedClip({ id: clip.id, effectId: 'text' });
-              requestPauseAndSeekTo(currentTime);
+              requestPauseAndSeekTo(useStore.getState().currentTime);
               beginHistoryGroup(`text-move-${clip.id}`, 'Move text');
               dragRef.current = {
                 mode: 'move',
@@ -387,7 +385,7 @@ export const TextOverlayEditor = ({ containerRef, canvasRef }: Props) => {
             {/* Label badge */}
             {isSelected && (
               <div
-                className="pointer-events-none absolute -top-6 left-0 whitespace-nowrap rounded-full border border-white/[0.07] bg-[#141418]/[0.82] px-2 py-0.5 text-[10px] font-medium tracking-[0.1em] text-white/70 backdrop-blur-md"
+                className="pointer-events-none absolute -top-6 left-0 whitespace-nowrap rounded-full border border-white/[0.07] bg-sf-panel/90 px-2 py-0.5 text-[10px] font-medium tracking-[0.1em] text-white/70"
                 style={{ maxWidth: pw }}
               >
                 {label}
@@ -404,7 +402,7 @@ export const TextOverlayEditor = ({ containerRef, canvasRef }: Props) => {
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     setSelectedClip({ id: clip.id, effectId: 'text' });
-                    requestPauseAndSeekTo(currentTime);
+                    requestPauseAndSeekTo(useStore.getState().currentTime);
                     beginHistoryGroup(`text-resize-${clip.id}`, 'Resize text');
                     dragRef.current = {
                       mode: 'resize',

@@ -1,3 +1,4 @@
+import { invalidatePreview } from '../../pixi/previewInvalidation';
 import { createScreenforgeFileUrl } from '../../screenforge-url';
 /**
  * Camera PIP effect — PixiJS implementation.
@@ -101,6 +102,9 @@ function ensurePreviewCameraVideo(path: string | null): HTMLVideoElement | null 
   video.preload = 'auto';
   video.muted = true;
   video.playsInline = true;
+  // Its frames arrive on their own; the paused preview must draw them.
+  video.addEventListener('loadeddata', invalidatePreview);
+  video.addEventListener('seeked', invalidatePreview);
   video.load();
   previewCameraVideo = video;
   previewCameraPath = path;
@@ -113,6 +117,8 @@ function disposePreviewCameraVideo(): void {
     return;
   }
   previewCameraVideo.pause();
+  previewCameraVideo.removeEventListener('loadeddata', invalidatePreview);
+  previewCameraVideo.removeEventListener('seeked', invalidatePreview);
   previewCameraVideo.removeAttribute('src');
   previewCameraVideo.load();
   previewCameraVideo = null;

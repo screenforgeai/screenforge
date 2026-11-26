@@ -38,7 +38,7 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
   const {
     activeWidget,
     maskClips,
-    currentTime,
+    activeMaskIdsKey,
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
@@ -48,7 +48,12 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
     useShallow((state) => ({
       activeWidget: state.activeWidget,
       maskClips: state.maskClips,
-      currentTime: state.currentTime,
+      // The ids of masks under the playhead, as one string so it compares by
+      // value: playback updates currentTime every frame, this rarely changes.
+      activeMaskIdsKey: state.maskClips
+        .filter((m) => state.currentTime >= m.start && state.currentTime < m.end)
+        .map((m) => m.id)
+        .join(','),
       commitEdit: state.commitEdit,
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
@@ -110,10 +115,10 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
     ? canvasDisplayRect.width / Math.max(box.canvasWidth, 1)
     : 1;
 
-  const activeMasks = useMemo(
-    () => maskClips.filter((m) => currentTime >= m.start && currentTime < m.end),
-    [maskClips, currentTime],
-  );
+  const activeMasks = useMemo(() => {
+    const ids = new Set(activeMaskIdsKey ? activeMaskIdsKey.split(',') : []);
+    return maskClips.filter((m) => ids.has(m.id));
+  }, [maskClips, activeMaskIdsKey]);
 
   const toDisplayRect = useCallback(
     (mask: MaskClip) => {
@@ -306,7 +311,7 @@ export const MaskOverlayEditor = ({ containerRef, canvasRef }: Props) => {
             )}
 
             {isEditing && (
-              <div className="pointer-events-none absolute left-2.5 top-2.5 rounded-full border border-white/7 bg-[#141418]/72 px-2.5 py-1 text-xs font-medium tracking-[0.12em] text-white/78 shadow-[0_1px_1px_rgba(8,8,10,0.18),0_8px_18px_rgba(8,8,10,0.16)] backdrop-blur-md transition-all duration-150">
+              <div className="pointer-events-none absolute left-2.5 top-2.5 rounded-full border border-white/7 bg-sf-panel/85 px-2.5 py-1 text-xs font-medium tracking-[0.12em] text-white/78 shadow-[0_1px_1px_rgba(8,8,10,0.18),0_8px_18px_rgba(8,8,10,0.16)] transition-all duration-150">
                 {mask.type === 'blur' ? 'Blur' : 'Mask'}
               </div>
             )}

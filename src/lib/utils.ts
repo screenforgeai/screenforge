@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { drawThumbnailCanvas } from './pixi/previewThumbnail';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -106,11 +107,10 @@ export function captureFrame(video: HTMLVideoElement): string {
   }
 
   try {
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d')?.drawImage(video, 0, 0);
-    return canvas.toDataURL(THUMBNAIL_IMAGE_TYPE, THUMBNAIL_IMAGE_QUALITY);
+    // Thumbnail size, not the full frame: encoding a 1440p JPEG on the main thread
+    // stalled the editor at every autosave.
+    const canvas = drawThumbnailCanvas(video, video.videoWidth, video.videoHeight);
+    return canvas ? canvas.toDataURL(THUMBNAIL_IMAGE_TYPE, THUMBNAIL_IMAGE_QUALITY) : '';
   } catch {
     return '';
   }

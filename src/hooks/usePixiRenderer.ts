@@ -9,8 +9,33 @@ import {
   playCursorClickSound,
   type ClickSoundHit,
 } from '../lib/effects/cursor/audio';
-import { createPreviewPixiApp, getPreviewRendererResolution } from '../lib/pixi/createPixiApp';
+import {
+  createPreviewPixiApp,
+  fitPreviewResolution,
+  resizePreviewRenderer,
+  stepPixiSystemTicker,
+} from '../lib/pixi/createPixiApp';
 import type { PixiScene, PixiEffectUpdater } from '../lib/pixi/types';
+import { registerPreviewFrameRenderer } from '../lib/pixi/previewThumbnail';
+import { trackVideoFrames } from '../lib/pixi/videoFrames';
+import { onPreviewInvalidated, invalidatePreview } from '../lib/pixi/previewInvalidation';
+import { createPreviewRenderScheduler } from '../lib/pixi/previewRenderScheduler';
+import { hasSceneMoved, readSceneMotion } from '../lib/pixi/sceneMotion';
+
+/** How long the preview's on-screen size must hold still before its buffer is resized. */
+const PREVIEW_RESIZE_SETTLE_MS = 120;
+
+/** Video events that change what the paused preview should show. */
+const PREVIEW_DIRTY_VIDEO_EVENTS = [
+  'play',
+  'pause',
+  'seeking',
+  'seeked',
+  'loadedmetadata',
+  'loadeddata',
+  'ended',
+  'emptied',
+] as const;
 import {
   analyzePixiEffects,
   runPixiEffectOnLoad,
@@ -155,6 +180,8 @@ export const usePixiRenderer = (
   // The effect updaters for the current scene; they close over it, so they
   // must never outlive it (see the scene cleanup below).
   const updatersRef = useRef<PixiEffectUpdater[]>([]);
+  // The scene's layout size (the recording's pixels), as last set by resize.
+  const logicalSizeRef = useRef<{ width: number; height: number } | null>(null);
 
   // Track only whether a recording is present (null vs. non-null).
   // Switching from R1 → R2 must NOT destroy the Pixi app — recreating a
@@ -204,6 +231,39 @@ export const usePixiRenderer = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasRecording]); // re-run only when canvas enters/leaves the DOM
 
+  // ── Project thumbnails ────────────────────────────────────────────────────
+  // A thumbnail draws a frame and is copied off the canvas in the same task
+  // (capturePreviewThumbnailCanvas), so it never relies on a kept drawing buffer
+  // or on the preview having drawn recently (it stops drawing once settled).
+  useEffect(() => {
+    if (!sceneReady) {
+      return;
+    }
+    return registerPreviewFrameRenderer((read, { fullResolution }) => {
+      const scene = sceneRef.current;
+      const video = videoRef.current;
+      if (!scene?.app.renderer || !video || video.videoWidth === 0) {
+        return;
+      }
+      const { renderer, stage } = scene.app;
+      // The buffer is only as big as the preview is shown: a frame screenshot
+      // draws once at the recording's pixels, then puts the buffer back. The exact
+      // layout size, not renderer.width/height (Pixi rounds them via the buffer).
+      const shownResolution = renderer.resolution;
+      const enlarge = fullResolution && shownResolution < 1;
+      const logical = logicalSizeRef.current ?? { width: renderer.width, height: renderer.height };
+      if (enlarge) {
+        renderer.resize(logical.width, logical.height, 1);
+      }
+      renderer.render(stage);
+      read(scene.app.canvas as HTMLCanvasElement);
+      if (enlarge) {
+        renderer.resize(logical.width, logical.height, shownResolution);
+        renderer.render(stage);
+      }
+    });
+  }, [sceneReady, videoRef]);
+
   // ── Renderer resize when source dimensions or frame settings change ───────
   useEffect(() => {
     const video = videoRef.current;
@@ -221,14 +281,30 @@ export const usePixiRenderer = (
       const { isCropEditing: editing } = useStore.getState();
       const targetFrame = editing ? { ...frame, cropRect: DEFAULT_CROP_RECT } : frame;
       const geometry = getFrameGeometry(targetFrame, sw, sh);
-      const resolution = getPreviewRendererResolution();
+      const canvas = scene.app.canvas as HTMLCanvasElement;
+      const shown = canvas.getBoundingClientRect();
+      // Laid out in the recording's pixels; drawn at the size it is shown.
+      const resolution = fitPreviewResolution({
+        logicalWidth: geometry.canvasWidth,
+        logicalHeight: geometry.canvasHeight,
+        displayWidth: shown.width,
+        displayHeight: shown.height,
+        devicePixelRatio: window.devicePixelRatio,
+      });
       scene.sourceWidth = sw;
       scene.sourceHeight = sh;
-      scene.app.renderer.resize(geometry.canvasWidth, geometry.canvasHeight, resolution);
+      logicalSizeRef.current = { width: geometry.canvasWidth, height: geometry.canvasHeight };
+      resizePreviewRenderer(
+        scene.app.renderer,
+        geometry.canvasWidth,
+        geometry.canvasHeight,
+        resolution,
+      );
 
-      const canvas = scene.app.canvas as HTMLCanvasElement;
       canvas.style.width = '100%';
       canvas.style.height = '100%';
+      // Resizing clears the canvas: draw it again even while paused.
+      invalidatePreview();
     };
 
     if (video.readyState >= 1) {
@@ -236,7 +312,25 @@ export const usePixiRenderer = (
     }
     video.addEventListener('loadedmetadata', resize);
     window.addEventListener('resize', resize);
+    // The drawing buffer follows the preview's on-screen size (focus mode, the
+    // timeline divider, panels). Settle first: while the size is still changing
+    // the browser scales the current frame, instead of reallocating every frame.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+              if (video.readyState >= 1) {
+                resize();
+              }
+            }, PREVIEW_RESIZE_SETTLE_MS);
+          });
+    observer?.observe(scene.app.canvas as HTMLCanvasElement);
     return () => {
+      clearTimeout(resizeTimer);
+      observer?.disconnect();
       video.removeEventListener('loadedmetadata', resize);
       window.removeEventListener('resize', resize);
     };
@@ -260,6 +354,7 @@ export const usePixiRenderer = (
           return;
         }
         updatersRef.current = updaters;
+        invalidatePreview();
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -276,16 +371,50 @@ export const usePixiRenderer = (
   // Cursor-click audio and Pixi rendering share one requestAnimationFrame loop
   // rather than running two parallel loops. This halves RAF callbacks from
   // ~120/s to ~60/s and eliminates the scheduling jitter between the two loops.
+  //
+  // The loop runs every frame while the video plays. Paused, it runs only until
+  // the scene settles after the last change (PREVIEW_SETTLE_MS: effects smooth
+  // with dt), then sleeps until something marks the preview dirty again: a store
+  // change, a video event or new frame, a resize, finished effect setup, or
+  // invalidatePreview() from an asset that loaded.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) {
       return;
     }
 
-    let rafId: number;
+    let rafId = 0;
+    let disposed = false;
     let lastFrameTime = performance.now();
+    const scheduler = createPreviewRenderScheduler();
+    let lastMotion: number[] | null = null;
+    const wake = (): void => {
+      if (rafId === 0 && !disposed) {
+        // Sleeping frames are not elapsed animation time for the smoothing.
+        lastFrameTime = performance.now();
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+    const markDirty = (): void => {
+      scheduler.markDirty(performance.now());
+      wake();
+    };
+    // The frame effect re-uploads the video texture only when this names a new frame.
+    const videoFrames = trackVideoFrames(video, markDirty);
+    const unsubscribeStore = useStore.subscribe(markDirty);
+    const unsubscribeInvalidate = onPreviewInvalidated(markDirty);
+    for (const event of PREVIEW_DIRTY_VIDEO_EVENTS) {
+      video.addEventListener(event, markDirty);
+    }
+    window.addEventListener('resize', markDirty);
+    document.fonts?.addEventListener?.('loadingdone', markDirty);
 
     const tick = (): void => {
+      rafId = 0;
+      const isVideoPlaying = !video.paused && !video.ended;
+      if (!scheduler.shouldRender(performance.now(), isVideoPlaying)) {
+        return; // settled: sleep until markDirty()
+      }
       rafId = requestAnimationFrame(tick);
 
       // ── Cursor-click audio tick ──────────────────────────────────────────
@@ -354,14 +483,37 @@ export const usePixiRenderer = (
           width: video.videoWidth,
           height: video.videoHeight,
           ready: video.readyState >= 2,
+          frameId: videoFrames.frameId,
         },
       });
 
       scene.app.renderer.render(scene.app.stage);
+      stepPixiSystemTicker(now);
+
+      // Paused, effects can keep moving on their own (the zoom camera's follow eases
+      // for seconds after a seek): stay awake until they come to rest.
+      if (!isVideoPlaying) {
+        const motion = readSceneMotion(scene);
+        if (hasSceneMoved(lastMotion, motion)) {
+          scheduler.markDirty(now);
+        }
+        lastMotion = motion;
+      }
     };
 
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
+    markDirty();
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      videoFrames.dispose();
+      unsubscribeStore();
+      unsubscribeInvalidate();
+      for (const event of PREVIEW_DIRTY_VIDEO_EVENTS) {
+        video.removeEventListener(event, markDirty);
+      }
+      window.removeEventListener('resize', markDirty);
+      document.fonts?.removeEventListener?.('loadingdone', markDirty);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoRef, recording]); // re-run when recording changes so RAF starts once video is in the DOM
 };

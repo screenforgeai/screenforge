@@ -1,5 +1,5 @@
 diff --git a/dist/index.es.js b/dist/index.es.js
-index b48875e9ab04f3ec66c0224a92759d125b2be978..b78b384b4fd7de33b944f045181ef126571ddd44 100644
+index b48875e9ab04f3ec66c0224a92759d125b2be978..7b3d2be9a98b34d0e230eb15e2a7d7a537be67e1 100644
 --- a/dist/index.es.js
 +++ b/dist/index.es.js
 @@ -8412,7 +8412,7 @@ const rc = /* @__PURE__ */ no(nc), ic = ({ children: s, interactRef: i, draggabl
@@ -145,3 +145,71 @@ index b48875e9ab04f3ec66c0224a92759d125b2be978..b78b384b4fd7de33b944f045181ef126
            lastLeft: Z,
            lastWidth: Y,
            left: Z,
+@@ -9141,7 +9144,7 @@ const uc = (s, i) => s.reduce((r, e) => r + (e?.rowHeight || i), 0), dc = (s, i)
+         action: J.action,
+         row: J.row,
+         editorData: r
+-      }), ue = ct(b, { scaleWidth: a, scale: m, startLeft: u }), me = de({
++      }), ue = ct(s.getCursorTime ? s.getCursorTime() : b, { scaleWidth: a, scale: m, startLeft: u }), me = de({
+         editorData: r,
+         assistActionIds: re,
+         action: J.action,
+@@ -9284,6 +9287,16 @@ const uc = (s, i) => s.reduce((r, e) => r + (e?.rowHeight || i), 0), dc = (s, i)
+       }
+     )
+   ] }) }) });
++}, sfCursorHost = ({ cursorStore: s, ...i }) => {
++  // Screenforge patch: the cursor subscribes to the cursor time itself, so
++  // moving it (setTime on every playback frame) redraws only the cursor.
++  const [r, e] = wt(s.time);
++  return Qe(() => {
++    const a = (c) => e(c);
++    return s.subs.add(a), e(s.time), () => {
++      s.subs.delete(a);
++    };
++  }, [s]), /* @__PURE__ */ Ee(oc, { ...i, cursorTime: r });
+ }, Sc = Jt.forwardRef((s, i) => {
+   const r = Xl(s), { style: e } = s;
+   let {
+@@ -9303,7 +9316,14 @@ const uc = (s, i) => s.reduce((r, e) => r + (e?.rowHeight || i), 0), dc = (s, i)
+     autoReRender: L = !0,
+     onScroll: q
+   } = r;
+-  const P = Ae(k || new ta()), W = Ae(null), I = Ae(null), V = Ae(null), [x, j] = wt(c), [ie, te] = wt(ir), [Q, ce] = wt(ql), [de, he] = wt(!1), [pe, Se] = wt(Number.MAX_SAFE_INTEGER);
++  const P = Ae(k || new ta()), W = Ae(null), I = Ae(null), V = Ae(null), [x, j] = wt(c), [ie, te] = wt(ir), sfCursor = Ae(null), [de, he] = wt(!1), [pe, Se] = wt(Number.MAX_SAFE_INTEGER);
++  // Screenforge patch: the cursor time lives in a ref with subscribers instead of
++  // state here. As state, every setTime re-rendered the whole timeline, every row
++  // and clip included, once per playback frame.
++  sfCursor.current || (sfCursor.current = { time: ql, subs: /* @__PURE__ */ new Set() });
++  const Q = sfCursor.current.time, ce = (F) => {
++    sfCursor.current.time !== F && (sfCursor.current.time = F, sfCursor.current.subs.forEach((oe) => oe(F)));
++  };
+   lr(() => {
+     Te(Yl(c, { scale: S })), j(c);
+   }, [c, R, z, S]), Qe(() => {
+@@ -9394,6 +9414,7 @@ const uc = (s, i) => s.reduce((r, e) => r + (e?.rowHeight || i), 0), dc = (s, i)
+         disableDrag: m || de,
+         editorData: x,
+         cursorTime: Q,
++        getCursorTime: () => sfCursor.current.time,
+         scaleCount: ie,
+         setScaleCount: Te,
+         scrollTop: oe,
+@@ -9407,7 +9428,7 @@ const uc = (s, i) => s.reduce((r, e) => r + (e?.rowHeight || i), 0), dc = (s, i)
+       }
+     ),
+     !v && /* @__PURE__ */ Ee(
+-      oc,
++      sfCursorHost,
+       {
+         ...r,
+         timelineWidth: pe,
+@@ -9416,7 +9437,7 @@ const uc = (s, i) => s.reduce((r, e) => r + (e?.rowHeight || i), 0), dc = (s, i)
+         scaleCount: ie,
+         setScaleCount: Te,
+         setCursor: Re,
+-        cursorTime: Q,
++        cursorStore: sfCursor.current,
+         editorData: x,
+         areaRef: I,
+         scrollSync: V,

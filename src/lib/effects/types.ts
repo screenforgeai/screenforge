@@ -5,6 +5,12 @@ export interface RenderSource {
   width: number;
   height: number;
   ready: boolean;
+  /**
+   * Preview only: changes whenever the source shows a new frame (a played frame,
+   * a seek, a load). The GPU copy is refreshed only when it changes. Absent in
+   * export, which uploads every frame it renders.
+   */
+  frameId?: number;
 }
 
 export interface RenderContext {

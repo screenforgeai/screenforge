@@ -13,7 +13,7 @@ import {
   WIDGET_SECTION_HEADING_CLASS,
 } from 'src/components/layout';
 import { cn, formatTime } from 'src/lib/utils';
-import { sortMediaSegments } from 'src/lib/helpers/segments';
+import { findSegmentIdAtPlayhead, sortMediaSegments } from 'src/lib/helpers/segments';
 
 // ── VideoWidget ───────────────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ export const VideoWidget = () => {
     beginHistoryGroup,
     endHistoryGroup,
     setSelectedClip,
-    currentTime,
+    playheadSegmentId,
     selectedClip,
     requestSeekTo,
     requestPauseAndSeekTo,
@@ -40,7 +40,9 @@ export const VideoWidget = () => {
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
       setSelectedClip: state.setSelectedClip,
-      currentTime: state.currentTime,
+      // Only the segment under the playhead, not the time itself: playback
+      // updates currentTime every frame, the panel only changes with this.
+      playheadSegmentId: findSegmentIdAtPlayhead(state.mediaSegments, state.currentTime),
       selectedClip: state.selectedClip,
       requestSeekTo: state.requestSeekTo,
       requestPauseAndSeekTo: state.requestPauseAndSeekTo,
@@ -50,10 +52,6 @@ export const VideoWidget = () => {
   const orderedSegments = sortMediaSegments(mediaSegments);
 
   const expandedId = selectedClip?.effectId === 'video' ? selectedClip.id : null;
-
-  const playheadSegmentId =
-    orderedSegments.find((seg) => currentTime >= seg.timelineStart && currentTime < seg.timelineEnd)
-      ?.id ?? null;
 
   useEffect(() => {
     if (!playheadSegmentId) {
@@ -225,6 +223,7 @@ export const VideoWidget = () => {
                   aria-current={isPlayheadActive ? 'true' : undefined}
                   onClick={() => {
                     const mid = (seg.timelineStart + seg.timelineEnd) / 2;
+                    const { currentTime } = useStore.getState();
                     const isPlayheadOverClip =
                       currentTime >= seg.timelineStart && currentTime < seg.timelineEnd;
 

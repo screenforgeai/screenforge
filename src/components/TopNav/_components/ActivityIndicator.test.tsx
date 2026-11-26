@@ -45,4 +45,18 @@ describe('ActivityIndicator', () => {
       'delay-150',
     );
   });
+
+  it('spins only while visible: a hidden endless animation keeps the page drawing frames', () => {
+    const { container, rerender } = render(
+      <ActivityIndicator label="Autosaving..." visible={false} />,
+    );
+    const spinner = () => container.querySelector('svg');
+
+    expect(spinner()).toHaveClass('animate-none');
+    expect(spinner()).not.toHaveClass('animate-spin');
+
+    rerender(<ActivityIndicator label="Autosaving..." visible={true} />);
+    expect(spinner()).toHaveClass('animate-spin');
+    expect(spinner()).not.toHaveClass('animate-none');
+  });
 });

@@ -504,7 +504,7 @@ export const TextWidget = () => {
     commitEdit,
     beginHistoryGroup,
     endHistoryGroup,
-    currentTime,
+    activeClipIdsKey,
     selectedClip,
     setSelectedClip,
     requestPauseAndSeekTo,
@@ -516,7 +516,12 @@ export const TextWidget = () => {
       commitEdit: s.commitEdit,
       beginHistoryGroup: s.beginHistoryGroup,
       endHistoryGroup: s.endHistoryGroup,
-      currentTime: s.currentTime,
+      // The ids of clips under the playhead, as one string so it compares by
+      // value: playback updates currentTime every frame, this rarely changes.
+      activeClipIdsKey: s.textClips
+        .filter((c) => s.currentTime >= c.start && s.currentTime <= c.end)
+        .map((c) => c.id)
+        .join(','),
       selectedClip: s.selectedClip,
       setSelectedClip: s.setSelectedClip,
       requestPauseAndSeekTo: s.requestPauseAndSeekTo,
@@ -524,14 +529,11 @@ export const TextWidget = () => {
     })),
   );
 
-  const activeClipIds = new Set(
-    textClips.filter((c) => currentTime >= c.start && currentTime <= c.end).map((c) => c.id),
-  );
+  const activeClipIds = new Set(activeClipIdsKey ? activeClipIdsKey.split(',') : []);
 
   const expandedId = selectedClip?.effectId === 'text' ? selectedClip.id : localExpandedId;
   const setExpandedId = (id: string | null) => setLocalExpandedId(id);
 
-  const activeClipIdsKey = [...activeClipIds].join(',');
   useEffect(() => {
     for (const id of activeClipIds) {
       clipRefs.current[id]?.scrollIntoView({ block: 'nearest' });
@@ -557,7 +559,7 @@ export const TextWidget = () => {
 
   const handleAdd = () => {
     const id = `text-${Date.now()}`;
-    const clip = defaultTextClip(id, currentTime);
+    const clip = defaultTextClip(id, useStore.getState().currentTime);
     commitEdit('Add text clip', (state) => ({
       textClips: [...state.textClips, clip].sort((a, b) => a.start - b.start),
     }));
@@ -578,7 +580,7 @@ export const TextWidget = () => {
   };
 
   const handleUpdate = (id: string, patch: Partial<TextClip>) => {
-    requestPauseAndSeekTo(currentTime);
+    requestPauseAndSeekTo(useStore.getState().currentTime);
     commitEdit('Edit text clip', (state) => ({
       textClips: state.textClips.map((c) => (c.id === id ? { ...c, ...patch } : c)),
     }));
@@ -628,6 +630,7 @@ export const TextWidget = () => {
                 setExpandedId(willExpand ? clip.id : null);
                 setSelectedClip(willExpand ? { id: clip.id, effectId: 'text' } : null);
                 if (willExpand) {
+                  const { currentTime } = useStore.getState();
                   const isPlayheadOverClip =
                     currentTime >= clip.start + 0.5 && currentTime <= clip.end;
                   if (!isPlayheadOverClip) {

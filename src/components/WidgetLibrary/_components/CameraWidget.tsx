@@ -155,28 +155,21 @@ const LAYOUT_OPTIONS: { value: CameraLayoutPreset; Icon: () => JSX.Element }[] =
 
 export const CameraWidget = () => {
   const { t } = useTranslation('camera');
-  const {
-    recordingResult,
-    camera,
-    currentTime,
-    cameraClips,
-    commitEdit,
-    beginHistoryGroup,
-    endHistoryGroup,
-  } = useStore(
-    useShallow((state) => ({
-      recordingResult: state.recordingResult,
-      camera: state.camera,
-      currentTime: state.currentTime,
-      cameraClips: state.cameraClips,
-      commitEdit: state.commitEdit,
-      beginHistoryGroup: state.beginHistoryGroup,
-      endHistoryGroup: state.endHistoryGroup,
-    })),
-  );
+  const { recordingResult, camera, activeClip, commitEdit, beginHistoryGroup, endHistoryGroup } =
+    useStore(
+      useShallow((state) => ({
+        recordingResult: state.recordingResult,
+        camera: state.camera,
+        // The clip under the playhead (a stored clip, so its identity is stable),
+        // not the time itself: playback updates currentTime every frame.
+        activeClip: findCameraClipAtTime(state.cameraClips, state.currentTime),
+        commitEdit: state.commitEdit,
+        beginHistoryGroup: state.beginHistoryGroup,
+        endHistoryGroup: state.endHistoryGroup,
+      })),
+    );
 
   const hasCameraTrack = Boolean(recordingResult?.cameraPath);
-  const activeClip = findCameraClipAtTime(cameraClips, currentTime);
   const activeLayout: CameraLayoutPreset = activeClip?.layout ?? 'pip';
 
   const trackCamera = (property: string, value: unknown) =>

@@ -56,6 +56,7 @@ import type {
   MotionPoses,
 } from 'src/lib/animation/motionClips';
 import { SCENE_MOTION_PROPS, SCENE_MOTION_SPECS } from 'src/lib/animation/sceneMotion';
+import type { MediaSegment } from 'src/types/timeline';
 import type { SceneMotionProp } from 'src/lib/animation/sceneMotion';
 import { cn, formatTime } from 'src/lib/utils';
 import { mapTimelineTimeToSource } from 'src/lib/helpers/segments';
@@ -85,6 +86,36 @@ export const MotionWidget = () => (
   </PreviewCardProvider>
 );
 
+// The clip under the playhead, or the nearest one before the first / after the last.
+const getPlayheadSegment = (segments: readonly MediaSegment[], time: number) => {
+  const sorted = [...segments].sort((a, b) => a.timelineStart - b.timelineStart);
+  return (
+    getSegmentAt(segments, time) ??
+    (time <= (sorted[0]?.timelineStart ?? 0) ? sorted[0] : sorted.at(-1))
+  );
+};
+
+// The store selector runs on every playback frame: lay clips out again only
+// when the clips or segments change, not when only the time does.
+let lastLayout: {
+  motionClips: readonly MotionClip[];
+  mediaSegments: readonly MediaSegment[];
+  clips: ReturnType<typeof layoutMotionClips>;
+} | null = null;
+const layoutMotionClipsCached = (
+  motionClips: readonly MotionClip[],
+  mediaSegments: readonly MediaSegment[],
+) => {
+  if (lastLayout?.motionClips !== motionClips || lastLayout.mediaSegments !== mediaSegments) {
+    lastLayout = {
+      motionClips,
+      mediaSegments,
+      clips: layoutMotionClips(motionClips, mediaSegments),
+    };
+  }
+  return lastLayout.clips;
+};
+
 const MotionWidgetBody = () => {
   const { t } = useTranslation('motion');
   const preview = usePreviewCard();
@@ -102,7 +133,8 @@ const MotionWidgetBody = () => {
     beginHistoryGroup,
     endHistoryGroup,
     setSelectedClip,
-    currentTime,
+    playheadSegmentId,
+    playheadClipId,
     selectedClip,
     requestSeekTo,
     requestPauseAndSeekTo,
@@ -116,7 +148,13 @@ const MotionWidgetBody = () => {
       beginHistoryGroup: state.beginHistoryGroup,
       endHistoryGroup: state.endHistoryGroup,
       setSelectedClip: state.setSelectedClip,
-      currentTime: state.currentTime,
+      // What sits under the playhead, not the time itself: playback updates
+      // currentTime every frame, and the panel only changes when these do.
+      playheadSegmentId: getPlayheadSegment(state.mediaSegments, state.currentTime)?.id ?? null,
+      playheadClipId:
+        layoutMotionClipsCached(state.motionClips, state.mediaSegments).find(
+          (clip) => state.currentTime >= clip.start && state.currentTime <= clip.end,
+        )?.id ?? null,
       selectedClip: state.selectedClip,
       requestSeekTo: state.requestSeekTo,
       requestPauseAndSeekTo: state.requestPauseAndSeekTo,
@@ -127,14 +165,9 @@ const MotionWidgetBody = () => {
     mediaSegments.length > 0
       ? Math.max(...mediaSegments.map((s) => s.timelineEnd))
       : (recordingResult?.duration ?? 0);
-  const clips = layoutMotionClips(motionClips, mediaSegments);
+  const clips = layoutMotionClipsCached(motionClips, mediaSegments);
   // Intro / Outro in the Add menu belong to the clip under the playhead.
-  const sortedSegments = [...mediaSegments].sort((a, b) => a.timelineStart - b.timelineStart);
-  const playheadSegment =
-    getSegmentAt(mediaSegments, currentTime) ??
-    (currentTime <= (sortedSegments[0]?.timelineStart ?? 0)
-      ? sortedSegments[0]
-      : sortedSegments.at(-1));
+  const playheadSegment = mediaSegments.find((segment) => segment.id === playheadSegmentId);
   // One still of the user's own recording, decoded once, shared by every preview.
   const previewSourceTime =
     Math.round((mapTimelineTimeToSource(mediaSegments, duration / 2) ?? 0) * 2) / 2;
@@ -210,9 +243,6 @@ const MotionWidgetBody = () => {
     }
   };
   const expandedId = selectedClip?.effectId === 'motion' ? selectedClip.id : manualExpandedId;
-  const playheadClipId =
-    clips.find((clip) => currentTime >= clip.start && currentTime <= clip.end)?.id ?? null;
-
   useEffect(() => {
     if (!playheadClipId) {
       return;
@@ -296,7 +326,10 @@ const MotionWidgetBody = () => {
             <DropdownMenuItem
               className="cursor-pointer gap-2 py-1.5 px-2 text-sm"
               onClick={() =>
-                applyAdd(t('addAtPlayhead'), addMotionAt(motionClips, mediaSegments, currentTime))
+                applyAdd(
+                  t('addAtPlayhead'),
+                  addMotionAt(motionClips, mediaSegments, useStore.getState().currentTime),
+                )
               }
             >
               <IconMotion size={12} />
