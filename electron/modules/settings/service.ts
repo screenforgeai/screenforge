@@ -12,6 +12,8 @@ export interface AppSettings {
   telemetryEnabled: boolean;
   /** Version whose release notes were last offered in "What's new"; absent before the first check. */
   lastSeenVersion?: string;
+  /** "Get early updates": this install reads the beta update feed; absent until set. */
+  earlyUpdates?: boolean;
 }
 
 const DEFAULTS: AppSettings = {
@@ -31,12 +33,23 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
-function withLastSeenVersion(settings: AppSettings, value: unknown): AppSettings {
-  return isNonEmptyString(value) ? { ...settings, lastSeenVersion: value } : settings;
+/** Adds the optional fields that hold a valid value; leaves the rest out. */
+function withOptionalFields(
+  settings: AppSettings,
+  values: { lastSeenVersion?: unknown; earlyUpdates?: unknown },
+): AppSettings {
+  const next: AppSettings = { ...settings };
+  if (isNonEmptyString(values.lastSeenVersion)) {
+    next.lastSeenVersion = values.lastSeenVersion;
+  }
+  if (isBoolean(values.earlyUpdates)) {
+    next.earlyUpdates = values.earlyUpdates;
+  }
+  return next;
 }
 
 function withDefaults(parsed: Partial<AppSettings>): AppSettings {
-  return withLastSeenVersion(
+  return withOptionalFields(
     {
       profile: { ...DEFAULTS.profile, ...parsed.profile },
       language: parsed.language ?? DEFAULTS.language,
@@ -44,7 +57,7 @@ function withDefaults(parsed: Partial<AppSettings>): AppSettings {
         ? parsed.telemetryEnabled
         : DEFAULTS.telemetryEnabled,
     },
-    parsed.lastSeenVersion,
+    parsed,
   );
 }
 
@@ -68,7 +81,7 @@ export function getSettingsSync(): AppSettings {
 
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings();
-  const next: AppSettings = withLastSeenVersion(
+  const next: AppSettings = withOptionalFields(
     {
       profile: { ...current.profile, ...patch.profile },
       language: patch.language ?? current.language,
@@ -76,7 +89,12 @@ export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSett
         ? patch.telemetryEnabled
         : current.telemetryEnabled,
     },
-    isNonEmptyString(patch.lastSeenVersion) ? patch.lastSeenVersion : current.lastSeenVersion,
+    {
+      lastSeenVersion: isNonEmptyString(patch.lastSeenVersion)
+        ? patch.lastSeenVersion
+        : current.lastSeenVersion,
+      earlyUpdates: isBoolean(patch.earlyUpdates) ? patch.earlyUpdates : current.earlyUpdates,
+    },
   );
   await fs.writeFile(settingsPath(), JSON.stringify(next), 'utf8');
   if (isBoolean(patch.telemetryEnabled)) {

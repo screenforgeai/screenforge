@@ -3,7 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { identifyUser, trackEvent } from 'src/lib/analytics';
 import { SUPPORTED_LANGUAGES, type UserProfile } from 'src/lib/userProfile';
-import { IconGlobe, IconLink, IconShield, IconUserAccount, IconX } from 'src/lib/icons';
+import {
+  IconDownload,
+  IconGlobe,
+  IconLink,
+  IconShield,
+  IconUserAccount,
+  IconX,
+} from 'src/lib/icons';
 import type { SettingsSection } from 'src/lib/settingsNavigation';
 import { DirectorInfoTip } from '../../Director/DirectorInfoTip';
 import { DirectorAccountPanel } from './DirectorAccountPanel';
@@ -48,6 +55,7 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
     language: { title: t('language_title'), description: t('language_description') },
     director: { title: t('director_title'), description: t('director_description') },
     privacy: { title: t('privacy_title'), description: t('privacy_description') },
+    updates: { title: t('updates_title'), description: t('updates_description') },
   };
 
   const emptyProfile: UserProfile = { name: '', email: '' };
@@ -66,6 +74,10 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
   // Privacy state
   const [telemetryEnabled, setTelemetryEnabled] = useState(true);
   const [savedTelemetryEnabled, setSavedTelemetryEnabled] = useState(true);
+
+  // Updates state
+  const [earlyUpdates, setEarlyUpdates] = useState(false);
+  const [savedEarlyUpdates, setSavedEarlyUpdates] = useState(false);
 
   const hasOpenedRef = useRef(false);
   const { directorSharing } = useFeatureFlags();
@@ -101,6 +113,8 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
       setSavedLang(lang);
       setTelemetryEnabled(s.telemetryEnabled);
       setSavedTelemetryEnabled(s.telemetryEnabled);
+      setEarlyUpdates(s.earlyUpdates === true);
+      setSavedEarlyUpdates(s.earlyUpdates === true);
     });
   }, [open]);
 
@@ -109,10 +123,12 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
     profile.email.trim() !== savedProfile.email.trim();
   const langDirty = currentLang !== savedLang;
   const telemetryDirty = telemetryEnabled !== savedTelemetryEnabled;
+  const earlyUpdatesDirty = earlyUpdates !== savedEarlyUpdates;
   const isDirty = {
     profile: profileDirty,
     language: langDirty,
     privacy: telemetryDirty,
+    updates: earlyUpdatesDirty,
     // Account has no Save: signing in and out apply at once.
     director: false,
   }[activeSection];
@@ -131,6 +147,24 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
         ]);
         setSavedTelemetryEnabled(telemetryEnabled);
         toast.success(t('saved'));
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    if (activeSection === 'updates') {
+      setIsSaving(true);
+      try {
+        await Promise.all([
+          window.screenforge.saveSettings({ earlyUpdates }),
+          new Promise((r) => setTimeout(r, 500)),
+        ]);
+        setSavedEarlyUpdates(earlyUpdates);
+        trackEvent('settings_early_updates_changed', { enabled: earlyUpdates });
+        toast.success(t('saved'));
+        // The new feed applies at the next check: run it now.
+        void window.screenforge.checkForUpdatesNow().catch(() => undefined);
       } finally {
         setIsSaving(false);
       }
@@ -223,6 +257,12 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
                   <IconShield size={15} />
                 </span>
                 {t('tabs_privacy')}
+              </TabsTrigger>
+              <TabsTrigger value="updates">
+                <span data-tab-icon="">
+                  <IconDownload size={15} />
+                </span>
+                {t('tabs_updates')}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -323,6 +363,30 @@ export const SettingsModal = ({ open, section, onClose }: Props) => {
                   checked={telemetryEnabled}
                   disabled={isSaving}
                   onCheckedChange={setTelemetryEnabled}
+                  className="shrink-0"
+                >
+                  <SwitchThumb />
+                </Switch>
+              </label>
+            </TabsContent>
+
+            <TabsContent value="updates" className="flex-1 overflow-y-auto px-5 py-5">
+              <label
+                htmlFor="settings-early-updates"
+                className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-sf-border/50 bg-[#111116] px-3 py-2.5 transition-colors hover:border-sf-border-lt hover:bg-[#15151b]"
+              >
+                <div className="grid gap-0.5">
+                  <span className="text-sm font-medium leading-none text-sf-primary">
+                    {t('earlyUpdates_label')}
+                  </span>
+                  <span className="text-xs leading-4 text-sf-muted">{t('earlyUpdates_desc')}</span>
+                </div>
+                <Switch
+                  id="settings-early-updates"
+                  size="xs"
+                  checked={earlyUpdates}
+                  disabled={isSaving}
+                  onCheckedChange={setEarlyUpdates}
                   className="shrink-0"
                 >
                   <SwitchThumb />

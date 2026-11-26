@@ -689,6 +689,8 @@ export interface FeatureFlags {
   directorSharing: boolean;
   /** Chunked export, background prerendering and its progress in the top bar. */
   chunkedExport: boolean;
+  /** Updates come from the beta feed: releases before they reach everyone. */
+  betaUpdates: boolean;
 }
 
 /** The optional Director sign-in, as the app shows it. Never carries the token. */
@@ -919,11 +921,14 @@ export interface ScreenforgeAPI {
     profile: { name: string; email: string };
     language: string;
     telemetryEnabled: boolean;
+    /** "Get early updates"; absent until set. */
+    earlyUpdates?: boolean;
   }>;
   saveSettings: (patch: {
     profile?: { name: string; email: string };
     language?: string;
     telemetryEnabled?: boolean;
+    earlyUpdates?: boolean;
   }) => Promise<{
     profile: { name: string; email: string };
     language: string;

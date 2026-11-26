@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FeatureFlags } from '../types';
 
-const OFF: FeatureFlags = { directorSharing: false, chunkedExport: false };
+const OFF: FeatureFlags = { directorSharing: false, chunkedExport: false, betaUpdates: false };
 
 /** This release's feature flags, kept current from the main process; off until known. */
 export function useFeatureFlags(): FeatureFlags {

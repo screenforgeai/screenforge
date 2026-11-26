@@ -87,7 +87,8 @@ import { initAppTray, destroyAppTray, setAppTrayRecordingState } from './modules
 import { registerDirectorChannels } from './modules/director/channel';
 import { registerShareChannels } from './modules/share/channel';
 import { registerFeatureChannels } from './modules/features/channel';
-import { initFeatureFlags } from './modules/features/service';
+import { getFeatureFlags, initFeatureFlags } from './modules/features/service';
+import { resolveUpdateChannel } from './modules/updater/release-channel';
 import { initDirectorAccount } from './modules/director/service';
 import { APP_LINK_SCHEME, findAppLinkInArgv, parseAppLink } from './modules/director/app-link';
 
@@ -782,6 +783,12 @@ app.on('ready', async () => {
 
   startUpdater({
     isAppBusy: () => isRecordingBusy() || isExportBusy(),
+    getChannel: () =>
+      resolveUpdateChannel({
+        override: process.env.SCREENFORGE_UPDATE_CHANNEL,
+        earlyUpdates: getSettingsSync().earlyUpdates === true,
+        betaFlag: getFeatureFlags().betaUpdates,
+      }),
   });
 
   if (pendingAppLink) {

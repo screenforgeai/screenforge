@@ -9,7 +9,7 @@ const getFeatureFlags = vi.fn();
 
 beforeEach(() => {
   listener = null;
-  getFeatureFlags.mockResolvedValue({ directorSharing: true, chunkedExport: true });
+  getFeatureFlags.mockResolvedValue({ directorSharing: true, chunkedExport: true, betaUpdates: true });
   Object.defineProperty(window, 'screenforge', {
     value: {
       getFeatureFlags,
@@ -31,13 +31,18 @@ afterEach(() => {
 describe('useFeatureFlags', () => {
   it('starts with everything off, reads the flags, then follows changes', async () => {
     const { result, unmount } = renderHook(() => useFeatureFlags());
-    expect(result.current).toEqual({ directorSharing: false, chunkedExport: false });
+    expect(result.current).toEqual({
+      directorSharing: false,
+      chunkedExport: false,
+      betaUpdates: false,
+    });
     await waitFor(() =>
-      expect(result.current).toEqual({ directorSharing: true, chunkedExport: true }),
+      expect(result.current).toEqual({ directorSharing: true, chunkedExport: true, betaUpdates: true }),
     );
 
-    act(() => listener?.({ directorSharing: false, chunkedExport: true }));
-    expect(result.current).toEqual({ directorSharing: false, chunkedExport: true });
+    const next = { directorSharing: false, chunkedExport: true, betaUpdates: false };
+    act(() => listener?.(next));
+    expect(result.current).toEqual(next);
 
     unmount();
     expect(unsubscribe).toHaveBeenCalled();
@@ -47,6 +52,10 @@ describe('useFeatureFlags', () => {
     getFeatureFlags.mockRejectedValue(new Error('no handler'));
     const { result } = renderHook(() => useFeatureFlags());
     await waitFor(() => expect(getFeatureFlags).toHaveBeenCalled());
-    expect(result.current).toEqual({ directorSharing: false, chunkedExport: false });
+    expect(result.current).toEqual({
+      directorSharing: false,
+      chunkedExport: false,
+      betaUpdates: false,
+    });
   });
 });
