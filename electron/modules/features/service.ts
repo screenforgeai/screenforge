@@ -18,6 +18,7 @@ function flags(): FeatureFlagStore {
       directorSharing: process.env.SCREENFORGE_FEATURE_DIRECTOR_SHARING?.trim(),
       chunkedExport: process.env.SCREENFORGE_FEATURE_CHUNKED_EXPORT?.trim(),
       fastExportEdges: process.env.SCREENFORGE_FEATURE_FAST_EXPORT_EDGES?.trim(),
+      betaUpdates: process.env.SCREENFORGE_FEATURE_BETA_UPDATES?.trim(),
     },
     evaluate: evaluateFeatureFlag,
     async readCache() {
@@ -27,7 +28,12 @@ function flags(): FeatureFlagStore {
           unknown
         >;
         const cached: Partial<FeatureFlags> = {};
-        for (const name of ['directorSharing', 'chunkedExport', 'fastExportEdges'] as const) {
+        for (const name of [
+          'directorSharing',
+          'chunkedExport',
+          'fastExportEdges',
+          'betaUpdates',
+        ] as const) {
           if (typeof parsed[name] === 'boolean') {
             cached[name] = parsed[name] as boolean;
           }

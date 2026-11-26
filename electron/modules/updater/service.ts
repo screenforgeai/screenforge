@@ -8,6 +8,13 @@ import {
   type UpdaterAdapter,
   type UpdaterAdapterListeners,
 } from './controller';
+import {
+  feedBaseUrlForChannel,
+  latestMacFeedVersion,
+  latestWindowsFeedVersion,
+  releasesUrlForChannel,
+  type UpdateChannel,
+} from './release-channel';
 
 const MAC_UPDATE_BASE_URL = process.env.SCREENFORGE_MAC_UPDATE_BASE_URL?.trim() ?? '';
 const WIN_UPDATE_BASE_URL = process.env.SCREENFORGE_WIN_UPDATE_BASE_URL?.trim() ?? '';
@@ -16,10 +23,12 @@ const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 // only checks the latest published release and the user installs it from the
 // download page.
 const LINUX_RELEASES_URL = process.env.SCREENFORGE_LINUX_RELEASES_URL?.trim() ?? '';
-const LINUX_RELEASES_TIMEOUT_MS = 15_000;
+const FEED_TIMEOUT_MS = 15_000;
 
 type StartUpdaterOptions = {
   isAppBusy: () => boolean;
+  /** Asked before every check, so a channel change applies at the next one. */
+  getChannel?: () => UpdateChannel;
 };
 
 type AutoUpdaterLike = Pick<
@@ -35,7 +44,11 @@ type AdapterFactoryOptions = {
   winUpdateBaseUrl?: string;
   linuxReleasesUrl?: string;
   updater?: AutoUpdaterLike;
+  getChannel?: () => UpdateChannel;
 };
+
+let channelResolver: () => UpdateChannel = () => 'stable';
+const currentChannel = (): UpdateChannel => channelResolver();
 
 type ReleasesResponse = {
   data?: {
@@ -79,6 +92,41 @@ function parseVersionFromReleaseName(releaseName?: string): string | undefined {
   return match?.[1];
 }
 
+async function fetchFeedVersion(url: string, format: 'json' | 'text'): Promise<string | undefined> {
+  const response = await fetch(url, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not check for updates (HTTP ${response.status}).`);
+  }
+  return format === 'json'
+    ? latestMacFeedVersion(await response.json())
+    : latestWindowsFeedVersion(await response.text());
+}
+
+/**
+ * Squirrel installs the build its feed lists, even an older one (e.g. after
+ * leaving the beta for a stable feed that hasn't caught up), so the feed is
+ * read first and Squirrel only runs for a newer version.
+ */
+async function feedOffersNewerVersion(
+  feedUrl: string,
+  format: 'json' | 'text',
+  currentVersion: string,
+  listeners: UpdaterAdapterListeners,
+): Promise<boolean> {
+  const latestVersion = await fetchFeedVersion(feedUrl, format);
+  if (latestVersion && isNewerVersion(latestVersion, currentVersion)) {
+    return true;
+  }
+
+  log.info('[updater] no newer version in the feed', { latestVersion });
+  listeners.onChecking();
+  listeners.onUpdateNotAvailable();
+  return false;
+}
+
 function getFeedLogInfo(baseUrl: string): { host: string; path: string } {
   try {
     const url = new URL(`${baseUrl.replace(/\/$/, '')}/RELEASES.json`);
@@ -97,28 +145,23 @@ function getFeedLogInfo(baseUrl: string): { host: string; path: string } {
 class MacUpdaterAdapter implements ActiveUpdaterAdapter {
   readonly kind = 'active' as const;
 
-  private started = false;
+  private listeners: UpdaterAdapterListeners | null = null;
+
+  private feedUrl: string | null = null;
 
   constructor(
     private readonly updater: AutoUpdaterLike,
     private readonly baseUrl: string,
+    private readonly currentVersion: string,
+    private readonly getChannel: () => UpdateChannel,
   ) {}
 
   start(listeners: UpdaterAdapterListeners): void {
-    if (this.started) {
+    if (this.listeners) {
       return;
     }
 
-    this.started = true;
-
-    const normalizedBaseUrl = this.baseUrl.replace(/\/$/, '');
-    const feedUrl = `${normalizedBaseUrl}/RELEASES.json`;
-    log.info('[updater] configuring macOS feed', getFeedLogInfo(normalizedBaseUrl));
-
-    this.updater.setFeedURL({
-      url: feedUrl,
-      serverType: 'json',
-    });
+    this.listeners = listeners;
 
     this.updater.on('checking-for-update', () => {
       log.info('[updater] checking for updates');
@@ -147,7 +190,26 @@ class MacUpdaterAdapter implements ActiveUpdaterAdapter {
   }
 
   async checkForUpdates(): Promise<void> {
-    await Promise.resolve(this.updater.checkForUpdates());
+    const listeners = this.listeners;
+    if (!listeners) {
+      return;
+    }
+
+    const channel = this.getChannel();
+    const baseUrl = feedBaseUrlForChannel(this.baseUrl, channel);
+    const feedUrl = `${baseUrl}/RELEASES.json`;
+    if (feedUrl !== this.feedUrl) {
+      log.info('[updater] configuring macOS feed', { channel, ...getFeedLogInfo(baseUrl) });
+      this.updater.setFeedURL({
+        url: feedUrl,
+        serverType: 'json',
+      });
+      this.feedUrl = feedUrl;
+    }
+
+    if (await feedOffersNewerVersion(feedUrl, 'json', this.currentVersion, listeners)) {
+      await Promise.resolve(this.updater.checkForUpdates());
+    }
   }
 
   quitAndInstall(): void {
@@ -158,26 +220,23 @@ class MacUpdaterAdapter implements ActiveUpdaterAdapter {
 class WinUpdaterAdapter implements ActiveUpdaterAdapter {
   readonly kind = 'active' as const;
 
-  private started = false;
+  private listeners: UpdaterAdapterListeners | null = null;
+
+  private feedUrl: string | null = null;
 
   constructor(
     private readonly updater: AutoUpdaterLike,
     private readonly baseUrl: string,
+    private readonly currentVersion: string,
+    private readonly getChannel: () => UpdateChannel,
   ) {}
 
   start(listeners: UpdaterAdapterListeners): void {
-    if (this.started) {
+    if (this.listeners) {
       return;
     }
 
-    this.started = true;
-
-    const normalizedBaseUrl = this.baseUrl.replace(/\/$/, '');
-    // Squirrel.Windows consumes a RELEASES manifest plus .nupkg packages.
-    const feedUrl = `${normalizedBaseUrl}/RELEASES`;
-    log.info('[updater] configuring Windows feed', { feedUrl });
-
-    this.updater.setFeedURL({ url: feedUrl });
+    this.listeners = listeners;
 
     this.updater.on('checking-for-update', () => {
       log.info('[updater] checking for updates');
@@ -206,7 +265,26 @@ class WinUpdaterAdapter implements ActiveUpdaterAdapter {
   }
 
   async checkForUpdates(): Promise<void> {
-    await Promise.resolve(this.updater.checkForUpdates());
+    const listeners = this.listeners;
+    if (!listeners) {
+      return;
+    }
+
+    const channel = this.getChannel();
+    // Squirrel.Windows takes the feed folder and fetches `RELEASES` and the
+    // .nupkg packages from it, so the URL must not end in /RELEASES.
+    const feedUrl = feedBaseUrlForChannel(this.baseUrl, channel);
+    if (feedUrl !== this.feedUrl) {
+      log.info('[updater] configuring Windows feed', { channel, feedUrl });
+      this.updater.setFeedURL({ url: feedUrl });
+      this.feedUrl = feedUrl;
+    }
+
+    if (
+      await feedOffersNewerVersion(`${feedUrl}/RELEASES`, 'text', this.currentVersion, listeners)
+    ) {
+      await Promise.resolve(this.updater.checkForUpdates());
+    }
   }
 
   quitAndInstall(): void {
@@ -222,6 +300,7 @@ class LinuxUpdaterAdapter implements ActiveUpdaterAdapter {
   constructor(
     private readonly releasesUrl: string,
     private readonly currentVersion: string,
+    private readonly getChannel: () => UpdateChannel,
   ) {}
 
   start(listeners: UpdaterAdapterListeners): void {
@@ -260,9 +339,9 @@ class LinuxUpdaterAdapter implements ActiveUpdaterAdapter {
   }
 
   private async fetchLatestVersion(): Promise<string | undefined> {
-    const response = await fetch(this.releasesUrl, {
+    const response = await fetch(releasesUrlForChannel(this.releasesUrl, this.getChannel()), {
       cache: 'no-store',
-      signal: AbortSignal.timeout(LINUX_RELEASES_TIMEOUT_MS),
+      signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
     });
     if (!response.ok) {
       throw new Error(`Could not check for updates (HTTP ${response.status}).`);
@@ -289,6 +368,7 @@ export function createUpdaterAdapter(options: AdapterFactoryOptions = {}): Updat
   const winUpdateBaseUrl = options.winUpdateBaseUrl ?? WIN_UPDATE_BASE_URL;
   const linuxReleasesUrl = options.linuxReleasesUrl ?? LINUX_RELEASES_URL;
   const updater = options.updater ?? autoUpdater;
+  const getChannel = options.getChannel ?? currentChannel;
 
   if (!isPackaged) {
     log.info('[updater] disabled', {
@@ -317,7 +397,7 @@ export function createUpdaterAdapter(options: AdapterFactoryOptions = {}): Updat
       arch,
       releasesUrl: linuxReleasesUrl,
     });
-    return new LinuxUpdaterAdapter(linuxReleasesUrl, app.getVersion());
+    return new LinuxUpdaterAdapter(linuxReleasesUrl, app.getVersion(), getChannel);
   }
 
   if (platform === 'win32') {
@@ -337,7 +417,7 @@ export function createUpdaterAdapter(options: AdapterFactoryOptions = {}): Updat
       arch,
       feed: getFeedLogInfo(winUpdateBaseUrl),
     });
-    return new WinUpdaterAdapter(updater, winUpdateBaseUrl);
+    return new WinUpdaterAdapter(updater, winUpdateBaseUrl, app.getVersion(), getChannel);
   }
 
   if (platform !== 'darwin' || arch !== 'arm64') {
@@ -367,7 +447,7 @@ export function createUpdaterAdapter(options: AdapterFactoryOptions = {}): Updat
     feed: getFeedLogInfo(macUpdateBaseUrl),
   });
 
-  return new MacUpdaterAdapter(updater, macUpdateBaseUrl);
+  return new MacUpdaterAdapter(updater, macUpdateBaseUrl, app.getVersion(), getChannel);
 }
 
 let controller: UpdaterController | null = null;
@@ -396,6 +476,9 @@ function getController(): UpdaterController {
 }
 
 export function startUpdater(options: StartUpdaterOptions): void {
+  if (options.getChannel) {
+    channelResolver = options.getChannel;
+  }
   const currentController = getController();
   currentController.setIsAppBusy(options.isAppBusy);
   log.info('[updater] starting', currentController.getState());
@@ -435,4 +518,5 @@ export function resetUpdaterForTests(): void {
   unsubscribeDiagnosticLogger = null;
   controller = null;
   willQuitForUpdate = false;
+  channelResolver = () => 'stable';
 }

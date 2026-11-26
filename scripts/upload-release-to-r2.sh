@@ -44,7 +44,9 @@ if [[ "$R2_PUBLIC_BASE_URL" != https://* ]]; then
 fi
 
 release_path="${prefix%/}/${tag}"
-mac_update_feed_path="${prefix%/}/updates/release/darwin/arm64"
+# New builds reach the beta feed only; scripts/promote-update-feed.sh moves a
+# version to the release feed once its GitHub release stops being a pre-release.
+mac_update_feed_path="${prefix%/}/updates/beta/darwin/arm64"
 public_base="${R2_PUBLIC_BASE_URL%/}"
 endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 

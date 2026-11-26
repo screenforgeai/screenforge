@@ -120,11 +120,20 @@ fi
 
 server_webhook_url="${SERVER_BASE_URL%/}${server_webhook_path}"
 
+# Publishing a pre-release ships it to beta; a release (or a pre-release
+# turned into one) ships it to everyone.
 event_action="$(jq -r '.action // empty' "$GITHUB_EVENT_PATH")"
-if [[ "$event_action" != "published" ]]; then
-  echo "Skipping webhook: release action '${event_action}' is not 'published'."
-  exit 0
-fi
+is_prerelease="$(jq -r '.release.prerelease // false' "$GITHUB_EVENT_PATH")"
+case "$event_action" in
+  prereleased) channel="beta" ;;
+  released) channel="stable" ;;
+  published) [[ "$is_prerelease" == "true" ]] && channel="beta" || channel="stable" ;;
+  *)
+    echo "Skipping webhook: release action '${event_action}' does not publish a build."
+    exit 0
+    ;;
+esac
+echo "Publishing ${channel} build."
 
 tag="$(jq -r '.release.tag_name // empty' "$GITHUB_EVENT_PATH")"
 if [[ -z "$tag" ]]; then
@@ -257,7 +266,7 @@ payload="$(
     --arg event "release.published" \
     --arg version "$version" \
     --arg tag "$tag" \
-    --arg channel "stable" \
+    --arg channel "$channel" \
     --arg platform "$platform" \
     --arg arch "$arch" \
     --arg downloadUrl "$download_url" \

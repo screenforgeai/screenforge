@@ -197,7 +197,10 @@ jobs:
           release_prefix="${R2_RELEASE_PREFIX#/}"
           release_prefix="${release_prefix%/}"
 
+          # The app reads the release feed (and the beta feed beside it when
+          # it is on the beta channel); a new build always lands on beta first.
           echo "SCREENFORGE_MAC_UPDATE_BASE_URL=${public_base}/${release_prefix}/updates/release/darwin/arm64" >> "$GITHUB_ENV"
+          echo "SCREENFORGE_MAC_UPDATE_MANIFEST_BASE_URL=${public_base}/${release_prefix}/updates/beta/darwin/arm64" >> "$GITHUB_ENV"
 
       - name: Generate release notes from changelog
         run: |
@@ -272,6 +275,7 @@ jobs:
         env:
           SCREENFORGE_ENABLE_SIGNING: ${{ steps.signing.outputs.enabled }}
           SCREENFORGE_MAC_UPDATE_BASE_URL: ${{ env.SCREENFORGE_MAC_UPDATE_BASE_URL }}
+          SCREENFORGE_MAC_UPDATE_MANIFEST_BASE_URL: ${{ env.SCREENFORGE_MAC_UPDATE_MANIFEST_BASE_URL }}
           SCREENFORGE_MAC_UPDATE_RELEASE_NOTES_PATH: ${{ env.SCREENFORGE_MAC_UPDATE_RELEASE_NOTES_PATH }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
@@ -336,7 +340,9 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           draft: true
-          prerelease: false
+          # Publishing the draft ships it to beta only; unticking "Set as a
+          # pre-release" (or scripts/promote-release.sh) ships it to everyone.
+          prerelease: true
           body_path: ${{ runner.temp }}/release-notes.md
           fail_on_unmatched_files: true
           files: |

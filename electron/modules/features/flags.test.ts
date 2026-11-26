@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureFlags } from '../../../src/types';
 import {
+  BETA_UPDATES_FLAG,
   CHUNKED_EXPORT_FLAG,
   createFeatureFlags,
   DIRECTOR_SHARING_FLAG,
@@ -25,8 +26,13 @@ const setup = (over: Partial<FeatureFlagsDeps> = {}) => {
   return { flags: createFeatureFlags(deps), deps };
 };
 
-const ON = { directorSharing: true, chunkedExport: true, fastExportEdges: true };
-const OFF = { directorSharing: false, chunkedExport: false, fastExportEdges: false };
+const ON = { directorSharing: true, chunkedExport: true, fastExportEdges: true, betaUpdates: true };
+const OFF = {
+  directorSharing: false,
+  chunkedExport: false,
+  fastExportEdges: false,
+  betaUpdates: false,
+};
 
 describe('feature flags', () => {
   it('asks PostHog for each flag', async () => {
@@ -35,9 +41,11 @@ describe('feature flags', () => {
     expect(DIRECTOR_SHARING_FLAG).toBe('director-sharing');
     expect(CHUNKED_EXPORT_FLAG).toBe('chunked-export');
     expect(FAST_EXPORT_EDGES_FLAG).toBe('fast-export-edges');
+    expect(BETA_UPDATES_FLAG).toBe('beta-updates');
     expect(deps.evaluate).toHaveBeenCalledWith(DIRECTOR_SHARING_FLAG);
     expect(deps.evaluate).toHaveBeenCalledWith(CHUNKED_EXPORT_FLAG);
     expect(deps.evaluate).toHaveBeenCalledWith(FAST_EXPORT_EDGES_FLAG);
+    expect(deps.evaluate).toHaveBeenCalledWith(BETA_UPDATES_FLAG);
     expect(flags.get()).toEqual(ON);
   });
 
@@ -50,6 +58,7 @@ describe('feature flags', () => {
       directorSharing: false,
       chunkedExport: true,
       fastExportEdges: false,
+      betaUpdates: false,
     });
   });
 
@@ -83,6 +92,7 @@ describe('feature flags', () => {
       directorSharing: true,
       chunkedExport: false,
       fastExportEdges: false,
+      betaUpdates: false,
     });
   });
 
@@ -121,6 +131,8 @@ describe('feature flags', () => {
     ['chunkedExport', '0', false],
     ['fastExportEdges', '1', true],
     ['fastExportEdges', '0', false],
+    ['betaUpdates', '1', true],
+    ['betaUpdates', '0', false],
   ] as const)('can force %s with an override of %s', async (name, override, on) => {
     const { flags, deps } = setup({
       overrides: { [name]: override },
@@ -135,9 +147,10 @@ describe('feature flags', () => {
       directorSharing: DIRECTOR_SHARING_FLAG,
       chunkedExport: CHUNKED_EXPORT_FLAG,
       fastExportEdges: FAST_EXPORT_EDGES_FLAG,
+      betaUpdates: BETA_UPDATES_FLAG,
     }[name];
     expect(asked).not.toContain(forcedKey);
-    expect(asked).toHaveLength(2);
+    expect(asked).toHaveLength(3);
   });
 
   it('lets the newest refresh win, even when an older one answers last', async () => {
@@ -154,20 +167,22 @@ describe('feature flags', () => {
 
     const older = flags.refresh();
     const newer = flags.refresh(); // e.g. "Share usage data" was just turned off
-    // Two flags are asked per refresh: the older refresh's answers come first.
-    answers.slice(2).forEach((resolve) => resolve(null));
+    // Three flags are asked per refresh: the older refresh's answers come first.
+    answers.slice(3).forEach((resolve) => resolve(null));
     await newer;
-    answers.slice(0, 2).forEach((resolve) => resolve(true));
+    answers.slice(0, 3).forEach((resolve) => resolve(true));
     await older;
 
     expect(flags.get()).toEqual(OFF);
     expect(deps.writeCache).toHaveBeenLastCalledWith({
       directorSharing: false,
       fastExportEdges: false,
+      betaUpdates: false,
     });
     expect(deps.writeCache).not.toHaveBeenCalledWith({
       directorSharing: true,
       fastExportEdges: true,
+      betaUpdates: true,
     });
   });
 
@@ -210,10 +225,12 @@ describe('feature flags', () => {
       directorSharing: false,
       chunkedExport: true,
       fastExportEdges: false,
+      betaUpdates: false,
     });
     expect(deps.writeCache).toHaveBeenCalledWith({
       directorSharing: false,
       fastExportEdges: false,
+      betaUpdates: false,
     });
 
     // A later launch without the override starts from PostHog's last answer only.

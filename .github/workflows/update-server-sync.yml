@@ -1,9 +1,14 @@
 name: Update Server Sync
 
+# Every build is drafted as a pre-release. Publishing it ships it to the beta
+# channel; unticking "Set as a pre-release" later (or publishing it as a full
+# release) promotes it: the version moves to the release update feed and the
+# website lists it for everyone.
 on:
   release:
     types:
-      - published
+      - prereleased
+      - released
 
 permissions:
   contents: read
@@ -13,9 +18,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  promote-feed:
+    # Release jobs need this org's signing/R2 secrets; skip them in forks.
+    if: github.repository_owner == 'screenforgeai' && github.event.action == 'released'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          sparse-checkout: |
+            scripts/promote-update-feed.sh
+            scripts/legacy-win-feed.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Promote this version to the release feed
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+          R2_RELEASE_PREFIX: ${{ vars.R2_RELEASE_PREFIX || 'screenforge' }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: bash scripts/promote-update-feed.sh
+
   notify:
     # Release jobs need this org's signing/R2 secrets; skip them in forks.
-    if: github.repository_owner == 'screenforgeai'
+    if: >-
+      always() &&
+      github.repository_owner == 'screenforgeai' &&
+      needs.promote-feed.result != 'failure' &&
+      needs.promote-feed.result != 'cancelled'
+    needs: promote-feed
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10

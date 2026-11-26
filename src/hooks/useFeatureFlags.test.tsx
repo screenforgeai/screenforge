@@ -13,6 +13,7 @@ beforeEach(() => {
     directorSharing: true,
     chunkedExport: true,
     fastExportEdges: true,
+    betaUpdates: true,
   });
   Object.defineProperty(window, 'screenforge', {
     value: {
@@ -39,16 +40,23 @@ describe('useFeatureFlags', () => {
       directorSharing: false,
       chunkedExport: false,
       fastExportEdges: false,
+      betaUpdates: false,
     });
     await waitFor(() =>
       expect(result.current).toEqual({
         directorSharing: true,
         chunkedExport: true,
         fastExportEdges: true,
+        betaUpdates: true,
       }),
     );
 
-    const next = { directorSharing: false, chunkedExport: true, fastExportEdges: false };
+    const next = {
+      directorSharing: false,
+      chunkedExport: true,
+      fastExportEdges: false,
+      betaUpdates: false,
+    };
     act(() => listener?.(next));
     expect(result.current).toEqual(next);
 
@@ -64,6 +72,7 @@ describe('useFeatureFlags', () => {
       directorSharing: false,
       chunkedExport: false,
       fastExportEdges: false,
+      betaUpdates: false,
     });
   });
 });

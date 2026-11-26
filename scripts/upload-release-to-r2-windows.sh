@@ -44,7 +44,9 @@ if [[ "$R2_PUBLIC_BASE_URL" != https://* ]]; then
 fi
 
 release_path="${prefix%/}/${tag}"
-win_update_feed_path="${prefix%/}/updates/release/win32/x64"
+# New builds reach the beta feed only; scripts/promote-update-feed.sh moves a
+# version to the release feed once its GitHub release stops being a pre-release.
+win_update_feed_path="${prefix%/}/updates/beta/win32/x64"
 public_base="${R2_PUBLIC_BASE_URL%/}"
 endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
@@ -128,3 +130,11 @@ for file in "${win_feed_artifacts[@]}"; do
     --cache-control "$cache_control"
   echo "Uploaded update feed ${name} -> ${public_base}/${object_key}"
 done
+
+# Keep this build's RELEASES with the version too: the beta feed's copy is
+# replaced by the next build, and promotion needs the one for this version.
+aws s3 cp out/make/squirrel.windows/x64/RELEASES "s3://${R2_BUCKET}/${release_path}/RELEASES" \
+  --endpoint-url "$endpoint" \
+  --only-show-errors \
+  --cache-control "public, max-age=31536000, immutable"
+echo "Uploaded RELEASES -> ${public_base}/${release_path}/RELEASES"

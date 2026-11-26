@@ -150,6 +150,22 @@ describe('settings service', () => {
     expect((await getSettings()).onboarding).toEqual({ completed: true });
   });
 
+  it('leaves early updates out until the user turns them on or off', async () => {
+    expect(await getSettings()).not.toHaveProperty('earlyUpdates');
+  });
+
+  it('remembers early updates across unrelated saves and ignores a non-boolean', async () => {
+    await saveSettings({ earlyUpdates: true });
+    await saveSettings({ language: 'de' });
+    await saveSettings({ earlyUpdates: 'false' as unknown as boolean });
+
+    expect(await getSettings()).toMatchObject({ language: 'de', earlyUpdates: true });
+    expect(getSettingsSync().earlyUpdates).toBe(true);
+
+    await saveSettings({ earlyUpdates: false });
+    expect((await getSettings()).earlyUpdates).toBe(false);
+  });
+
   it('ignores a malformed onboarding record or product updates value in the file', async () => {
     fs.writeFileSync(
       path.join(userData, 'settings.json'),
