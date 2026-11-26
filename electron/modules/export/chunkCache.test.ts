@@ -241,7 +241,25 @@ describe('ChunkRunWriter', () => {
     });
     const packets = packetsFor(run);
     packets[60] = { ...packets[60], type: 'delta' };
-    await expect(writer.write(packets)).rejects.toThrow('does not start on a keyframe');
+    // The message says which frame came first, so the encoder's fault shows.
+    await expect(writer.write(packets)).rejects.toThrow(
+      'does not start on a keyframe: its first encoded frame is 120 (delta), the chunk starts at 120',
+    );
+  });
+
+  it('names a later frame when the first frame of a chunk never arrived', async () => {
+    const writer = new ChunkRunWriter({
+      dir,
+      container: 'mp4',
+      fps: FPS,
+      decoderConfig: null,
+      run,
+      createMuxer: fakeMuxerFactory([]),
+    });
+    const packets = packetsFor(run).filter((_, i) => i !== 60);
+    await expect(writer.write(packets)).rejects.toThrow(
+      'its first encoded frame is 121 (delta), the chunk starts at 120',
+    );
   });
 
   it('refuses to finish a chunk with missing frames', async () => {

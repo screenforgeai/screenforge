@@ -9,7 +9,7 @@ import { CH } from './channels';
 import log, { getLogFilePath } from './lib/logger';
 import { installNavigationGuards } from './lib/navigation-guard';
 import { pinWindowToAllWorkspaces } from './lib/workspace-pin';
-import { registerAppChannels } from './modules/app/channel';
+import { registerAppChannels, registerDiagnosticLogChannel } from './modules/app/channel';
 import {
   prepareScreenshotPermissions,
   requestAccessibilityAccess,
@@ -530,6 +530,8 @@ app.on('ready', async () => {
 
   // For export test runs
   if (IS_EXPORT_HARNESS_MODE && EXPORT_HARNESS_MANIFEST && EXPORT_HARNESS_RESULT) {
+    // The export window's speed lines (export:capture:*) come through here.
+    registerDiagnosticLogChannel();
     harnessKeepAliveWindow = new BrowserWindow({
       show: false,
       width: 1,

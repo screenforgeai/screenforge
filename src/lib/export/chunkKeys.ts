@@ -151,6 +151,8 @@ const TIMED_PLACEHOLDER = '__timed__';
 /**
  * Pulls every array whose items are all timed out of `value`, replacing it
  * with a placeholder. Arrays with any untimed item stay in the global part.
+ * An empty array counts as timed, so adding the first clip to a lane (or
+ * removing the last) only refreshes the chunks near it instead of all.
  */
 export function splitTimedLists(
   value: unknown,
@@ -158,12 +160,10 @@ export function splitTimedLists(
   lists: TimedList[] = [],
 ): { global: unknown; lists: TimedList[] } {
   if (Array.isArray(value)) {
-    if (value.length > 0) {
-      const extents = value.map(timeExtents);
-      if (extents.every((e) => e !== null)) {
-        lists.push({ path, items: value, extents: extents as Interval[][] });
-        return { global: TIMED_PLACEHOLDER, lists };
-      }
+    const extents = value.map(timeExtents);
+    if (extents.every((e) => e !== null)) {
+      lists.push({ path, items: value, extents: extents as Interval[][] });
+      return { global: TIMED_PLACEHOLDER, lists };
     }
     return {
       global: value.map((item, i) => splitTimedLists(item, `${path}[${i}]`, lists).global),

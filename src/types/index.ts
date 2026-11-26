@@ -471,7 +471,15 @@ export interface CaptureWindowParams {
   stateVersion?: number;
   /** Pre-render: share of wall time spent rendering (see captureTimeline). */
   dutyCycle?: number;
+  /**
+   * How edges are smoothed: 'msaa' multisamples the whole canvas; 'shader'
+   * renders without it and smooths the frame's corners in a shader and small
+   * shapes with MSAA of their own. Set by the main process from a feature flag.
+   */
+  edgeSmoothing?: EdgeSmoothing;
 }
+
+export type EdgeSmoothing = 'msaa' | 'shader';
 
 /** Result returned from the hidden export-worker BrowserWindow. */
 export interface CaptureWindowResult {
@@ -516,10 +524,14 @@ export interface ExportCapturePerfStats {
   decodeWaitMs: number;
   renderMs: number;
   gpuSyncMs: number;
+  /** Waiting for the GPU to finish frames and copying them back to the CPU. */
+  readbackMs: number;
   encodeMs: number;
   encoderFlushMs: number;
   writerBackpressureMs: number;
   audioRenderMs: number;
+  /** Time a background prerender spent resting between batches (duty cycle). */
+  restMs: number;
   batchCount: number;
   yieldedFrameCount: number;
   videoFrameCount: number;
@@ -727,6 +739,11 @@ export interface FeatureFlags {
   directorSharing: boolean;
   /** Chunked export, background prerendering and its progress in the top bar. */
   chunkedExport: boolean;
+  /**
+   * Export renders without canvas MSAA: the frame's rounded corners are
+   * smoothed in a shader and small shapes get MSAA of their own. Faster.
+   */
+  fastExportEdges: boolean;
 }
 
 /** The optional Director sign-in, as the app shows it. Never carries the token. */

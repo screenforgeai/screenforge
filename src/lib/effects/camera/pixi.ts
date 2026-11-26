@@ -19,6 +19,7 @@ import { Container, Sprite, Graphics, Texture, BlurFilter, CanvasSource } from '
 import { DropShadowFilter } from 'pixi-filters';
 import type { PixiEffect, PixiEffectUpdater } from '../../pixi/types';
 import { smoothFilterEdges } from '../../pixi/smoothEdges';
+import { wrapWithLocalMsaa } from '../../pixi/edgeSmoothing';
 import type { RenderContext } from '../types';
 import { useStore } from '../../../store';
 import {
@@ -165,6 +166,12 @@ export const cameraPixiEffect: PixiEffect<CameraData> = {
 
     // Frame shadow sits behind camera container in the overlay.
     scene.overlayContainer.addChild(cameraFrameShadow, cameraContainer);
+    if (scene.edgeSmoothing === 'shader') {
+      // No canvas MSAA: the round clip is a stencil on cameraContainer itself,
+      // which Pixi draws outside that container's own filters, so a parent
+      // gives the bubble MSAA of its own.
+      wrapWithLocalMsaa(cameraContainer);
+    }
 
     // ── Per-frame state ────────────────────────────────────────────────────
     let lastSourceTime: number | null = null;

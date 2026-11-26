@@ -132,7 +132,9 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
   ) => (
     <section
       aria-label={t('share_title')}
-      className="grid gap-2 rounded-lg border border-sf-border bg-sf-panel px-3 py-3"
+      // min-w-0 and a shrinkable column: otherwise a long link sets the panel's
+      // width and runs past the dialog instead of truncating.
+      className="grid min-w-0 grid-cols-1 gap-2 rounded-lg border border-sf-border bg-sf-panel px-3 py-3"
     >
       <div className="flex min-h-8 items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-md font-medium text-sf-primary">
@@ -197,11 +199,10 @@ export const SharePanel = ({ filePath, format, durationS, title, projectId }: Sh
 
   if (state.status === 'preparing' || state.status === 'finishing') {
     return shell(
-      <span className="flex items-center gap-2 text-sm text-sf-muted">
-        <Spinner className="size-3.5 text-sf-border fill-sf-primary" />
-        {t(state.status === 'preparing' ? 'share_preparing' : 'share_finishing')}
-      </span>,
+      null,
       state.status === 'preparing' ? cancelButton : undefined,
+      t(state.status === 'preparing' ? 'share_preparing' : 'share_finishing'),
+      <Spinner className="size-3.5 text-sf-border fill-sf-primary" />,
     );
   }
 
