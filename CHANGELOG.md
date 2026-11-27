@@ -1,5 +1,17 @@
 # screenforge
 
+## 0.11.0
+
+### Minor Changes
+
+- 23db2f7: New installs now start with a short setup window before the editor. It welcomes you, asks for your name and email (optional, with a choice to get product updates and tips), and on macOS explains and asks for Screen Recording and Accessibility. When Screen Recording needs Screenforge to reopen, it does that for you and brings you back to the same step. Then pick your language and whether to share usage data, and start your first recording or look around the editor first. If FFmpeg is missing, it installs during the last step. If you already use Screenforge, you won't see it.
+
+### Patch Changes
+
+- 096fda8: With more than one monitor on macOS or Windows, Record, Screenshot and Area now ask which monitor to use: each monitor is covered with its number, name and size, and you click the one you want (or press its number; Esc cancels). Screenshots started from the menu bar icon or the shortcut ask too, and an area can now be drawn on any monitor, not just the main one.
+- 210d147: The editor is smoother and much lighter on battery: playback no longer stutters, dragging the timeline divider and switching focus mode are smooth, the preview stops using the graphics card while it's paused, and windows like the area selector open about twice as fast.
+- 8cf95a0: Faster exports on Mac: each frame now comes back from the graphics card at less than half the size, so exports and the background preparation of an export take less time. Behind a setting that is off for now, exports can also skip full-frame smoothing and smooth only the edges that need it, which makes them faster still.
+
 ## 0.10.1
 
 ### Patch Changes
