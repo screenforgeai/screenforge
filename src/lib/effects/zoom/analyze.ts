@@ -157,6 +157,16 @@ function isPrimaryClick(click: ClickEvent): boolean {
   );
 }
 
+/** The window lookups below need moves in time order; recordings already are. */
+function inTimeOrder(moveEvents: MoveEvent[]): MoveEvent[] {
+  for (let i = 1; i < moveEvents.length; i++) {
+    if (moveEvents[i].t < moveEvents[i - 1].t) {
+      return [...moveEvents].sort((a, b) => a.t - b.t);
+    }
+  }
+  return moveEvents;
+}
+
 function normalizeRecording(recording: RecordingResult): NormalizedRecording | null {
   const { recordingArea, startTime, mouseData } = recording;
   if (!recordingArea || !startTime) {
@@ -165,7 +175,9 @@ function normalizeRecording(recording: RecordingResult): NormalizedRecording | n
 
   const keyEvents = getKeyEvents(mouseData, startTime);
   return {
-    moveEvents: getMoveEvents(mouseData, startTime, recordingArea, recording.captureBoundsTimeline),
+    moveEvents: inTimeOrder(
+      getMoveEvents(mouseData, startTime, recordingArea, recording.captureBoundsTimeline),
+    ),
     clickEvents: getClickEvents(
       mouseData,
       startTime,
@@ -250,6 +262,26 @@ function getSpread(points: Point[], cx: number, cy: number, metric: SpatialMetri
   return Math.sqrt(variance);
 }
 
+/**
+ * First index whose event is at or after `t` (strict: after `t`). Move events
+ * are in time order, so each measurement below reads only its own short window
+ * instead of walking every move of the recording: with one pass per click
+ * cluster, an hour-long take used to cost billions of steps on the main thread.
+ */
+function firstIndexFrom(moveEvents: MoveEvent[], t: number, strict = false): number {
+  let lo = 0;
+  let hi = moveEvents.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (strict ? moveEvents[mid].t <= t : moveEvents[mid].t < t) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
 function averageSpeed(
   moveEvents: MoveEvent[],
   start: number,
@@ -262,7 +294,10 @@ function averageSpeed(
 
   let distanceSum = 0;
   let durationSum = 0;
-  for (let i = 1; i < moveEvents.length; i++) {
+  // Only pairs that reach into [start, end]: b at or after start, a at or before end.
+  const from = Math.max(1, firstIndexFrom(moveEvents, start));
+  const to = Math.min(moveEvents.length - 1, firstIndexFrom(moveEvents, end, true));
+  for (let i = from; i <= to; i++) {
     const a = moveEvents[i - 1];
     const b = moveEvents[i];
     if (b.t < start || a.t > end) {
@@ -293,7 +328,10 @@ function measureJitter(
   cy: number,
   metric: SpatialMetric,
 ): number {
-  const samples = moveEvents.filter((event) => event.t >= start && event.t <= end);
+  const samples = moveEvents.slice(
+    firstIndexFrom(moveEvents, start),
+    firstIndexFrom(moveEvents, end, true),
+  );
   if (samples.length === 0) {
     return 0;
   }
@@ -316,7 +354,7 @@ function measureResidence(
 
   if (direction === 'backward') {
     let dwellStart = focusTime;
-    for (let i = moveEvents.length - 1; i >= 0; i--) {
+    for (let i = firstIndexFrom(moveEvents, focusTime) - 1; i >= 0; i--) {
       const event = moveEvents[i];
       if (event.t >= focusTime) {
         continue;
@@ -334,10 +372,8 @@ function measureResidence(
   }
 
   let dwellEnd = focusTime;
-  for (const event of moveEvents) {
-    if (event.t <= focusTime) {
-      continue;
-    }
+  for (let i = firstIndexFrom(moveEvents, focusTime, true); i < moveEvents.length; i++) {
+    const event = moveEvents[i];
     if (event.t - focusTime > maxWindow) {
       break;
     }
@@ -457,11 +493,9 @@ function estimatePostRoll(
   let firstExit: number | null = null;
   let lingerTime = 0;
 
-  for (const event of moveEvents) {
+  for (let i = firstIndexFrom(moveEvents, lastClickT, true); i < moveEvents.length; i++) {
+    const event = moveEvents[i];
     const dt = event.t - lastClickT;
-    if (dt <= 0) {
-      continue;
-    }
     if (dt > POST_ROLL_MAX) {
       break;
     }

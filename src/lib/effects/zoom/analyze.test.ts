@@ -297,3 +297,41 @@ describe('inferZoomDefaultsAtTime', () => {
     expect(defaults.cx).toBeLessThan(0.7);
   });
 });
+
+describe('long recordings', () => {
+  // A minute of cursor at 60 Hz with a click cluster every few seconds.
+  function longRecording(minutes: number): RecordingResult {
+    const events: CursorEvent[] = [];
+    for (let i = 0; i < minutes * 60 * 60; i++) {
+      const t = i / 60;
+      const phase = Math.floor(t / 4);
+      const nx = 0.2 + ((phase * 37) % 60) / 100 + Math.sin(t * 3) * 0.01;
+      const ny = 0.2 + ((phase * 53) % 60) / 100 + Math.cos(t * 3) * 0.01;
+      events.push(move(t, nx, ny));
+      if (i % 240 === 120) {
+        events.push(click(t + 0.001, nx, ny));
+      }
+    }
+    return { ...makeRecording(events), duration: minutes * 60 };
+  }
+
+  function fastestRunMs(recording: RecordingResult): number {
+    let best = Number.POSITIVE_INFINITY;
+    for (let run = 0; run < 3; run++) {
+      const started = performance.now();
+      detectZoomClips(recording);
+      best = Math.min(best, performance.now() - started);
+    }
+    return best;
+  }
+
+  // Each click cluster used to walk every move of the recording, so detection
+  // grew with clicks × moves: ~10 s of frozen editor for an hour-long take.
+  it('detects zooms in time that grows with the length, not its square', () => {
+    const short = fastestRunMs(longRecording(5));
+    const long = fastestRunMs(longRecording(20));
+
+    // Measured: ~3.5–4× now, ~9× before (fixed costs hide part of the square).
+    expect(long / Math.max(short, 1)).toBeLessThan(6.5);
+  });
+});
