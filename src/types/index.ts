@@ -1066,6 +1066,10 @@ export interface ScreenforgeAPI {
   onCaptureParams: (cb: (params: CaptureWindowParams) => void) => () => void;
   /** Hidden window: subscribe to abort signals from the main process. */
   onCaptureAbort: (cb: () => void) => () => void;
+  /** Editor: the background pre-render's pace (duty cycle, 0–1]. */
+  setExportPrerenderPace: (dutyCycle: number) => void;
+  /** Hidden pre-render window: subscribe to pace changes from the editor. */
+  onPrerenderPace: (cb: (dutyCycle: number) => void) => () => void;
   checkFFmpegStatus: () => Promise<{ available: boolean }>;
   installFFmpeg: () => void;
   onInstallProgress: (cb: (progress: { downloaded: number; total: number }) => void) => () => void;

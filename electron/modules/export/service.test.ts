@@ -335,6 +335,25 @@ describe('export service', () => {
         );
         win.destroy();
       });
+
+      it('starts at the latest pace and passes later changes on', async () => {
+        const win = fakeWindow();
+        const { onReady } = await startPrerender(() => false);
+        const { setExportPrerenderPace } = await import('./service');
+
+        // The editor's preview went to sleep while the window was loading.
+        setExportPrerenderPace(1);
+        onReady({ sender: win.webContents });
+        expect(win.webContents.send).toHaveBeenCalledWith(
+          CH.export.CAPTURE_PARAMS,
+          expect.objectContaining({ dutyCycle: 1 }),
+        );
+
+        // Then it woke up.
+        setExportPrerenderPace(0.5);
+        expect(win.webContents.send).toHaveBeenLastCalledWith(CH.export.PRERENDER_PACE, 0.5);
+        win.destroy();
+      });
     });
 
     it('ignores a broken camera video when the camera is turned off', async () => {

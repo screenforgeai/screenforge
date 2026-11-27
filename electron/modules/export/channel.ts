@@ -33,6 +33,7 @@ import {
   endChunkRun,
   runExportPrerender,
   stopExportPrerender,
+  setExportPrerenderPace,
   getMainWindowForCapture,
   powerAllowsExportPrerender,
   watchPrerenderPower,
@@ -138,6 +139,9 @@ export function registerExportChannels(preloadPath: string): void {
     runExportPrerender(params, preloadPath),
   );
   handleChannel<[], void>(CH.export.PRERENDER_STOP, () => stopExportPrerender());
+  listenChannel<[number]>(CH.export.PRERENDER_PACE, (dutyCycle) =>
+    setExportPrerenderPace(dutyCycle),
+  );
   // Only the prerender hook asks, and only with the chunked-export flag on, so
   // the power watch never starts while the flag is off.
   handleChannel<[], boolean>(CH.export.PRERENDER_POWER, () => {

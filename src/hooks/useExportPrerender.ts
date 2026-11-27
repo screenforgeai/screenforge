@@ -10,7 +10,9 @@
  * - Playback and scrubbing (the playhead moving) pause it, so the preview gets
  *   the GPU; it resumes once the playhead has been still for a moment.
  * - An export stops it; other UI changes (selection, panels) leave it alone.
- * - It runs throttled and at low priority. It runs on mains power, or on
+ * - It runs at low priority, flat out while the editor is still (its preview
+ *   asleep) and held while someone uses it: the preview drawing, or a click,
+ *   key or scroll in the last moment. It runs on mains power, or on
  *   battery while at least 30% is left, and never while recording (both
  *   checked in the main process, which also stops it when that changes).
  */
@@ -21,14 +23,26 @@ import { useStore } from '../store';
 import type { AppStore } from '../store/types';
 import { prepareExportCapture } from '../lib/export/captureParams';
 import { buildExportSettings, loadStoredExportSettings } from '../lib/export/exportSettingsStorage';
-import { PRERENDER_DUTY_CYCLE } from '../lib/export/captureScheduling';
+import {
+  PRERENDER_ACTIVE_DUTY_CYCLE,
+  PRERENDER_IDLE_DUTY_CYCLE,
+} from '../lib/export/captureScheduling';
+import { isPreviewDrawing, onPreviewDrawingChanged } from '../lib/pixi/previewActivity';
 
-export { PRERENDER_DUTY_CYCLE };
+export { PRERENDER_ACTIVE_DUTY_CYCLE, PRERENDER_IDLE_DUTY_CYCLE };
 
 /** Wait after the last edit before (re)starting. */
 export const PRERENDER_EDIT_DELAY_MS = 1_000;
 /** Wait after the playhead last moved before resuming. */
 export const PRERENDER_PLAYBACK_DELAY_MS = 1_500;
+/**
+ * How long the editor must have been still (preview asleep, no click, key or
+ * scroll) before the pre-render goes back to full speed. Holding it is
+ * immediate; this keeps the pace from flapping between edits a moment apart.
+ */
+export const PRERENDER_IDLE_SETTLE_MS = 500;
+/** Input that holds the pre-render, caught before the editor handles it. */
+const PRERENDER_BRAKE_EVENTS = ['pointerdown', 'keydown', 'wheel'] as const;
 
 /** The store fields an export's pixels depend on. */
 const EXPORT_STATE_FIELDS: ReadonlyArray<keyof AppStore> = [
@@ -122,6 +136,50 @@ export function useExportPrerender(enabled: boolean): void {
     let paused = false;
     // A restart came due while the previous pre-render was still stopping.
     let restartWhenStopped = false;
+    // The pace: held while someone uses the editor, flat out once it has been
+    // still for PRERENDER_IDLE_SETTLE_MS, or while the window is hidden (its
+    // preview cannot draw then). Sent on every change; the main process keeps
+    // it for a pre-render that is starting.
+    let dutyCycle = PRERENDER_ACTIVE_DUTY_CYCLE;
+    // When the editor was last in use: a click, key or scroll, or the preview
+    // going to sleep. Starts in use, so a fresh pre-render waits for stillness.
+    let lastActiveAt = performance.now();
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const updatePace = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+      const drawing = isPreviewDrawing();
+      const stillFor = performance.now() - lastActiveAt;
+      const inUse = !document.hidden && (drawing || stillFor < PRERENDER_IDLE_SETTLE_MS);
+      const next = inUse ? PRERENDER_ACTIVE_DUTY_CYCLE : PRERENDER_IDLE_DUTY_CYCLE;
+      if (next !== dutyCycle) {
+        dutyCycle = next;
+        window.screenforge.setExportPrerenderPace(next);
+      }
+      if (inUse && !drawing) {
+        idleTimer = setTimeout(updatePace, PRERENDER_IDLE_SETTLE_MS - stillFor);
+      }
+    };
+    const onPreviewDrawing = (drawing: boolean) => {
+      if (!drawing) {
+        lastActiveAt = performance.now();
+      }
+      updatePace();
+    };
+    // Capture phase: hold the pre-render before the editor reacts to the input,
+    // so the frame that shows its result is not queued behind pre-render work.
+    const onInput = () => {
+      lastActiveAt = performance.now();
+      updatePace();
+    };
+    for (const type of PRERENDER_BRAKE_EVENTS) {
+      window.addEventListener(type, onInput, { capture: true, passive: true });
+    }
+    document.addEventListener('visibilitychange', updatePace);
+    const unsubscribePreview = onPreviewDrawingChanged(onPreviewDrawing);
+    updatePace();
 
     const stop = () => {
       if (running) {
@@ -171,7 +229,7 @@ export function useExportPrerender(enabled: boolean): void {
           includeAudio: false,
           chunking: 'prerender',
           stateVersion,
-          dutyCycle: PRERENDER_DUTY_CYCLE,
+          dutyCycle,
         });
       } catch {
         // Pre-rendering is best effort; the export renders anything missing.
@@ -238,7 +296,15 @@ export function useExportPrerender(enabled: boolean): void {
       if (timer) {
         clearTimeout(timer);
       }
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+      }
       stop();
+      unsubscribePreview();
+      for (const type of PRERENDER_BRAKE_EVENTS) {
+        window.removeEventListener(type, onInput, { capture: true });
+      }
+      document.removeEventListener('visibilitychange', updatePace);
       unsubscribeStore();
       unsubscribeStatus();
       unsubscribePower();

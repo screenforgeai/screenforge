@@ -6,6 +6,7 @@ import type { MusicClip } from '../lib/timeline';
 import type { ZoomClip, MediaSegment, CameraClip, MaskClip } from '../types/timeline';
 import { captureTimeline } from '../lib/export/captureTimeline';
 import { createChunkedCaptureHooks } from '../lib/export/chunkedCapture';
+import { PRERENDER_FRAMES_PER_BURST } from '../lib/export/captureScheduling';
 import { setCustomWallpaperUrl } from '../lib/effects/frame/wallpapers';
 import { useStore } from '../store';
 import { normalizeMotionClips } from '../lib/animation/motionClips';
@@ -19,6 +20,15 @@ const ExportWorker = () => {
       const unsubscribeAbort = window.screenforge.onCaptureAbort(() => {
         controller.abort();
       });
+      // A pre-render's pace follows the editor's preview: full speed while it
+      // sleeps, throttled while it draws. Read by the capture before each rest.
+      let dutyCycle = params.dutyCycle ?? 1;
+      const unsubscribePace: () => void =
+        params.chunking === 'prerender'
+          ? window.screenforge.onPrerenderPace((next) => {
+              dutyCycle = next;
+            })
+          : () => undefined;
 
       // Populate this window's fresh Zustand store so effect draw callbacks
       // (cursor render, camera draw, zoom interpolation) read correct settings.
@@ -135,7 +145,8 @@ const ExportWorker = () => {
               onRunChunks: chunked.onRunChunks,
               onRunEnd: chunked.onRunEnd,
               skipAudio: isPrerender,
-              dutyCycle: isPrerender ? params.dutyCycle : undefined,
+              dutyCycle: isPrerender ? () => dutyCycle : undefined,
+              framesPerBurst: isPrerender ? PRERENDER_FRAMES_PER_BURST : undefined,
             }
           : {}),
         onDiagnostic: (event, data) =>
@@ -211,6 +222,7 @@ const ExportWorker = () => {
         })
         .finally(() => {
           unsubscribeAbort();
+          unsubscribePace();
         });
     });
 

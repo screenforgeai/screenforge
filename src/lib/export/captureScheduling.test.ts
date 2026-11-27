@@ -6,8 +6,12 @@ import {
   getSegmentIndexAtTime,
   getSyntheticEndMediaTime,
   isCaptureKeyFrame,
+  normalizeDutyCycle,
   resolveOutputFrameMode,
+  restAfterWork,
   shouldSeekAtSegmentBoundary,
+  waitWhileHeld,
+  yieldToEventLoop,
 } from './captureScheduling';
 
 const SEGMENTS: MediaSegment[] = [
@@ -128,5 +132,76 @@ describe('capture scheduling helpers', () => {
 
     watch.clear();
     vi.useRealTimers();
+  });
+});
+
+describe('pre-render pace', () => {
+  it('reads an unset or invalid pace as full speed, and 0 or less as held', () => {
+    expect(normalizeDutyCycle(undefined)).toBe(1);
+    expect(normalizeDutyCycle(Number.NaN)).toBe(1);
+    expect(normalizeDutyCycle(0)).toBe(0);
+    expect(normalizeDutyCycle(-1)).toBe(0);
+    expect(normalizeDutyCycle(0.01)).toBe(0.05);
+    expect(normalizeDutyCycle(0.5)).toBe(0.5);
+    expect(normalizeDutyCycle(2)).toBe(1);
+  });
+
+  it('rests so that work takes the pace’s share of the time', () => {
+    expect(restAfterWork(20, 0.5)).toBe(20);
+    expect(restAfterWork(30, 0.75)).toBeCloseTo(10);
+    expect(restAfterWork(20, 1)).toBe(0);
+    // Held is handled before resting.
+    expect(restAfterWork(20, 0)).toBe(0);
+  });
+
+  it('waits while held, then continues at the new pace', async () => {
+    vi.useFakeTimers();
+    try {
+      let pace = 0;
+      let resumedAt: number | null = null;
+      const waiting = waitWhileHeld(() => pace, undefined, 50).then((next) => {
+        resumedAt = Date.now();
+        return next;
+      });
+      const heldSince = Date.now();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(resumedAt).toBeNull();
+
+      pace = 1;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await waiting).toBe(1);
+      expect(resumedAt).toBe(heldSince + 550);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops waiting when the capture is stopped', async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const waiting = waitWhileHeld(() => 0, controller.signal, 50);
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await waiting).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('yieldToEventLoop', () => {
+  it('lets a task that is already waiting run first, then continues', async () => {
+    const order: string[] = [];
+    const waiting = new MessageChannel();
+    waiting.port1.onmessage = () => {
+      order.push('other task');
+      waiting.port1.close();
+    };
+    waiting.port2.postMessage(null);
+
+    await yieldToEventLoop();
+    order.push('continued');
+    expect(order).toEqual(['other task', 'continued']);
   });
 });

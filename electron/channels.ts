@@ -84,6 +84,9 @@ export const CH = {
     // Editor window → main process: fill the cache in the background / stop
     PRERENDER_START: 'export:prerender-start',
     PRERENDER_STOP: 'export:prerender-stop',
+    // Editor window → main process → hidden window: the pre-render's pace
+    // (duty cycle), which follows whether the editor's preview is drawing
+    PRERENDER_PACE: 'export:prerender-pace',
     // Hidden window → main process → editor window: pre-render progress
     PRERENDER_STATUS: 'export:prerender-status',
     // Editor window → main process: does the power (mains, or battery ≥ 30%) allow a pre-render?

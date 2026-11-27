@@ -21,6 +21,7 @@ import { trackVideoFrames } from '../lib/pixi/videoFrames';
 import { onPreviewInvalidated, invalidatePreview } from '../lib/pixi/previewInvalidation';
 import { createPreviewRenderScheduler } from '../lib/pixi/previewRenderScheduler';
 import { hasSceneMoved, readSceneMotion } from '../lib/pixi/sceneMotion';
+import { setPreviewDrawing } from '../lib/pixi/previewActivity';
 
 /** How long the preview's on-screen size must hold still before its buffer is resized. */
 const PREVIEW_RESIZE_SETTLE_MS = 120;
@@ -393,6 +394,7 @@ export const usePixiRenderer = (
         // Sleeping frames are not elapsed animation time for the smoothing.
         lastFrameTime = performance.now();
         rafId = requestAnimationFrame(tick);
+        setPreviewDrawing(true);
       }
     };
     const markDirty = (): void => {
@@ -413,6 +415,7 @@ export const usePixiRenderer = (
       rafId = 0;
       const isVideoPlaying = !video.paused && !video.ended;
       if (!scheduler.shouldRender(performance.now(), isVideoPlaying)) {
+        setPreviewDrawing(false);
         return; // settled: sleep until markDirty()
       }
       rafId = requestAnimationFrame(tick);
@@ -505,6 +508,7 @@ export const usePixiRenderer = (
     return () => {
       disposed = true;
       cancelAnimationFrame(rafId);
+      setPreviewDrawing(false);
       videoFrames.dispose();
       unsubscribeStore();
       unsubscribeInvalidate();
