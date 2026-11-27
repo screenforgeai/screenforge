@@ -329,3 +329,56 @@ describe('cursor styles and effects in saved projects', () => {
     expect(useStore.getState().cursorEffect).toBe('none');
   });
 });
+
+describe('undo and redo keep the recording', () => {
+  // The preview re-analyses the recording (cursor paths, auto zooms) and
+  // rebuilds its pipeline whenever recordingResult changes identity, and it
+  // re-seeds auto zooms when none are left. Undoing an unrelated edit handed it
+  // a fresh copy each time: seconds of work on a long recording, and zooms the
+  // user had deleted came back.
+  it('keeps the same recordingResult object through undo and redo of other edits', () => {
+    act(() => {
+      useStore.getState().loadRecordingSession(RECORDING_RESULT);
+    });
+    const recording = useStore.getState().recordingResult;
+
+    act(() => {
+      useStore.getState().commitEdit('Change cursor effect', () => ({ cursorEffect: 'highlight' }));
+    });
+    act(() => {
+      useStore.getState().undo();
+    });
+    expect(useStore.getState().cursorEffect).toBe('none');
+    expect(useStore.getState().recordingResult).toBe(recording);
+
+    act(() => {
+      useStore.getState().redo();
+    });
+    expect(useStore.getState().cursorEffect).toBe('highlight');
+    expect(useStore.getState().recordingResult).toBe(recording);
+  });
+
+  it('still restores an earlier recordingResult when an edit replaced it', () => {
+    act(() => {
+      useStore
+        .getState()
+        .loadRecordingSession({ ...RECORDING_RESULT, cameraPath: '/tmp/cam.webm' });
+    });
+    const withCamera = useStore.getState().recordingResult;
+
+    act(() => {
+      useStore.getState().commitEdit('Remove camera', (state) => ({
+        recordingResult: state.recordingResult
+          ? { ...state.recordingResult, cameraPath: undefined }
+          : null,
+      }));
+    });
+    expect(useStore.getState().recordingResult?.cameraPath).toBeUndefined();
+
+    act(() => {
+      useStore.getState().undo();
+    });
+    expect(useStore.getState().recordingResult).toBe(withCamera);
+    expect(useStore.getState().recordingResult?.cameraPath).toBe('/tmp/cam.webm');
+  });
+});

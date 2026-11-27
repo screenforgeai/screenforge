@@ -43,7 +43,9 @@ export { DEFAULT_BACKGROUND, DEFAULT_FRAME } from '../lib/effects/frame';
 
 function cloneSnapshot(snapshot: HistorySnapshot): HistorySnapshot {
   return {
-    recordingResult: snapshot.recordingResult ? { ...snapshot.recordingResult } : null,
+    // Shared, not copied: it is only ever replaced, never changed in place, and
+    // the preview re-analyses the recording whenever its identity changes.
+    recordingResult: snapshot.recordingResult,
     zoomClips: snapshot.zoomClips.map((clip) => ({ ...clip })),
     mediaSegments: snapshot.mediaSegments.map((seg) => ({ ...seg })),
     cameraMediaSegments: snapshot.cameraMediaSegments.map((seg) => ({ ...seg })),
@@ -119,7 +121,7 @@ function createSnapshot(state: AppStore): HistorySnapshot {
 
 function snapshotToPatch(snapshot: HistorySnapshot): EditableStorePatch {
   return {
-    recordingResult: snapshot.recordingResult ? { ...snapshot.recordingResult } : null,
+    recordingResult: snapshot.recordingResult,
     zoomClips: snapshot.zoomClips.map((clip) => ({ ...clip })),
     mediaSegments: snapshot.mediaSegments.map((seg) => ({ ...seg })),
     cameraMediaSegments: snapshot.cameraMediaSegments.map((seg) => ({ ...seg })),
