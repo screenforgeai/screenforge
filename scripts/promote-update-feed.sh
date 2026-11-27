@@ -72,10 +72,17 @@ copy_to_release_feed() {
     echo "Unsafe update feed file name: ${name}" >&2
     exit 1
   fi
-  aws s3 cp "s3://${R2_BUCKET}/${beta_path}/${name}" "s3://${R2_BUCKET}/${release_path}/${name}" \
+  # Download, then upload: R2 can't do the AWS CLI's bucket-to-bucket copy
+  # (it asks for the object's tags, which R2 doesn't implement).
+  local file="${work_dir}/package-${name}"
+  aws s3 cp "s3://${R2_BUCKET}/${beta_path}/${name}" "$file" \
+    --endpoint-url "$endpoint" \
+    --only-show-errors
+  aws s3 cp "$file" "s3://${R2_BUCKET}/${release_path}/${name}" \
     --endpoint-url "$endpoint" \
     --only-show-errors \
     --cache-control "public, max-age=31536000, immutable"
+  rm -f "$file"
   echo "Copied ${name} -> ${public_base}/${release_path}/${name}"
 }
 

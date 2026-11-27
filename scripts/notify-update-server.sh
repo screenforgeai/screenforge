@@ -87,6 +87,12 @@ trim_surrounding_blank_lines() {
   '
 }
 
+# A manual run of update-server-sync.yml has no release event; it passes the
+# release it is for, shaped like a "released" event, here instead.
+if [[ -n "${RELEASE_EVENT_PATH:-}" ]]; then
+  GITHUB_EVENT_PATH="$RELEASE_EVENT_PATH"
+fi
+
 if [[ -z "${GITHUB_EVENT_PATH:-}" ]]; then
   echo "GITHUB_EVENT_PATH is required." >&2
   exit 1

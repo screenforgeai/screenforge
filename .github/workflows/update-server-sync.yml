@@ -4,23 +4,34 @@ name: Update Server Sync
 # channel; unticking "Set as a pre-release" later (or publishing it as a full
 # release) promotes it: the version moves to the release update feed and the
 # website lists it for everyone.
+#
+# A release event runs this file and its scripts as they were at the release's
+# tag. To redo a promotion with the current scripts (e.g. after a fix), run it
+# by hand ("Run workflow") with the tag of a published, non-pre-release release.
 on:
   release:
     types:
       - prereleased
       - released
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release to promote and list for everyone (mac-vX.Y.Z or win-vX.Y.Z)
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: update-server-sync-${{ github.event.release.id }}
+  group: update-server-sync-${{ github.event.release.id || inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   promote-feed:
     # Release jobs need this org's signing/R2 secrets; skip them in forks.
-    if: github.repository_owner == 'screenforgeai' && github.event.action == 'released'
+    if: >-
+      github.repository_owner == 'screenforgeai' &&
+      (github.event.action == 'released' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
@@ -35,6 +46,22 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
+      - name: Check the release is out for everyone (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^(mac|win|linux)-v[0-9A-Za-z._-]+$ ]]; then
+            echo "Release tag is invalid: ${TAG}" >&2
+            exit 1
+          fi
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.draft or .prerelease')" != "false" ]]; then
+            echo "${TAG} is a draft or a pre-release; publish it for everyone first." >&2
+            exit 1
+          fi
+
       - name: Promote this version to the release feed
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -43,7 +70,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
           R2_RELEASE_PREFIX: ${{ vars.R2_RELEASE_PREFIX || 'screenforge' }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: bash scripts/promote-update-feed.sh
 
   notify:
@@ -67,6 +94,27 @@ jobs:
             scripts/notify-update-server.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
+
+      # A manual run has no release event, so read the release it names and
+      # hand the webhook script the same shape a "released" event has.
+      - name: Load the release (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^(mac|win|linux)-v[0-9A-Za-z._-]+$ ]]; then
+            echo "Release tag is invalid: ${TAG}" >&2
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > "$RUNNER_TEMP/release.json"
+          if [[ "$(jq -r '.draft or .prerelease' "$RUNNER_TEMP/release.json")" != "false" ]]; then
+            echo "${TAG} is a draft or a pre-release; publish it for everyone first." >&2
+            exit 1
+          fi
+          jq '{action: "released", release: .}' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/release-event.json"
+          echo "RELEASE_EVENT_PATH=$RUNNER_TEMP/release-event.json" >> "$GITHUB_ENV"
 
       - name: Notify update server webhook
         env:
