@@ -185,9 +185,18 @@ function createScreenforgeMock(backend: CaptureBackend) {
     pauseRecording: vi.fn(),
     resumeRecording: vi.fn(),
     discardRecording: vi.fn().mockResolvedValue(undefined),
-    saveRecording: vi.fn().mockResolvedValue('/tmp/portal-capture.webm'),
-    saveAudioCapture: vi.fn().mockResolvedValue('/tmp/audio.webm'),
-    saveCameraCapture: vi.fn().mockResolvedValue('/tmp/camera.webm'),
+    // MediaRecorder chunks stream to one temp file per kind (captureFileWriter).
+    openCaptureStream: vi.fn(async (kind: string) => `stream-${kind}`),
+    appendCaptureStream: vi.fn().mockResolvedValue(undefined),
+    closeCaptureStream: vi.fn(
+      async (id: string) =>
+        ({
+          'stream-screen': '/tmp/portal-capture.webm',
+          'stream-audio': '/tmp/audio.webm',
+          'stream-camera': '/tmp/camera.webm',
+        })[id] ?? '/tmp/unknown.webm',
+    ),
+    abortCaptureStream: vi.fn().mockResolvedValue(undefined),
     mergeAudio: vi.fn().mockResolvedValue('/tmp/merged.mp4'),
     recordingFinished: vi.fn(),
     recordingFailed: vi.fn(),
@@ -529,9 +538,13 @@ describe('FloatingToolbar recording widget', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
 
       await waitFor(() => expect(screenforge.recordingFinished).toHaveBeenCalled());
-      // The recorded webm was uploaded, then finalized with its pixel size.
-      expect(screenforge.saveRecording).toHaveBeenCalledTimes(1);
-      expect(screenforge.saveRecording.mock.calls[0][0]).toBeInstanceOf(ArrayBuffer);
+      // The webm was streamed to disk while recording, then finalized with its pixel size.
+      expect(screenforge.openCaptureStream).toHaveBeenCalledWith('screen');
+      expect(screenforge.appendCaptureStream).toHaveBeenCalledWith(
+        'stream-screen',
+        expect.any(ArrayBuffer),
+      );
+      expect(screenforge.closeCaptureStream).toHaveBeenCalledWith('stream-screen');
       expect(screenforge.stopRecording).toHaveBeenCalledWith({
         webmPath: '/tmp/portal-capture.webm',
         width: 1280,

@@ -2,9 +2,6 @@ import { CH } from '../../channels';
 import { handleChannel, listenChannel } from '../../lib/ipc-main';
 import type { ConcatRecordingsOptions, SelectedArea } from '../../../src/types/index';
 import {
-  saveRecording,
-  saveAudioCapture,
-  saveCameraCapture,
   mergeAudio,
   startRecording,
   stopRecording,
@@ -18,15 +15,28 @@ import {
   reencodeRecording,
   getCaptureBackend,
   getSystemAudioSupportForCapture,
+  isRecordingBusy,
 } from './service';
+import { createStopRecovery } from './stop-recovery';
+import {
+  abortCaptureStream,
+  appendCaptureStream,
+  closeCaptureStream,
+  openCaptureStream,
+  type CaptureStreamKind,
+} from './capture-stream';
+
+/** Lets the window controller finish a stop whose toolbar died mid-save. */
+export const stopRecovery = createStopRecovery({ stopRecording, isRecordingBusy });
 
 export function registerRecordingChannels(): void {
   handleChannel<
     [string, SelectedArea | null | undefined, { rendererCapture?: boolean } | undefined],
     void
-  >(CH.recording.START, (sourceId, cropArea, options) =>
-    startRecording(sourceId, cropArea ?? null, options),
-  );
+  >(CH.recording.START, (sourceId, cropArea, options) => {
+    stopRecovery.reset();
+    return startRecording(sourceId, cropArea ?? null, options);
+  });
 
   handleChannel(
     CH.recording.STOP,
@@ -41,7 +51,7 @@ export function registerRecordingChannels(): void {
         hasEmbeddedAudio,
         filePath,
         areaCrop,
-      } = await stopRecording(rendererCapture);
+      } = await stopRecovery.stop(rendererCapture);
       return {
         mouseData: events,
         startTime,
@@ -61,17 +71,16 @@ export function registerRecordingChannels(): void {
   listenChannel(CH.recording.PAUSE, () => pauseRecording());
   listenChannel(CH.recording.RESUME, () => resumeRecording());
 
-  // Manual save triggered from TopNav — writes the final processed buffer to the
-  // user's output folder after export encoding.
-  handleChannel<[ArrayBuffer], string>(CH.recording.SAVE, (buffer) => saveRecording(buffer));
-
-  handleChannel<[ArrayBuffer], string>(CH.recording.SAVE_AUDIO, (buffer) =>
-    saveAudioCapture(buffer),
+  // The toolbar's MediaRecorders (mic, camera, Wayland screen) append each
+  // chunk to a temp file as it arrives, instead of sending the whole take at stop.
+  handleChannel<[CaptureStreamKind], string>(CH.recording.STREAM_OPEN, (kind) =>
+    openCaptureStream(kind),
   );
-
-  handleChannel<[ArrayBuffer], string>(CH.recording.SAVE_CAMERA, (buffer) =>
-    saveCameraCapture(buffer),
+  handleChannel<[string, ArrayBuffer], void>(CH.recording.STREAM_APPEND, (id, chunk) =>
+    appendCaptureStream(id, chunk),
   );
+  handleChannel<[string], string>(CH.recording.STREAM_CLOSE, (id) => closeCaptureStream(id));
+  handleChannel<[string], void>(CH.recording.STREAM_ABORT, (id) => abortCaptureStream(id));
 
   handleChannel<[string, string], string>(CH.recording.MERGE_AUDIO, (videoPath, audioPath) =>
     mergeAudio(videoPath, audioPath),

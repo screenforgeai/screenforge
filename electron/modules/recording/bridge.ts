@@ -5,6 +5,7 @@ import {
   createSubscription,
   createVoidSubscription,
 } from '../../lib/ipc-renderer';
+import type { CaptureStreamKind } from '../../../src/lib/recording/captureFileWriter';
 import type {
   AreaCrop,
   CaptureBackend,
@@ -44,9 +45,10 @@ export const recordingBridge = {
   pauseRecording: createSendBridge<[]>(CH.recording.PAUSE),
   resumeRecording: createSendBridge<[]>(CH.recording.RESUME),
   discardRecording: createInvokeBridge<[], void>(CH.recording.DISCARD),
-  saveRecording: createInvokeBridge<[ArrayBuffer], string>(CH.recording.SAVE),
-  saveAudioCapture: createInvokeBridge<[ArrayBuffer], string>(CH.recording.SAVE_AUDIO),
-  saveCameraCapture: createInvokeBridge<[ArrayBuffer], string>(CH.recording.SAVE_CAMERA),
+  openCaptureStream: createInvokeBridge<[CaptureStreamKind], string>(CH.recording.STREAM_OPEN),
+  appendCaptureStream: createInvokeBridge<[string, ArrayBuffer], void>(CH.recording.STREAM_APPEND),
+  closeCaptureStream: createInvokeBridge<[string], string>(CH.recording.STREAM_CLOSE),
+  abortCaptureStream: createInvokeBridge<[string], void>(CH.recording.STREAM_ABORT),
   mergeAudio: createInvokeBridge<[string, string], string>(CH.recording.MERGE_AUDIO),
   recordingFinished: createSendBridge<[RecordingResult]>(CH.recording.FINISHED),
   recordingFailed: createSendBridge<[string]>(CH.recording.FAILED),

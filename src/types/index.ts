@@ -927,9 +927,11 @@ export interface ScreenforgeAPI {
   }>;
   pauseRecording: () => void;
   resumeRecording: () => void;
-  saveRecording: (buffer: ArrayBuffer) => Promise<string>;
-  saveAudioCapture: (buffer: ArrayBuffer) => Promise<string>;
-  saveCameraCapture: (buffer: ArrayBuffer) => Promise<string>;
+  /** Streams a toolbar MediaRecorder to a temp file; see src/lib/recording/captureFileWriter.ts. */
+  openCaptureStream: (kind: 'audio' | 'camera' | 'screen') => Promise<string>;
+  appendCaptureStream: (id: string, chunk: ArrayBuffer) => Promise<void>;
+  closeCaptureStream: (id: string) => Promise<string>;
+  abortCaptureStream: (id: string) => Promise<void>;
   mergeAudio: (videoPath: string, audioPath: string) => Promise<string>;
   recordingFinished: (data: RecordingResult) => void;
   recordingFailed: (message: string) => void;

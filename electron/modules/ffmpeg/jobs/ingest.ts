@@ -5,7 +5,7 @@
  *   1. Remove the system cursor from the raw .webm via delogo
  *   2. (Future) noise reduction, silence trimming, etc.
  *
- * Input:  raw .webm saved by saveRecording()
+ * Input:  raw .webm streamed to disk by the toolbar (capture-stream.ts)
  * Output: cleaned .webm at the same temp path (replaces in-place via swap)
  */
 import path from 'node:path';

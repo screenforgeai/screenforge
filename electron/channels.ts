@@ -17,9 +17,10 @@ export const CH = {
   recording: {
     START: 'recording:start',
     STOP: 'recording:stop',
-    SAVE: 'recording:save',
-    SAVE_AUDIO: 'recording:save-audio',
-    SAVE_CAMERA: 'recording:save-camera',
+    STREAM_OPEN: 'recording:stream-open',
+    STREAM_APPEND: 'recording:stream-append',
+    STREAM_CLOSE: 'recording:stream-close',
+    STREAM_ABORT: 'recording:stream-abort',
     MERGE_AUDIO: 'recording:merge-audio',
     PAUSE: 'recording:pause',
     RESUME: 'recording:resume',

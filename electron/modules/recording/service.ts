@@ -1239,31 +1239,6 @@ export function clearActiveCropArea(): void {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function saveRecording(buffer: ArrayBuffer): Promise<string> {
-  const tempPath = createTempPath('screenforge', 'webm');
-  await fs.writeFile(tempPath, Buffer.from(buffer));
-  return tempPath;
-}
-
-/**
- * Saves raw mic audio (webm/opus from MediaRecorder) to a temp file.
- * Distinct from saveRecording(), which is for final export output.
- */
-export async function saveAudioCapture(buffer: ArrayBuffer): Promise<string> {
-  const tempPath = createTempPath('screenforge-audio', 'webm');
-  await fs.writeFile(tempPath, Buffer.from(buffer));
-  return tempPath;
-}
-
-/**
- * Saves raw camera capture (webm from MediaRecorder) to a temp file.
- */
-export async function saveCameraCapture(buffer: ArrayBuffer): Promise<string> {
-  const tempPath = createTempPath('screenforge-camera', 'webm');
-  await fs.writeFile(tempPath, Buffer.from(buffer));
-  return tempPath;
-}
-
 /**
  * Remuxes an MP4 produced by IMFSinkWriter (moov at end) so the moov atom sits at
  * the front of the file. Chromium's FFmpeg demuxer fails to seek these files when

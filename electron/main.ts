@@ -25,7 +25,7 @@ import { getSettingsSync } from './modules/settings/service';
 import { registerWhatsNewChannels } from './modules/whats-new/channel';
 import { recordInstallStateAtLaunch } from './modules/whats-new/service';
 import { registerPresetsChannels } from './modules/presets/channel';
-import { registerRecordingChannels } from './modules/recording/channel';
+import { registerRecordingChannels, stopRecovery } from './modules/recording/channel';
 import {
   isRecordingBusy,
   onRecordingActivityChanged,
@@ -633,6 +633,7 @@ app.on('ready', async () => {
     },
     createToolbarWindow,
     getToolbarLayout: () => toolbarLayout,
+    stopRecovery,
   });
   onRecordingActivityChanged(() => notifyUpdaterActivityChanged());
   // A background export pre-render never runs alongside a recording.

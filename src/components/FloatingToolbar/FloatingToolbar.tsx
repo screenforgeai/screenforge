@@ -56,6 +56,11 @@ import type {
   SelectedArea,
 } from '../../types/index';
 import { displaySurfaceOf } from '../../lib/recording/captureSource';
+import { getStopTimeouts } from '../../lib/recording/stopTimeouts';
+import {
+  createCaptureFileWriter,
+  type CaptureFileWriter,
+} from '../../lib/recording/captureFileWriter';
 import { FloatingToolbarMic } from './_components/FloatingToolbarMic';
 import { getSystemAudioNoticeKey } from '../../lib/recording/systemAudio';
 import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenuEmptyState';
@@ -63,13 +68,6 @@ import { FloatingToolbarMenuEmptyState } from './_components/FloatingToolbarMenu
 type SourceTab = 'display' | 'window' | 'area';
 type RecordState = 'idle' | 'countdown' | 'recording' | 'paused';
 
-const VIDEO_STOP_TIMEOUT_MS = 15000;
-// Wayland finalization uploads the webm and transcodes it to H.264, which
-// scales with recording length — allow far longer than the native path.
-const WAYLAND_VIDEO_STOP_TIMEOUT_MS = 10 * 60 * 1000;
-const MIC_STOP_TIMEOUT_MS = 5000;
-const CAMERA_STOP_TIMEOUT_MS = 7000;
-const AUDIO_MERGE_TIMEOUT_MS = 15000;
 const CAMERA_CAPTURE_BITRATE = 4_000_000;
 
 // Linux: setIgnoreMouseEvents' `forward` option is unsupported, so a
@@ -427,7 +425,8 @@ export const FloatingToolbar = () => {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  // Each MediaRecorder streams its chunks to a temp file as it records (captureFileWriter).
+  const audioWriterRef = useRef<CaptureFileWriter | null>(null);
   const analyserRafRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const recordStateRef = useRef<RecordState>('idle');
@@ -441,7 +440,7 @@ export const FloatingToolbar = () => {
   const micUiUpdateTsRef = useRef(0);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const cameraRecorderRef = useRef<MediaRecorder | null>(null);
-  const cameraChunksRef = useRef<Blob[]>([]);
+  const cameraWriterRef = useRef<CaptureFileWriter | null>(null);
   // Wayland (Linux): the toolbar records the screen itself from the PipeWire
   // portal stream — the main process can't grab the screen on Wayland.
   const captureBackendRef = useRef<CaptureBackend>('native');
@@ -449,7 +448,7 @@ export const FloatingToolbar = () => {
   const [portalCapture, setPortalCapture] = useState(false);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenRecorderRef = useRef<MediaRecorder | null>(null);
-  const screenChunksRef = useRef<Blob[]>([]);
+  const screenWriterRef = useRef<CaptureFileWriter | null>(null);
   const [screenTrack, setScreenTrack] = useState<MediaStreamTrack | null>(null);
   // Wayland: the screen picked through the capture helper, which records it without the system
   // pointer (the editor draws the cursor). Chromium's share is the fallback, and is used for windows.
@@ -1143,25 +1142,19 @@ export const FloatingToolbar = () => {
 
     // Start mic recording if enabled (after FFmpeg is confirmed capturing)
     if (micEnabled && micStreamRef.current) {
-      audioChunksRef.current = [];
+      const writer = createCaptureFileWriter(window.screenforge, 'audio');
+      audioWriterRef.current = writer;
       const recorder = new MediaRecorder(micStreamRef.current);
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
+      recorder.ondataavailable = (e) => writer.push(e.data);
       mediaRecorderRef.current = recorder;
       recorder.start(1000);
     }
 
     if (cameraEnabled && cameraStreamRef.current) {
-      cameraChunksRef.current = [];
+      const writer = createCaptureFileWriter(window.screenforge, 'camera');
+      cameraWriterRef.current = writer;
       const recorder = new MediaRecorder(cameraStreamRef.current, chooseCameraRecorderOptions());
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          cameraChunksRef.current.push(e.data);
-        }
-      };
+      recorder.ondataavailable = (e) => writer.push(e.data);
       cameraRecorderRef.current = recorder;
       recorder.start(1000);
     }
@@ -1410,7 +1403,8 @@ export const FloatingToolbar = () => {
       }
     }
     mediaRecorderRef.current = null;
-    audioChunksRef.current = [];
+    void audioWriterRef.current?.abort();
+    audioWriterRef.current = null;
 
     // Stop camera recorder without saving
     const camRecorder = cameraRecorderRef.current;
@@ -1422,7 +1416,8 @@ export const FloatingToolbar = () => {
       }
     }
     cameraRecorderRef.current = null;
-    cameraChunksRef.current = [];
+    void cameraWriterRef.current?.abort();
+    cameraWriterRef.current = null;
     stopCameraPreview();
 
     discardWaylandPortalCapture();
@@ -1467,19 +1462,19 @@ export const FloatingToolbar = () => {
     window.screenforge.closeCameraPreview();
     logToolbarDiagnostic('toolbar.recording.processing-emitted');
 
+    // Saving a long take rewrites multi-GB files: the limits grow with its length.
+    // The hidden toolbar's timer can lag (throttled), so also use the wall clock;
+    // over-counting a pause only makes a hang guard more generous.
+    const recordedSeconds = Math.max(elapsed, (Date.now() - startTimeRef.current) / 1000);
+    const timeouts = getStopTimeouts(recordedSeconds, captureBackendRef.current);
+
     try {
       // Stop MediaRecorder and FFmpeg concurrently to minimise drift.
       // Mic finalization should never block the video from loading forever.
       const [micResult, cameraResult, videoResult] = await Promise.allSettled([
-        withTimeout(stopMicRecording(), 'Microphone finalization', MIC_STOP_TIMEOUT_MS),
-        withTimeout(stopCameraRecording(), 'Camera finalization', CAMERA_STOP_TIMEOUT_MS),
-        withTimeout(
-          stopVideoRecording(),
-          'Video finalization',
-          captureBackendRef.current === 'wayland-portal'
-            ? WAYLAND_VIDEO_STOP_TIMEOUT_MS
-            : VIDEO_STOP_TIMEOUT_MS,
-        ),
+        withTimeout(stopMicRecording(), 'Microphone finalization', timeouts.micMs),
+        withTimeout(stopCameraRecording(), 'Camera finalization', timeouts.cameraMs),
+        withTimeout(stopVideoRecording(), 'Video finalization', timeouts.videoMs),
       ]);
 
       if (videoResult.status === 'rejected') {
@@ -1527,7 +1522,7 @@ export const FloatingToolbar = () => {
           finalPath = await withTimeout(
             window.screenforge.mergeAudio(filePath, audioPath),
             'Audio merge',
-            AUDIO_MERGE_TIMEOUT_MS,
+            timeouts.audioMergeMs,
           );
           if (finalPath !== filePath) {
             timelineAudioPath = finalPath;
@@ -1791,7 +1786,6 @@ export const FloatingToolbar = () => {
     if (!stream) {
       throw new Error('Nothing was picked to record.');
     }
-    screenChunksRef.current = [];
     const [videoTrack] = stream.getVideoTracks();
     // The portal, not the toolbar, decides what's shared: a tab, a window or a screen.
     const displaySurface = displaySurfaceOf(videoTrack);
@@ -1815,11 +1809,9 @@ export const FloatingToolbar = () => {
       ...(mimeType ? { mimeType } : {}),
       videoBitsPerSecond,
     });
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        screenChunksRef.current.push(e.data);
-      }
-    };
+    const writer = createCaptureFileWriter(window.screenforge, 'screen');
+    screenWriterRef.current = writer;
+    recorder.ondataavailable = (e) => writer.push(e.data);
     screenRecorderRef.current = recorder;
     recorder.start(1000);
   }
@@ -1831,28 +1823,32 @@ export const FloatingToolbar = () => {
   } | null> {
     const recorder = screenRecorderRef.current;
     if (!recorder || recorder.state === 'inactive') {
+      void screenWriterRef.current?.abort();
+      screenWriterRef.current = null;
       stopWaylandStream();
       return null;
     }
 
     const [videoTrack] = screenStreamRef.current?.getVideoTracks() ?? [];
     const settings = videoTrack?.getSettings();
+    const writer = screenWriterRef.current;
+    screenWriterRef.current = null;
 
     return new Promise((resolve, reject) => {
       recorder.addEventListener(
         'stop',
         async () => {
-          const blob = new Blob(screenChunksRef.current, { type: 'video/webm' });
-          screenChunksRef.current = [];
           screenRecorderRef.current = null;
           stopWaylandStream();
 
           try {
-            if (blob.size === 0) {
+            if (!writer) {
               throw new Error('Screen capture did not produce any video data.');
             }
-            const buffer = await blob.arrayBuffer();
-            const webmPath = await window.screenforge.saveRecording(buffer);
+            const webmPath = await writer.close().catch((err: unknown) => {
+              console.error('[recording] screen capture file failed:', err);
+              throw new Error('Screen capture did not produce any video data.');
+            });
             resolve({ webmPath, width: settings?.width, height: settings?.height });
           } catch (err) {
             reject(err);
@@ -1876,7 +1872,8 @@ export const FloatingToolbar = () => {
       }
     }
     screenRecorderRef.current = null;
-    screenChunksRef.current = [];
+    void screenWriterRef.current?.abort();
+    screenWriterRef.current = null;
     stopWaylandStream();
   }
 
@@ -1902,23 +1899,24 @@ export const FloatingToolbar = () => {
   async function stopMicRecording(): Promise<string | null> {
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state === 'inactive') {
+      void audioWriterRef.current?.abort();
+      audioWriterRef.current = null;
       return null;
     }
+    // Taken now: a next recording may set its own before this one stops.
+    const writer = audioWriterRef.current;
+    audioWriterRef.current = null;
 
     return new Promise<string | null>((resolve) => {
       recorder.addEventListener(
         'stop',
         async () => {
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          audioChunksRef.current = [];
           mediaRecorderRef.current = null;
 
           try {
-            const buffer = await blob.arrayBuffer();
-            const audioPath = await window.screenforge.saveAudioCapture(buffer);
-            resolve(audioPath);
+            resolve(writer ? await writer.close() : null);
           } catch (err) {
-            console.error('[audio] saveAudioCapture failed:', err);
+            console.error('[audio] mic capture file failed:', err);
             resolve(null);
           }
         },
@@ -1933,23 +1931,23 @@ export const FloatingToolbar = () => {
   async function stopCameraRecording(): Promise<string | null> {
     const recorder = cameraRecorderRef.current;
     if (!recorder || recorder.state === 'inactive') {
+      void cameraWriterRef.current?.abort();
+      cameraWriterRef.current = null;
       return null;
     }
+    const writer = cameraWriterRef.current;
+    cameraWriterRef.current = null;
 
     return new Promise<string | null>((resolve) => {
       recorder.addEventListener(
         'stop',
         async () => {
-          const blob = new Blob(cameraChunksRef.current, { type: 'video/webm' });
-          cameraChunksRef.current = [];
           cameraRecorderRef.current = null;
 
           try {
-            const buffer = await blob.arrayBuffer();
-            const cameraPath = await window.screenforge.saveCameraCapture(buffer);
-            resolve(cameraPath);
+            resolve(writer ? await writer.close() : null);
           } catch (err) {
-            console.error('[camera] saveCameraCapture failed:', err);
+            console.error('[camera] camera capture file failed:', err);
             resolve(null);
           }
         },
