@@ -327,18 +327,17 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
     () => new Map(orderedSegments.map((segment) => [segment.id, segment])),
     [orderedSegments],
   );
-  const audioSrc = useMemo(() => {
+  // The file the audio lane's waveform is read from (the main process decodes its peaks).
+  const timelineAudioPath = useMemo(() => {
     if (!recordingFilePath) {
       return null;
     }
 
-    const resolvedAudioPath = resolveTimelineAudioPath({
+    return resolveTimelineAudioPath({
       filePath: recordingFilePath,
       audioPath: audioPath ?? undefined,
       hasEmbeddedAudio: recordingHasEmbeddedAudio,
     });
-
-    return resolvedAudioPath ? createScreenforgeFileUrl(resolvedAudioPath) : null;
   }, [audioPath, recordingFilePath, recordingHasEmbeddedAudio]);
   const timelineScaleCount = useMemo(() => {
     const maxZoomEnd = zoomClips
@@ -990,7 +989,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       }
 
       if (id === 'audio') {
-        if (!recordingFilePath || !audioSrc || !hasAudioLane) {
+        if (!recordingFilePath || !timelineAudioPath || !hasAudioLane) {
           return [];
         }
         return orderedSegments
@@ -1086,7 +1085,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
     },
     [
       audioPath,
-      audioSrc,
+      timelineAudioPath,
       cameraClips,
       cameraEnabled,
       hasAudioLane,
@@ -2072,9 +2071,9 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
           selected={action.id === selectedClipId}
           multiSelected={multiSelectedIds.has(action.id)}
           audioWaveform={
-            action.effectId === 'audio' && audioSrc && audioSegment
+            action.effectId === 'audio' && timelineAudioPath && audioSegment
               ? {
-                  audioSrc,
+                  audioPath: timelineAudioPath,
                   sourceStart: audioSegment.sourceStart,
                   sourceEnd: audioSegment.sourceEnd,
                 }
@@ -2097,7 +2096,7 @@ export const CanvasTimeline = ({ videoRef, availableHeight }: CanvasTimelineProp
       multiSelectedIds,
       segmentsById,
       orderedSegments,
-      audioSrc,
+      timelineAudioPath,
     ],
   );
 

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
 interface AudioWaveformProps {
-  audioSrc: string;
+  /** The file whose audio track is drawn. */
+  audioPath: string;
   sourceStart: number;
   sourceEnd: number;
   selected: boolean;
@@ -13,69 +14,35 @@ interface WaveformData {
 }
 
 const BARS_COUNT = 90;
-const PEAKS_MAX_LENGTH = 4096;
 const MIN_BAR_HEIGHT_PERCENT = 3;
-const waveformCache = new Map<string, Promise<WaveformData>>();
+const waveformCache = new Map<string, Promise<WaveformData | null>>();
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function toChannelPeaks(rawPeaks: number[] | number[][]): number[] {
-  if (!Array.isArray(rawPeaks[0])) {
-    return (rawPeaks as number[]).map((value) => Math.abs(value));
-  }
-
-  const peaks = rawPeaks as number[][];
-  return peaks[0].map((value) => Math.abs(value));
-}
-
-async function loadWaveform(audioSrc: string): Promise<WaveformData> {
-  const cached = waveformCache.get(audioSrc);
+/**
+ * Peaks come from the main process, which decodes the audio with ffmpeg: the
+ * source is often the recording itself (mic merged in), and fetching and
+ * decoding an hour of it here took several GB and could crash the editor.
+ */
+function loadWaveform(audioPath: string): Promise<WaveformData | null> {
+  const cached = waveformCache.get(audioPath);
   if (cached) {
     return cached;
   }
 
-  const promise = (async (): Promise<WaveformData> => {
-    const response = await fetch(audioSrc);
-    if (!response.ok) {
-      throw new Error(`Unable to load audio file: ${response.status}`);
-    }
+  const promise = window.screenforge
+    .getAudioPeaks(audioPath)
+    .then((result) =>
+      result && result.peaks.length > 0 ? { peaks: result.peaks, duration: result.duration } : null,
+    )
+    .catch((error: unknown) => {
+      waveformCache.delete(audioPath);
+      throw error;
+    });
 
-    const arrayBuffer = await response.arrayBuffer();
-    const audioContext = new AudioContext();
-    try {
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const rawPeaks: number[][] = [];
-      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
-        const channelData = audioBuffer.getChannelData(channel);
-        const step = Math.max(1, Math.floor(channelData.length / PEAKS_MAX_LENGTH));
-        const channelPeaks = Array.from({ length: PEAKS_MAX_LENGTH }, (_, idx) => {
-          const from = idx * step;
-          const to = Math.min(channelData.length, from + step);
-          let max = 0;
-          for (let i = from; i < to; i += 1) {
-            max = Math.max(max, Math.abs(channelData[i]));
-          }
-          return max;
-        });
-        rawPeaks.push(channelPeaks);
-      }
-
-      const peaks = toChannelPeaks(rawPeaks);
-      return {
-        peaks: peaks.length > 0 ? peaks : [0],
-        duration: audioBuffer.duration || 0,
-      };
-    } finally {
-      await audioContext.close().catch(() => undefined);
-    }
-  })().catch((error) => {
-    waveformCache.delete(audioSrc);
-    throw error;
-  });
-
-  waveformCache.set(audioSrc, promise);
+  waveformCache.set(audioPath, promise);
   return promise;
 }
 
@@ -123,7 +90,7 @@ function getVisibleBars(
 }
 
 export const AudioWaveform = ({
-  audioSrc,
+  audioPath,
   sourceStart,
   sourceEnd,
   selected,
@@ -133,7 +100,7 @@ export const AudioWaveform = ({
   useEffect(() => {
     let mounted = true;
 
-    loadWaveform(audioSrc)
+    loadWaveform(audioPath)
       .then((nextWaveform) => {
         if (mounted) {
           setWaveform(nextWaveform);
@@ -148,7 +115,7 @@ export const AudioWaveform = ({
     return () => {
       mounted = false;
     };
-  }, [audioSrc]);
+  }, [audioPath]);
 
   const bars = useMemo(
     () => getVisibleBars(waveform, sourceStart, sourceEnd),

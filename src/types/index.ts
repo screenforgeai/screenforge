@@ -290,6 +290,13 @@ export interface RecordingCaptureSource {
   windowTitle?: string;
 }
 
+/** Waveform peaks of a file's audio track, decoded in the main process (audio-peaks module). */
+export interface AudioPeaks {
+  peaks: number[];
+  /** Seconds of decoded audio. */
+  duration: number;
+}
+
 export interface RecordingResult {
   filePath: string;
   mouseData: CursorEvent[];
@@ -933,6 +940,7 @@ export interface ScreenforgeAPI {
   closeCaptureStream: (id: string) => Promise<string>;
   abortCaptureStream: (id: string) => Promise<void>;
   mergeAudio: (videoPath: string, audioPath: string) => Promise<string>;
+  getAudioPeaks: (filePath: string) => Promise<AudioPeaks | null>;
   recordingFinished: (data: RecordingResult) => void;
   recordingFailed: (message: string) => void;
   recordingProcessing: () => void;

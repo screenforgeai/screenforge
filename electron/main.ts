@@ -20,6 +20,7 @@ import { initTelemetry, shutdownTelemetry, trackEvent } from './lib/telemetry';
 import { registerWindowChannels } from './modules/app/window-controller';
 import { resetToolbarMousePassthrough, resetToolbarShapeState } from './modules/app/toolbar-mouse';
 import { registerLibraryChannels } from './modules/library/channel';
+import { registerAudioPeaksChannels } from './modules/audio-peaks/channel';
 import { registerSettingsChannels } from './modules/settings/channel';
 import { getSettingsSync } from './modules/settings/service';
 import { registerWhatsNewChannels } from './modules/whats-new/channel';
@@ -581,6 +582,7 @@ app.on('ready', async () => {
   registerSourcesChannels();
   registerRecordingChannels();
   registerLibraryChannels();
+  registerAudioPeaksChannels();
   registerSettingsChannels();
   registerWhatsNewChannels();
   registerPresetsChannels();

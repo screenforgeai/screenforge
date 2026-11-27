@@ -40,6 +40,9 @@ export const CH = {
     GET_SYSTEM_AUDIO_SUPPORT: 'recording:get-system-audio-support',
     SOURCE_LOST: 'recording:source-lost',
   },
+  audioPeaks: {
+    GET: 'audio-peaks:get',
+  },
   library: {
     SAVE: 'library:save',
     GET_ALL: 'library:get-all',

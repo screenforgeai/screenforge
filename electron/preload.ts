@@ -22,6 +22,7 @@ import { whatsNewBridge } from './modules/whats-new/bridge';
 import { screenshotBridge } from './modules/screenshot/bridge';
 import { captureShortcutsBridge } from './modules/capture-shortcuts/bridge';
 import { onboardingBridge } from './modules/onboarding/bridge';
+import { audioPeaksBridge } from './modules/audio-peaks/bridge';
 
 contextBridge.exposeInMainWorld('screenforge', {
   ...sourcesBridge,
@@ -47,5 +48,6 @@ contextBridge.exposeInMainWorld('screenforge', {
   ...screenshotBridge,
   ...captureShortcutsBridge,
   ...onboardingBridge,
+  ...audioPeaksBridge,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 });

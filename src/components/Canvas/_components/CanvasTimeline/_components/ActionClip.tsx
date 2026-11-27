@@ -23,7 +23,7 @@ import {
 import { AudioWaveform } from './AudioWaveform';
 
 interface AudioWaveformData {
-  audioSrc: string;
+  audioPath: string;
   sourceStart: number;
   sourceEnd: number;
 }
@@ -159,7 +159,7 @@ export const ActionClip = ({
           />
           {isAudio && audioWaveform && (
             <AudioWaveform
-              audioSrc={audioWaveform.audioSrc}
+              audioPath={audioWaveform.audioPath}
               sourceStart={audioWaveform.sourceStart}
               sourceEnd={audioWaveform.sourceEnd}
               selected={selected}
