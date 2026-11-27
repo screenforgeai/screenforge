@@ -277,3 +277,84 @@ describe('computeChunkKeys', () => {
     expect(cursorChanged).toHaveLength(15);
   });
 });
+
+describe('selectForWindows on long event lists', () => {
+  /** The straightforward scan of every item per window, as the reference. */
+  function scanEveryItem(
+    list: ReturnType<typeof splitTimedLists>['lists'][number],
+    windows: [number, number][],
+  ): unknown[] {
+    const selected = new Set<number>();
+    for (const window of windows) {
+      let carryIndex = -1;
+      let carryEnd = -Infinity;
+      list.extents.forEach((extents, i) => {
+        if (extents.some((e) => e[0] <= window[1] && window[0] <= e[1])) {
+          selected.add(i);
+          return;
+        }
+        if (!extents.every((e) => e[0] === e[1])) {
+          return;
+        }
+        for (const e of extents) {
+          if (e[1] < window[0] && e[1] >= carryEnd) {
+            carryEnd = e[1];
+            carryIndex = i;
+          }
+        }
+      });
+      if (carryIndex >= 0) {
+        selected.add(carryIndex);
+      }
+    }
+    return [...selected].sort((a, b) => a - b).map((i) => list.items[i]);
+  }
+
+  let seed = 7;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+
+  it('selects exactly what a scan of every item would, for sorted and unsorted events', () => {
+    for (let round = 0; round < 200; round++) {
+      // Coarse times so events share timestamps and land on window edges.
+      const times = Array.from({ length: 1 + Math.floor(random() * 60) }, () =>
+        Math.round(random() * 40),
+      );
+      const sorted = round % 3 !== 0;
+      if (sorted) {
+        times.sort((a, b) => a - b);
+      }
+      const list = splitTimedLists(times.map((t, i) => ({ t, i }))).lists[0];
+      const windows = Array.from({ length: 1 + Math.floor(random() * 3) }, () => {
+        const from = Math.round(random() * 45) - 3;
+        return [from, from + Math.round(random() * 8)] as [number, number];
+      });
+
+      expect(selectForWindows(list, windows)).toEqual(scanEveryItem(list, windows));
+    }
+  });
+
+  // An hour of cursor moves is ~200k events and ~1,800 chunks: scanning every
+  // event for every chunk window held up each export for many seconds.
+  it('picks a window out of an hour of cursor moves without scanning them all', () => {
+    const moves = Array.from({ length: 216_000 }, (_, i) => ({ t: i / 60, nx: 0.5, ny: 0.5 }));
+    const list = splitTimedLists(moves).lists[0];
+
+    const started = performance.now();
+    for (let chunk = 0; chunk < 1_800; chunk++) {
+      selectForWindows(list, [
+        [chunk * 2 - 5, chunk * 2 + 5],
+        [chunk * 2 - 5, chunk * 2 + 5],
+      ]);
+    }
+    const elapsed = performance.now() - started;
+
+    // A mid-recording chunk: the 601 moves inside its window plus the one before.
+    const mid = selectForWindows(list, [[1795, 1805]]);
+    expect(mid).toEqual(scanEveryItem(list, [[1795, 1805]]));
+    expect(mid).toHaveLength(602);
+    expect(elapsed).toBeLessThan(2_000);
+  });
+});

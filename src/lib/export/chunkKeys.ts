@@ -234,6 +234,10 @@ export function selectForWindows(list: TimedList, windows: Interval[]): unknown[
         sourceWindows.some((w) => overlaps([segment.sourceStart, segment.sourceEnd], w)),
     );
   }
+  const instants = sortedInstantTimes(list);
+  if (instants) {
+    return selectSortedInstants(list, instants, windows);
+  }
   const selected = new Set<number>();
   for (const window of windows) {
     let carryIndex = -1;
@@ -255,6 +259,64 @@ export function selectForWindows(list: TimedList, windows: Interval[]): unknown[
     });
     if (carryIndex >= 0) {
       selected.add(carryIndex);
+    }
+  }
+  return [...selected].sort((a, b) => a - b).map((i) => list.items[i]);
+}
+
+const instantTimesCache = new WeakMap<TimedList, number[] | null>();
+
+/**
+ * The times of a list whose items are each one instant, in time order (cursor
+ * and key events), or null for any other list. Such a list is searched by
+ * bisection: scanning an hour of cursor moves for each of ~1,800 chunk windows
+ * held up every export for seconds.
+ */
+function sortedInstantTimes(list: TimedList): number[] | null {
+  if (instantTimesCache.has(list)) {
+    return instantTimesCache.get(list) ?? null;
+  }
+  const times: number[] = [];
+  let result: number[] | null = times;
+  for (const extents of list.extents) {
+    const only = extents.length === 1 ? extents[0] : null;
+    if (!only || only[0] !== only[1] || (times.length > 0 && only[0] < times[times.length - 1])) {
+      result = null;
+      break;
+    }
+    times.push(only[0]);
+  }
+  instantTimesCache.set(list, result);
+  return result;
+}
+
+/** First index whose time is at or after `t` (strict: after `t`). */
+function bisect(times: number[], t: number, strict: boolean): number {
+  let lo = 0;
+  let hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (strict ? times[mid] <= t : times[mid] < t) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/** Same selection as the scan in selectForWindows, for sorted instants. */
+function selectSortedInstants(list: TimedList, times: number[], windows: Interval[]): unknown[] {
+  const selected = new Set<number>();
+  for (const [from, to] of windows) {
+    const first = bisect(times, from, false);
+    const end = bisect(times, to, true);
+    for (let i = first; i < end; i++) {
+      selected.add(i);
+    }
+    // The carry-in: the last event before the window (the last of any tie).
+    if (first > 0) {
+      selected.add(first - 1);
     }
   }
   return [...selected].sort((a, b) => a - b).map((i) => list.items[i]);
